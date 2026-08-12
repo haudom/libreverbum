@@ -138,6 +138,8 @@ rows = cursor.fetchall()  # bewusst ungefiltert
 
 `grep -rn REGEL .` listet damit alle heiklen Stellen auf.
 
+Quellenangaben ohne Dateinamen meinen technik.md.
+
 | # | Regel | Quelle |
 |---|---|---|
 | 1 | Zeilen ohne `sense`-Text gehören **immer** in die Auswahlliste, nach `score` absteigend | §3 |
@@ -153,6 +155,8 @@ rows = cursor.fetchall()  # bewusst ungefiltert
 | 11 | Das Modell **wählt aus einer Liste**, es erzeugt nie frei | §3, „Messung…" |
 | 12 | Eigennamenfilter wirkt auf das **Vorkommen**, nie auf die Grundform | §5 |
 | 13 | Kein `except`, das nur protokolliert und weiterläuft — Abbruch mit Meldung oder `uncertain` | „Die Falle: es scheitert…" |
+| 14 | Gebaut wird, was die Phase verlangt — kein Schalter, keine Abstraktion, kein Zwischenspeicher auf Vorrat | konzept.md, „Phasenplan" |
+| 15 | Keine neue Abhängigkeit ohne vorherige Lizenzprüfung | §1, „Bekannte Kosten" |
 
 ---
 
@@ -184,8 +188,8 @@ prüfbar ist, ist sie zu prüfen — sonst bleibt sie eine Absichtserklärung:
 | 12 Eigennamen je Vorkommen | `red` bleibt Lernvokabel, obwohl es auch in einem Namen steht |
 | 13 nichts scheitert leise | unerreichbarer Modellserver ergibt einen sichtbaren Fehlschlag, kein stilles Loch in der Wortliste |
 
-Regeln 3, 8 und 9 sind Bauentscheidungen ohne sinnvollen Testpunkt — sie bleiben beim
-Regel-Kommentar.
+Regeln 3, 8, 9, 14 und 15 sind Bauentscheidungen ohne sinnvollen Testpunkt — sie bleiben
+beim Regel-Kommentar.
 
 ---
 

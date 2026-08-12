@@ -143,7 +143,20 @@ Formulierungsvorschlag für dokumentation.md §4:
 
 ---
 
-## 4. Regel 14 — Umfangsgrenze
+## 4. Regel 14 — Umfangsgrenze · **erledigt am 12.08.2026**
+
+Regel 14 steht in dokumentation.md §4. Aus der angehängten Lizenzpflicht ist dort eine
+**eigene Regel 15** geworden, kein Nebensatz von 14: Sie hat einen anderen Gegenstand
+(Abhängigkeiten statt Umfang), eine andere Quelle (technik.md §1, „Bekannte Kosten") und
+soll einzeln auffindbar sein — als Nebensatz wäre sie beim Überfliegen der Tabelle
+verloren gegangen.
+
+Beide sind Bauentscheidungen ohne sinnvollen Testpunkt und in §5 entsprechend vermerkt.
+Da mit Regel 14 die erste Quelle außerhalb von technik.md in die Tabelle kommt, steht
+darüber jetzt der Satz, dass Angaben ohne Dateinamen technik.md meinen.
+
+<details>
+<summary>Ursprüngliche Fassung des Punktes</summary>
 
 **Lücke:** Es gibt keine Aussage darüber, was **nicht** gebaut wird.
 
@@ -165,8 +178,10 @@ neue Abhängigkeit ohne vorherige Lizenzprüfung** (technik.md §1, „Bekannte 
 
 **Zu tun**
 
-- [ ] Regel 14 in dokumentation.md §4 aufnehmen
-- [ ] Lizenzprüfung als Vorbedingung jeder neuen Abhängigkeit ausdrücklich festhalten
+- [x] Regel 14 in dokumentation.md §4 aufnehmen
+- [x] Lizenzprüfung als Vorbedingung jeder neuen Abhängigkeit ausdrücklich festhalten
+
+</details>
 
 ---
 
