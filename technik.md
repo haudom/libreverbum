@@ -18,6 +18,7 @@ am saubersten auf:
 | 5 | Lemmatisierung und Eigennamenerkennung (spaCy oder Stanza) | **entschieden** (12.08.2026) |
 | 6 | Projektgerüst und Werkzeuge | **entschieden** (12.08.2026) |
 | 7 | Modulaufteilung des Kerns und Importregel | **entschieden** (12.08.2026) |
+| 8 | EPUB-Leser | **entschieden** (12.08.2026) |
 
 Frage 5 stand anfangs nicht auf der Liste. Sie ist aus Frage 2 entstanden, deren Messung
 mit der Folgerung endete, nicht die Datenquelle sei der Engpass, sondern die
@@ -137,8 +138,8 @@ Innerhalb dieser Festlegung bleibt bewusst offen und wird später bestimmt:
 
 - ~~**spaCy oder Stanza**, und in welcher Modellgröße~~ — **entschieden am 12.08.2026**,
   siehe Abschnitt 5
-- Konkrete Bibliotheken für EPUB, Anki-Export und Druckausgabe, jeweils **samt
-  Lizenzprüfung**
+- ~~Bibliothek für EPUB~~ — **entschieden am 12.08.2026**, siehe Abschnitt 8: keine
+- Konkrete Bibliotheken für Anki-Export und Druckausgabe, jeweils **samt Lizenzprüfung**
 - Aufteilung zwischen Qt Quick und klassischen Qt-Widgets, falls einzelne Ansichten
   damit schneller fertig werden
 
@@ -870,6 +871,118 @@ ist.
   vermutlich; gemessen ist es nicht
 - **Die Oberfläche ist nicht aufgeteilt.** Sie liegt außerhalb des Kernpakets, ihre
   Gliederung wird entschieden, wenn sie gebaut wird
+
+---
+
+## 8. EPUB-Leser — entschieden
+
+**Keine Bibliothek. `zipfile` und `xml.etree` für die Struktur, `html.parser` für den
+Fließtext. Kapitel kommen aus der Navigation; fehlt sie, gilt jedes Dokument der
+Lesereihenfolge als Kapitel — mit sichtbarem Hinweis.**
+
+### Zuerst die Lizenzfrage
+
+Geprüft am 12.08.2026 über die PyPI-Metadaten, wie Regel 15 es **vor** der Aufnahme
+verlangt:
+
+| Paket | Fassung | Lizenz |
+|---|---|---|
+| EbookLib | 0.20 | **AGPL-3.0 or later**, zieht `lxml` und `six` nach |
+| beautifulsoup4 | 4.15.0 | MIT (`soupsieve` MIT, `typing-extensions` PSF) |
+
+EbookLib ist die verbreitete Wahl und scheidet damit aus: AGPL färbt auf das ganze
+Programm ab und verbaute die spätere Veröffentlichung, die Abschnitt 1 offenhalten soll.
+
+Damit stand die eigentliche Frage: Braucht es überhaupt eine Bibliothek? Ein EPUB ist ein
+ZIP-Archiv mit XML darin, und beides kennt die Standardbibliothek.
+
+### Gemessene Ergebnisse
+
+Geprüft am 12.08.2026 mit [`tools/epub_check.py`](tools/epub_check.py) an zwölf Dateien:
+den beiden gemeinfreien Romanen der übrigen Messungen und zehn Dateien aus dem Bestand des
+Nutzers — Calibre-Konvertate, ein Fachbuch, zwei Manga. Zwei davon sind keine ZIP-Archive;
+die verbleibenden zehn ergeben acht verschiedene Bücher mit **570 Inhaltsdokumenten**.
+
+| | |
+|---|---|
+| Inhaltsdokumente | 570 |
+| davon mit `xml.etree` gelesen | **570 (100 %)** |
+| Fließtext Sherlock ohne Vorspann und Lizenzdokument | 105.027 Wörter |
+| dieselbe Zahl aus der Textfassung der Abschnitte 2 und 5 | 105.111 Wörter |
+| **Abweichung** | **0,08 %** |
+
+Die letzten drei Zeilen sind die eigentliche Rechtfertigung: Der Wortschatz, der aus dem
+EPUB kommt, ist derselbe, auf dem die Entscheidungen 2 und 5 beruhen. Die dortigen
+Messwerte tragen über den Formatwechsel hinweg und müssen nicht wiederholt werden.
+
+Die befürchtete Bruchstelle — HTML-Entitäten wie `&nbsp;`, die in XML nicht erklärt sind —
+trat in keiner der Dateien auf. `beautifulsoup4` bliebe nach dieser Messung ohne Aufgabe
+und wird nach Regel 14 nicht aufgenommen. Die Lizenzlage oben steht trotzdem fest, falls
+später doch ein toleranter Parser nötig wird.
+
+### Neuer Befund: `epub:type` gibt es in der Praxis nicht
+
+konzept.md verlangt in Schritt 1, Fließtext von Inhaltsverzeichnis, Impressum, Widmung und
+Fußnoten zu trennen. Die Norm hielte dafür `epub:type` bereit. **In keiner der zwölf
+Dateien kommt es vor** — zehn sind EPUB 2.0, und die beiden EPUB-3-Dateien zeichnen nichts
+aus.
+
+> **Folgerung:** Die Trennung ist eine Heuristik, keine Strukturabfrage. Bei Gutenberg
+> trägt sie leicht (Vorspann 239 Wörter, Lizenzdokument am Schluss); allgemein bleibt sie
+> unsicher und gehört im Zweifel gemeldet, nicht still entschieden (Regel 13).
+
+### Neuer Befund: manchen Dateien fehlen die Kapitelgrenzen ganz
+
+| Datei | EPUB | Navigation | Dokumente | h1–h3 | Wörter |
+|---|---|---|---|---|---|
+| Entwurfsmuster (Fachbuch) | 2.0 | 25 | 34 | 460 | 85.490 |
+| Dorian Gray | 2.0 | 22 | 23 | 26 | 82.939 |
+| Sherlock Holmes | 2.0 | 14 | 15 | 20 | 108.176 |
+| Calibre-Kurzanleitung | 2.0 | 13 | 14 | 24 | 4.693 |
+| Lehrbuch | 2.0 | 4 | 6 | 1 | 28.117 |
+| **Roman, Calibre-Konvertat** | 2.0 | **0** | 6 | **0** | 121.315 |
+| Manga (2 Bände) | 3.0 | 1 | 207 / 225 | 0 | **0** |
+
+Zwei Beobachtungen daraus:
+
+- **Die rohe Navigationsliste ist nicht die Kapitelliste.** Sherlock hat 18 Einträge auf 14
+  eindeutige Ziele: „Contents", die Unterpunkte `I./II./III.` einer Erzählung und die
+  Gutenberg-Lizenz stehen mit drin. Gezählt werden die eindeutigen Ziele
+- **Jede Datei mit Überschriften hat auch ein Inhaltsverzeichnis.** Ein Rückfall auf
+  `h1`–`h3` war vorgesehen und ist nach dieser Messung verworfen: Er griffe in keinem der
+  Fälle, in denen er gebraucht würde. Das Calibre-Konvertat hat weder Überschriften noch
+  Seitenumbruchmarken noch das Wort „chapter" im Text — nur nichtssagende `calibre1`-Klassen
+
+> **Regel:** Kapitel kommen aus der Navigation (`nav.xhtml` oder `toc.ncx`), gezählt nach
+> eindeutigen Zielen. Fehlt sie, gilt jedes Dokument der Lesereihenfolge als ein Kapitel —
+> zusammen mit einem sichtbaren Hinweis, dass die Grenzen nicht aus dem Buch stammen.
+
+Beim Calibre-Konvertat heißt das vier „Kapitel" zu je rund 30.000 Wörtern. Die Triage
+bleibt dank Wortobergrenze (konzept.md, Schritt 4) benutzbar; die Zusage des Konzepts,
+danach ein Kapitel am Stück zu lesen, wird sie nicht. Der saubere Weg führt über die
+Quelle: Calibre kann für solche Dateien ein Inhaltsverzeichnis erzeugen. Der Nachtrag zu
+Abnahmekriterium 1 in konzept.md hält das fest.
+
+### Was gemeldet und nicht verarbeitet wird
+
+Drei Fälle sind kein Fall für den Kernablauf und müssen als solche erkennbar sein statt als
+leeres Ergebnis (Regel 13):
+
+| Fall | in der Messung | Verhalten |
+|---|---|---|
+| kein ZIP-Archiv | 2 Dateien | Meldung „keine gültige EPUB-Datei" |
+| Bildband ohne Text | 2 Manga, 207 und 225 Dokumente, **0 Wörter** | Meldung; Bilder sind Phase 4 |
+| verschlüsselt (`META-INF/encryption.xml`) | keine | Meldung; Kopierschutz wird nicht umgangen |
+
+### Offene Punkte
+
+- **Wie viel Vorspann die Heuristik wegnimmt.** Gemessen ist nur, dass `epub:type` fehlt;
+  welche Schwelle Impressum und Widmung sauber trennt, entsteht beim Bau von `epub`
+- **Anker innerhalb eines Dokuments.** Bei allen zwölf Dateien gilt ein Kapitel gleich ein
+  Dokument. Ob Navigationsziele mit `#anker` als eigene Kapitel zu behandeln sind, ist
+  offen — der Fall kam nicht vor
+- **Bindestrich- und Sonderzeichen der Verlagsdateien** gegenüber Gutenberg sind nicht
+  gesondert geprüft; die Abweichung von 0,08 % ist an einer Gutenberg-Datei gemessen
 
 ---
 

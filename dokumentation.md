@@ -22,10 +22,11 @@ dort überarbeitet wird. Ein abgeschriebener Absatz wird still falsch.
 | Bezeichner, Dateinamen, Tabellen- und Spaltennamen | Docstrings, Kommentare, Commit-Nachrichten |
 | | Oberflächentexte, Fehlermeldungen, Protokollausgaben |
 
-**Namen aus fremden Quellen werden nie übersetzt**: `token.lemma_`, `token.pos_` sowie die
-WikDict-Spalten `sense`, `score`, `lexentry`, `written_rep`. Eine Übersetzung erzeugte zwei
-Namen für dasselbe Ding — die Verwechslung, die laut `technik.md` §3 schon einmal zu
-falschen Messergebnissen geführt hat.
+**Namen aus fremden Quellen werden nie übersetzt**: `token.lemma_`, `token.pos_`, die
+WikDict-Spalten `sense`, `score`, `lexentry`, `written_rep` sowie die Begriffe der
+EPUB-Norm (`spine`, `manifest`, `epub:type`). Eine Übersetzung erzeugte zwei Namen für
+dasselbe Ding — die Verwechslung, die laut `technik.md` §3 schon einmal zu falschen
+Messergebnissen geführt hat.
 
 > Eigene Felder mit einer **Momentaufnahme** aus WikDict tragen das Präfix `wikdict_`
 > (`wikdict_sense`, `wikdict_score`). So bleibt sichtbar, was eigener Bestand ist und was
@@ -82,6 +83,8 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | unsicher (markierter Eintrag) | `uncertain` |
 | Gegenstand des Kernablaufs | `entity` |
 | Durchlauf, Verkettung der Schritte | `pipeline` |
+| Lesereihenfolge, Manifest (EPUB) | `spine`, `manifest` |
+| Inhaltsverzeichnis einer Datei | `navigation` |
 
 Neue Begriffe kommen hierher, **bevor** der erste Bezeichner damit entsteht.
 

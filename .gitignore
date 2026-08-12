@@ -6,8 +6,9 @@ tools/en-de.sqlite3
 # Nutzerprofil — persönliche Daten, gehören nie ins Repository
 profil.sqlite3
 
-# Testtexte (Project Gutenberg u. a.)
+# Testtexte und Testbücher (Project Gutenberg u. a.)
 tools/*.txt
+tools/*.epub
 
 # Python
 __pycache__/

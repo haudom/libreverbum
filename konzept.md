@@ -45,9 +45,18 @@ EPUB einlesen  →  Kapitel wählen  →  Wortschatz extrahieren
 
 ### 1. Buch einlesen
 EPUB öffnen, Metadaten (Titel, Autor) und die Kapitelstruktur auslesen. Fließtext von
-Inhaltsverzeichnis, Impressum, Widmung und Fußnoten trennen.
+Inhaltsverzeichnis, Impressum, Widmung und Fußnoten trennen. Fehlt der Datei eine
+Kapitelstruktur, tritt die Lesereihenfolge an ihre Stelle — mit sichtbarem Hinweis.
 
 *Nur DRM-freie Dateien.* Kopierschutz wird nicht umgangen.
+
+> **Nachtrag 12.08.2026 aus der Messung:** Dass ein EPUB seine Kapitel kennt, ist eine
+> Annahme, keine Eigenschaft des Formats. Von acht geprüften Büchern enthält eines weder
+> Inhaltsverzeichnis noch Überschriften — ein Konvertat, dessen Text in vier Blöcken zu je
+> 30.000 Wörtern liegt. Festgehalten, weil der naheliegende Rückfall auf Überschriften
+> ebenfalls gemessen und verworfen wurde: Jede Datei, die Überschriften hat, hat auch ein
+> Inhaltsverzeichnis. Einzelheiten in [technik.md](technik.md) §8, „Neuer Befund: manchen
+> Dateien fehlen die Kapitelgrenzen ganz".
 
 ### 2. Wortschatz extrahieren
 Der wichtigste und unterschätzteste Schritt. Aus dem Rohtext entsteht eine saubere Wortliste:
@@ -223,7 +232,9 @@ Festlegungen samt Begründung und Messwerten stehen in [technik.md](technik.md).
 
 Das Konzept ist bestätigt, wenn folgender Ablauf an einem echten, DRM-freien EPUB gelingt:
 
-1. Buch wird eingelesen, Kapitelliste stimmt mit dem tatsächlichen Inhaltsverzeichnis überein
+1. Buch wird eingelesen; die Kapitelliste stimmt mit dem Inhaltsverzeichnis der Datei überein.
+   Enthält die Datei keines, wird das gemeldet und die Lesereihenfolge tritt an seine Stelle
+   — siehe Nachtrag bei Schritt 1
 2. Für ein mittleres Kapitel entsteht eine Wortliste, in der **Beugungsformen zusammengefasst**
    sind und **keine Figurennamen** als Lernvokabeln auftauchen
 3. Die Übersetzungen passen zum Kontext: Stichprobe von zwanzig Wörtern, darunter mindestens drei
