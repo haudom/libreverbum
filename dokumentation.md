@@ -152,6 +152,7 @@ rows = cursor.fetchall()  # bewusst ungefiltert
 | 10 | Wendungen ohne Wörterbucheintrag als `uncertain` markieren | „Messung: Mehrwortausdrücke" |
 | 11 | Das Modell **wählt aus einer Liste**, es erzeugt nie frei | §3, „Messung…" |
 | 12 | Eigennamenfilter wirkt auf das **Vorkommen**, nie auf die Grundform | §5 |
+| 13 | Kein `except`, das nur protokolliert und weiterläuft — Abbruch mit Meldung oder `uncertain` | „Die Falle: es scheitert…" |
 
 ---
 
@@ -181,6 +182,7 @@ prüfbar ist, ist sie zu prüfen — sonst bleibt sie eine Absichtserklärung:
 | 7 `reasoning_effort` | jeder Modellaufruf setzt `"none"` |
 | 10, 11 unsichere Wendungen | Wendung ohne Wörterbucheintrag ist `uncertain` |
 | 12 Eigennamen je Vorkommen | `red` bleibt Lernvokabel, obwohl es auch in einem Namen steht |
+| 13 nichts scheitert leise | unerreichbarer Modellserver ergibt einen sichtbaren Fehlschlag, kein stilles Loch in der Wortliste |
 
 Regeln 3, 8 und 9 sind Bauentscheidungen ohne sinnvollen Testpunkt — sie bleiben beim
 Regel-Kommentar.

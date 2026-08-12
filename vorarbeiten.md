@@ -106,7 +106,16 @@ wird. Damit wird aus einer Absichtserklärung eine geprüfte Zusage.
 
 ---
 
-## 3. Regel 13 — nichts scheitert leise
+## 3. Regel 13 — nichts scheitert leise · **erledigt am 12.08.2026**
+
+Regel 13 steht in dokumentation.md §4, ihr Prüfpunkt in §5. Der vorgeschlagene Wortlaut
+ist auf eine Tabellenzeile eingedampft — die übrigen zwölf Regeln stehen ebenso dort, und
+eine Regel, die sich nur in einem Absatz sagen lässt, wird beim Überfliegen der Tabelle
+übersehen. Beide zulässigen Formen der Sichtbarkeit bleiben darin genannt, damit die Regel
+nicht als Verbot des Abfangens gelesen wird: Abbruch mit Meldung **oder** `uncertain`.
+
+<details>
+<summary>Ursprüngliche Fassung des Punktes</summary>
 
 **Lücke:** Nirgends steht, was geschehen soll, wenn der Modellserver nicht antwortet,
 das EPUB kaputt ist oder ein Wörterbucheintrag fehlt.
@@ -126,9 +135,11 @@ Formulierungsvorschlag für dokumentation.md §4:
 
 **Zu tun**
 
-- [ ] Regel 13 in dokumentation.md §4 aufnehmen, Quelle: technik.md, „Die Falle…"
-- [ ] Prüfpunkt in §5 ergänzen: unerreichbarer Modellserver führt zu sichtbarem
+- [x] Regel 13 in dokumentation.md §4 aufnehmen, Quelle: technik.md, „Die Falle…"
+- [x] Prüfpunkt in §5 ergänzen: unerreichbarer Modellserver führt zu sichtbarem
       Fehlschlag, nicht zu einem stillen Loch in der Wortliste
+
+</details>
 
 ---
 
