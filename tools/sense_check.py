@@ -24,10 +24,9 @@ unterstützt, wird das erzwungen; sonst wird die Antwort streng geprüft.
 
 Aufruf
 ------
-    python werkzeuge/bedeutungstest.py                     # Server automatisch suchen
-    python werkzeuge/bedeutungstest.py --url http://127.0.0.1:8080
-    python werkzeuge/bedeutungstest.py --buch buch.txt     # eigene Textquelle
-    python werkzeuge/bedeutungstest.py --wort bank --wort lie
+    python tools/sense_check.py                     # Server automatisch suchen
+    python tools/sense_check.py --url http://127.0.0.1:8080
+    python tools/sense_check.py --word bank --word lie
 """
 
 from __future__ import annotations
@@ -42,10 +41,10 @@ import urllib.error
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-STANDARD_DB = os.path.join(HERE, "en-de.sqlite3")
+DEFAULT_DB = os.path.join(HERE, "en-de.sqlite3")
 
 # Übliche Adressen lokaler Modellserver. llama-server zuerst, weil empfohlen.
-KANDIDATEN = [
+SERVER_CANDIDATES = [
     ("http://127.0.0.1:8080", "llama-server"),
     ("http://127.0.0.1:1234", "LM Studio"),
     ("http://127.0.0.1:11434", "Ollama"),
@@ -60,9 +59,9 @@ KANDIDATEN = [
 # Für eine Vokabelkarte zählt das Ergebnis, nicht welche Zeile das Modell traf.
 # Die Aufgabe ist damit leichter, als die Länge der Liste vermuten lässt.
 #
-# 'erwartet' ist eine Menge zulässiger deutscher Wörter; None heisst: von Hand
+# 'expected' ist eine Menge zulässiger deutscher Wörter; None heisst: von Hand
 # beurteilen.
-TESTFAELLE = [
+TEST_CASES = [
     ("bank", "He sat on the bank of the river and watched the water flow past.", {"Ufer"}),
     ("bank", "She deposited the cheque at the bank on Monday morning.", {"Bank"}),
     ("saw", "He saw her standing at the window.", None),
@@ -81,34 +80,34 @@ TESTFAELLE = [
 
 # --------------------------------------------------------------------------- Server
 
-def finde_server(vorgabe: str | None) -> tuple[str, str, str] | None:
+def find_server(preset: str | None) -> tuple[str, str, str] | None:
     """Sucht einen erreichbaren, OpenAI-kompatiblen Modellserver.
 
     Gibt (url, modellname, beschreibung) zurück. Der Modellname ist nötig, weil
     manche Server (Ollama) ihn zwingend verlangen, andere (llama-server) nicht.
     """
-    kandidaten = [(vorgabe, "vorgegeben")] if vorgabe else KANDIDATEN
-    for url, name in kandidaten:
+    candidates = [(preset, "vorgegeben")] if preset else SERVER_CANDIDATES
+    for url, name in candidates:
         url = url.rstrip("/")
         try:
             with urllib.request.urlopen(f"{url}/v1/models", timeout=2) as r:
-                daten = json.load(r)
-            modelle = [m.get("id", "?") for m in daten.get("data", [])]
-            return url, (modelle[0] if modelle else ""), f"{name} · {', '.join(modelle[:3]) or 'unbenannt'}"
+                data = json.load(r)
+            models = [m.get("id", "?") for m in data.get("data", [])]
+            return url, (models[0] if models else ""), f"{name} · {', '.join(models[:3]) or 'unbenannt'}"
         except Exception:
             continue
     return None
 
 
 # Denkschritte mancher Modelle (Qwen3 u. a.) vor der eigentlichen Antwort
-DENKBLOCK = re.compile(r"<think>.*?</think>", re.S | re.I)
+THINK_BLOCK = re.compile(r"<think>.*?</think>", re.S | re.I)
 
 
-def frage_modell(url: str, modell: str, prompt: str, anzahl: int,
-                 timeout: int) -> tuple[int | None, str]:
+def ask_model(url: str, model: str, prompt: str, option_count: int,
+              timeout: int) -> tuple[int | None, str]:
     """Fragt das Modell nach einer Bedeutungsnummer. Gibt (nummer, rohantwort) zurück."""
-    rumpf = {
-        "model": modell,          # Ollama verlangt das Feld; llama-server ignoriert es
+    body = {
+        "model": model,           # Ollama verlangt das Feld; llama-server ignoriert es
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0,
         # Denkschritt abschalten. Ohne das verbrauchen Modelle wie Qwen3.5 ihr ganzes
@@ -123,37 +122,38 @@ def frage_modell(url: str, modell: str, prompt: str, anzahl: int,
         "response_format": {
             "type": "json_schema",
             "json_schema": {
-                "name": "auswahl",
+                "name": "sense_choice",
                 "strict": True,
                 "schema": {
                     "type": "object",
-                    "properties": {"nummer": {"type": "integer",
-                                              "minimum": 1, "maximum": anzahl}},
-                    "required": ["nummer"],
+                    "properties": {"choice": {"type": "integer",
+                                              "minimum": 1, "maximum": option_count}},
+                    "required": ["choice"],
                     "additionalProperties": False,
                 },
             },
         },
     }
-    def sende(koerper: dict):
-        anfrage = urllib.request.Request(
+
+    def send(payload: dict):
+        request = urllib.request.Request(
             f"{url}/v1/chat/completions",
-            data=json.dumps(koerper).encode("utf-8"),
+            data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(anfrage, timeout=timeout) as r:
+        with urllib.request.urlopen(request, timeout=timeout) as r:
             return json.load(r)
 
     try:
-        antwort = sende(rumpf)
+        response = send(body)
     except urllib.error.HTTPError as e:
         # Server, die "reasoning_effort" oder das JSON-Schema nicht kennen, lehnen die
         # Anfrage ab. Dann ohne diese Felder erneut versuchen.
         if e.code in (400, 422):
-            schlank = {k: v for k, v in rumpf.items()
+            reduced = {k: v for k, v in body.items()
                        if k not in ("reasoning_effort", "response_format")}
             try:
-                antwort = sende(schlank)
+                response = send(reduced)
             except Exception as e2:
                 return None, f"auch ohne Zusatzfelder gescheitert: {e2}"
         else:
@@ -161,24 +161,24 @@ def frage_modell(url: str, modell: str, prompt: str, anzahl: int,
     except Exception as e:
         return None, f"Fehler: {e}"
 
-    nachricht = antwort["choices"][0]["message"]
-    text = (nachricht.get("content") or "").strip()
+    message = response["choices"][0]["message"]
+    text = (message.get("content") or "").strip()
     # Manche Server liefern den Denkschritt in einem eigenen Feld, andere inline.
-    text = DENKBLOCK.sub("", text).strip()
-    if not text and nachricht.get("reasoning_content"):
-        text = str(nachricht["reasoning_content"]).strip()
+    text = THINK_BLOCK.sub("", text).strip()
+    if not text and message.get("reasoning_content"):
+        text = str(message["reasoning_content"]).strip()
 
     try:
-        nummer = int(json.loads(text)["nummer"])
+        choice = int(json.loads(text)["choice"])
     except Exception:
         # Notnagel für Server ohne Schema-Zwang: letzte Zahl im gültigen Bereich nehmen —
         # die erste wäre oft eine Zahl aus dem Denkschritt.
-        zahlen = [int(z) for z in re.findall(r"\d+", text)]
-        gueltig = [z for z in zahlen if 1 <= z <= anzahl]
-        nummer = gueltig[-1] if gueltig else None
-    if nummer is not None and not 1 <= nummer <= anzahl:
-        return None, f"ausserhalb 1..{anzahl}: {text!r}"
-    return nummer, text
+        numbers = [int(n) for n in re.findall(r"\d+", text)]
+        valid = [n for n in numbers if 1 <= n <= option_count]
+        choice = valid[-1] if valid else None
+    if choice is not None and not 1 <= choice <= option_count:
+        return None, f"ausserhalb 1..{option_count}: {text!r}"
+    return choice, text
 
 
 # --------------------------------------------------------------------------- Wörterbuch
@@ -187,36 +187,37 @@ def frage_modell(url: str, modell: str, prompt: str, anzahl: int,
 # wichtig: 36 % aller Einträge haben keinen sense-Text, und es sind systematisch die
 # **Hauptbedeutungen** mit der höchsten Bewertung. Beispiele: watch → „Uhr“ (136,7),
 # draw → „zeichnen“ (172,9) — beides die jeweils bestbewertete Zeile des Stichworts.
-OHNE_SINN = "Hauptbedeutung, ohne nähere Angabe"
+NO_SENSE_TEXT = "Hauptbedeutung, ohne nähere Angabe"
 
 
-def bedeutungen(con: sqlite3.Connection, wort: str) -> list[tuple[str, str, str]]:
+def senses(con: sqlite3.Connection, word: str) -> list[tuple[str, str, str]]:
     """(Wortart, englische Kurzdefinition, deutsche Entsprechung) je Bedeutung.
 
     Nach Bewertung absteigend — die gebräuchlichsten Bedeutungen stehen oben.
     """
-    zeilen = con.execute(
+    rows = con.execute(
         "SELECT lexentry, sense, trans_list FROM translation "
-        "WHERE written_rep = ? ORDER BY score DESC", (wort,)).fetchall()
-    gesehen, ergebnis = set(), []
-    for lexentry, sinn, uebersetzung in zeilen:
-        wortart = lexentry.split("__")[1].replace("_", " ") if lexentry and "__" in lexentry else "?"
-        schluessel = (sinn or "").strip().lower() or f"\0{wortart}"   # je Wortart nur einmal
-        if schluessel in gesehen:
+        "WHERE written_rep = ? ORDER BY score DESC", (word,)).fetchall()
+    seen, result = set(), []
+    for lexentry, wikdict_sense, translation in rows:
+        pos = lexentry.split("__")[1].replace("_", " ") if lexentry and "__" in lexentry else "?"
+        key = (wikdict_sense or "").strip().lower() or f"\0{pos}"   # je Wortart nur einmal
+        if key in seen:
             continue
-        gesehen.add(schluessel)
-        ergebnis.append((wortart, (sinn or "").strip() or OHNE_SINN, uebersetzung))
-    return ergebnis
+        seen.add(key)
+        result.append((pos, (wikdict_sense or "").strip() or NO_SENSE_TEXT, translation))
+    return result
 
 
-def baue_prompt(wort: str, satz: str, liste: list[tuple[str, str, str]]) -> str:
-    zeilen = [f"{i}. ({wa}) {sinn} → {ue}" for i, (wa, sinn, ue) in enumerate(liste, 1)]
+def build_prompt(word: str, sentence: str, options: list[tuple[str, str, str]]) -> str:
+    lines = [f"{i}. ({pos}) {sense} → {translation}"
+             for i, (pos, sense, translation) in enumerate(options, 1)]
     return (
         "You are helping a German learner of English.\n"
-        f'In the sentence below, which listed meaning does the word "{wort}" have?\n\n'
-        f"Sentence: {satz}\n\n"
-        "Meanings:\n" + "\n".join(zeilen) + "\n\n"
-        'Answer with JSON only: {"nummer": <number>}'
+        f'In the sentence below, which listed meaning does the word "{word}" have?\n\n'
+        f"Sentence: {sentence}\n\n"
+        "Meanings:\n" + "\n".join(lines) + "\n\n"
+        'Answer with JSON only: {"choice": <number>}'
     )
 
 
@@ -230,87 +231,87 @@ def main() -> int:
         description="Prüft, ob das lokale Modell die richtige Wörterbuchbedeutung wählt.",
         epilog="Setzt Abnahmekriterium 3 aus konzept.md um.")
     p.add_argument("--url", help="Adresse des Modellservers (sonst automatische Suche)")
-    p.add_argument("--db", default=STANDARD_DB, help="Pfad zur WikDict-Datenbank")
-    p.add_argument("--modell", help="Modellname (sonst das erste, das der Server nennt)")
-    p.add_argument("--wort", action="append", help="nur diese Wörter prüfen (mehrfach möglich)")
+    p.add_argument("--db", default=DEFAULT_DB, help="Pfad zur WikDict-Datenbank")
+    p.add_argument("--model", help="Modellname (sonst das erste, das der Server nennt)")
+    p.add_argument("--word", action="append", help="nur diese Wörter prüfen (mehrfach möglich)")
     p.add_argument("--timeout", type=int, default=120, help="Zeitgrenze je Anfrage in Sekunden")
-    p.add_argument("--zeige-prompt", action="store_true", help="ersten Prompt vollständig ausgeben")
+    p.add_argument("--show-prompt", action="store_true", help="ersten Prompt vollständig ausgeben")
     args = p.parse_args()
 
     if not os.path.exists(args.db):
         print(f"Wörterbuch fehlt: {args.db}", file=sys.stderr)
-        print("Mit  python werkzeuge/abdeckungstest.py --hole-woerterbuch  herunterladen.",
+        print("Mit  python tools/coverage_check.py --fetch-dictionary  herunterladen.",
               file=sys.stderr)
         return 1
 
-    gefunden = finde_server(args.url)
-    if not gefunden:
+    found = find_server(args.url)
+    if not found:
         print("Kein Modellserver erreichbar.\n", file=sys.stderr)
         print("Erwartet wird eine OpenAI-kompatible Schnittstelle, zum Beispiel:", file=sys.stderr)
         print("  llama-server -m modell.gguf -c 8192 --host 127.0.0.1 --port 8080",
               file=sys.stderr)
-        print("\nGesucht wurde auf: " + ", ".join(u for u, _ in KANDIDATEN), file=sys.stderr)
+        print("\nGesucht wurde auf: " + ", ".join(u for u, _ in SERVER_CANDIDATES), file=sys.stderr)
         return 1
 
-    url, modell, beschreibung = gefunden
-    if args.modell:
-        modell = args.modell
-    print(f"Server: {url}  ({beschreibung})")
-    print(f"Modell: {modell or '(vom Server bestimmt)'}")
+    url, model, description = found
+    if args.model:
+        model = args.model
+    print(f"Server: {url}  ({description})")
+    print(f"Modell: {model or '(vom Server bestimmt)'}")
 
     con = sqlite3.connect(args.db)
-    faelle = [f for f in TESTFAELLE if not args.wort or f[0] in args.wort]
-    if not faelle:
+    cases = [c for c in TEST_CASES if not args.word or c[0] in args.word]
+    if not cases:
         print("Keine Testfälle für die angegebenen Wörter.", file=sys.stderr)
         return 1
 
-    print(f"Testfälle: {len(faelle)}\n" + "=" * 72)
+    print(f"Testfälle: {len(cases)}\n" + "=" * 72)
 
-    geprueft = passend = unklar = 0
-    erster = True
-    for wort, satz, erwartet in faelle:
-        liste = bedeutungen(con, wort)
-        if len(liste) < 2:
-            print(f"\n{wort!r}: nur {len(liste)} Bedeutung(en) im Wörterbuch — übersprungen")
+    checked = correct = manual = 0
+    first = True
+    for word, sentence, expected in cases:
+        options = senses(con, word)
+        if len(options) < 2:
+            print(f"\n{word!r}: nur {len(options)} Bedeutung(en) im Wörterbuch — übersprungen")
             continue
 
-        prompt = baue_prompt(wort, satz, liste)
-        if erster and args.zeige_prompt:
+        prompt = build_prompt(word, sentence, options)
+        if first and args.show_prompt:
             print("\n--- Prompt (Beispiel) ---\n" + prompt + "\n" + "-" * 24)
-            erster = False
+            first = False
 
-        nummer, roh = frage_modell(url, modell, prompt, len(liste), args.timeout)
-        geprueft += 1
+        choice, raw = ask_model(url, model, prompt, len(options), args.timeout)
+        checked += 1
 
-        print(f"\n„{satz}“")
-        print(f"  Wort: {wort}   ({len(liste)} Bedeutungen zur Auswahl)")
+        print(f"\n„{sentence}“")
+        print(f"  Wort: {word}   ({len(options)} Bedeutungen zur Auswahl)")
 
-        if nummer is None:
-            print(f"  → KEINE gültige Antwort: {roh}")
-            unklar += 1
+        if choice is None:
+            print(f"  → KEINE gültige Antwort: {raw}")
+            manual += 1
             continue
 
-        wortart, sinn, uebersetzung = liste[nummer - 1]
+        pos, sense, translation = options[choice - 1]
         # Bewertung am Ergebnis: reicht eine der gelieferten Übersetzungen aus?
-        geliefert = {t.strip() for t in (uebersetzung or "").split("|")}
-        if erwartet is None:
-            marke = "?"          # von Hand zu beurteilen
-            unklar += 1
-        elif geliefert & erwartet:
-            marke = "ok"
-            passend += 1
+        offered = {t.strip() for t in (translation or "").split("|")}
+        if expected is None:
+            mark = "?"           # von Hand zu beurteilen
+            manual += 1
+        elif offered & expected:
+            mark = "ok"
+            correct += 1
         else:
-            marke = "FALSCH"
+            mark = "FALSCH"
 
-        print(f"  → [{marke}] {nummer}. ({wortart}) {sinn} → {uebersetzung}")
-        if marke == "FALSCH":
-            print(f"       erwartet: {' / '.join(sorted(erwartet))}")
+        print(f"  → [{mark}] {choice}. ({pos}) {sense} → {translation}")
+        if mark == "FALSCH":
+            print(f"       erwartet: {' / '.join(sorted(expected))}")
 
     print("\n" + "=" * 72)
-    automatisch = geprueft - unklar
-    if automatisch:
-        print(f"Automatisch bewertbar: {passend}/{automatisch} richtig")
-    print(f"Von Hand zu beurteilen: {unklar}")
+    auto_scored = checked - manual
+    if auto_scored:
+        print(f"Automatisch bewertbar: {correct}/{auto_scored} richtig")
+    print(f"Von Hand zu beurteilen: {manual}")
     print("\nHinweis: Das Modell kann nur aus der vorgelegten Liste wählen — erfundene")
     print("Übersetzungen sind ausgeschlossen. Geprüft wird die Trefferqualität der Auswahl.")
     return 0

@@ -180,7 +180,7 @@ Geprüft am 11.08.2026 an zwei gemeinfreien Romanen (*The Picture of Dorian Gray
 | Textabdeckung (tokens) | 94,7 % | 94,7 % |
 | **Restlücke nach Lemmatisierung + Eigennamenfilter** | **≈ 1,1 %** | **≈ 1,0 %** |
 
-Die Messung ist reproduzierbar: [`werkzeuge/abdeckungstest.py`](werkzeuge/abdeckungstest.py)
+Die Messung ist reproduzierbar: [`tools/coverage_check.py`](tools/coverage_check.py)
 rechnet sie gegen beliebige Textdateien und einen beliebigen Datenstand nach.
 
 Die Restlücke ist noch zu hoch angesetzt — das Skript verwendet bewusst nur eine grobe
@@ -286,7 +286,7 @@ dieser Karte ohne Probleme und zügig.
 
 ### Gemessene Ergebnisse
 
-Geprüft mit [`werkzeuge/bedeutungstest.py`](werkzeuge/bedeutungstest.py) — der
+Geprüft mit [`tools/sense_check.py`](tools/sense_check.py) — der
 Umsetzung von Abnahmekriterium 3 aus dem Konzept:
 
 | | |
@@ -588,7 +588,7 @@ Rohtext
 Schritt 2 und 3 hängen zusammen: Die Grundform von `saw` ist *see* **oder** *saw*, je
 nach Wortart — und die Wortart ergibt sich erst aus dem Satzzusammenhang. Deshalb
 lässt sich das nicht durch eine Endungstabelle ersetzen. Das Skript
-[`werkzeuge/abdeckungstest.py`](werkzeuge/abdeckungstest.py) versucht genau das und
+[`tools/coverage_check.py`](tools/coverage_check.py) versucht genau das und
 scheitert nachweislich an `went`, `paid`, `heard`.
 
 ### Warum die Wortart trotzdem nicht genügt
@@ -626,7 +626,7 @@ inzwischen gemessen — siehe nächster Abschnitt.
 
 ## Messung: Mehrwortausdrücke
 
-Geprüft am 11.08.2026 mit [`werkzeuge/wendungstest.py`](werkzeuge/wendungstest.py) an
+Geprüft am 11.08.2026 mit [`tools/mwe_check.py`](tools/mwe_check.py) an
 *The Adventures of Sherlock Holmes* (108.163 Wörter), Modell Qwen 3.5 9B.
 
 Das Konzept nennt Redewendungen „die eigentliche Stärke des LLM-Ansatzes". Die Messung
