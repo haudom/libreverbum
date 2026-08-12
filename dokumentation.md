@@ -31,6 +31,11 @@ falschen Messergebnissen geführt hat.
 > (`wikdict_sense`, `wikdict_score`). So bleibt sichtbar, was eigener Bestand ist und was
 > aus einer austauschbaren Fremdquelle stammt — vgl. Regel 3.
 
+**Keine Ausnahmen.** Der Ordner `werkzeuge/` widersprach dieser Regel und heißt ab dem
+12.08.2026 `tools/`, die Skripte darin ebenso englisch. Grund: Wer nach vorhandenem
+Bestand arbeitet — Mensch wie Modell — folgt dem, was im Repository steht, nicht dem,
+was hier gefordert wird. Eine vom eigenen Bestand widerlegte Regel gilt faktisch nicht.
+
 ### Folge für das Schema
 
 `technik.md` §4 benennt die Tabellen noch deutsch. Verbindlich ist ab jetzt:
@@ -78,7 +83,10 @@ Neue Begriffe kommen hierher, **bevor** der erste Bezeichner damit entsteht.
 
 ## 3. Modul-Docstring
 
-Feste Abschnitte, überflüssige weglassen statt leer füllen.
+**Verbindlich sind zwei Abschnitte: „Voraussetzungen" und „Liefert".** *Aufgabe* und
+*Regeln* sind freiwillig und nur zu schreiben, wenn sie etwas sagen, das nicht schon aus
+Modulname und Signaturen hervorgeht. Ein Gerüst mit Pflichtabschnitten wird gefüllt,
+auch wenn nichts zu sagen ist — die kürzere Pflicht ist deshalb die wirksamere.
 
 ```python
 """Wortschatzextraktion — Kapiteltext zu Grundformen.
@@ -111,7 +119,7 @@ Architekturregel aus §1 (Kern ohne Bezug zur Oberfläche).
 
 Funktions-Docstrings: ein Satz, dann nur, was nicht aus der Signatur hervorgeht —
 Vorbedingungen, Randfälle, Begründungen. Keine Parameterlisten, die Typannotationen
-abschreiben. Für `werkzeuge/` gilt weiter das dortige Muster *Hintergrund / Verfahren /
+abschreiben. Für `tools/` gilt weiter das dortige Muster *Hintergrund / Verfahren /
 Aufruf*.
 
 ---
@@ -157,6 +165,23 @@ def test_acceptance_6_known_words_are_not_asked_again():
 ```
 
 Dokumentation, die lügen kann, lügt irgendwann; ein Test kann es nicht.
+
+**Das gilt für die Regeln aus §4 genauso wie für die Abnahmekriterien.** Ein
+Regel-Kommentar sagt nur, was gelten *soll*; ob es gilt, prüft niemand. Wo eine Regel
+prüfbar ist, ist sie zu prüfen — sonst bleibt sie eine Absichtserklärung:
+
+| Regel | Prüfung |
+|---|---|
+| 1 Zeilen ohne `sense` | `watch` und `draw` liefern ihre Hauptbedeutung in der Auswahlliste |
+| 2 Lemmatisierung vor Nachschlagen | `He saw her…` ergibt *see*, nicht *Säge* |
+| 4 getrennte Dateien | Profilzugriff öffnet nie `en-de.sqlite3` |
+| 5 `PRAGMA user_version` | ist gesetzt und passt zum erwarteten Stand |
+| 6 Anki-GUID | nach dem Export steht zu jeder Karte eine Kennung in `card` |
+| 7 `reasoning_effort` | jeder Modellaufruf setzt `"none"` |
+| 10, 11 unsichere Wendungen | Wendung ohne Wörterbucheintrag ist `uncertain` |
+
+Regeln 3, 8 und 9 sind Bauentscheidungen ohne sinnvollen Testpunkt — sie bleiben beim
+Regel-Kommentar.
 
 ---
 
