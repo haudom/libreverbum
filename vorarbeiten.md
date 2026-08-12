@@ -6,6 +6,10 @@
 > die zwei bis drei jederzeit geltenden Sätze nach [CLAUDE.md](CLAUDE.md). Diese Datei ist
 > danach leer und wird gelöscht.
 
+> **Alle fünf Punkte sind am 12.08.2026 erledigt.** Was entschieden wurde, steht an seinem
+> Platz: technik.md §6 und §7, dokumentation.md §2, §4 und §5, CLAUDE.md. Diese Datei
+> trägt nur noch die Vorgeschichte und kann gelöscht werden — die Historie hat Git.
+
 **Anlass:** Alle fünf technischen Entscheidungen stehen, Phase 1 kann beginnen. Es fehlt
 aber das Gerüst, in dem gebaut wird — und es fehlen zwei Regeln gegen Fehler, die
 speziell dann entstehen, wenn ein Modell den Großteil des Codes schreibt.
@@ -206,7 +210,32 @@ neue Abhängigkeit ohne vorherige Lizenzprüfung** (technik.md §1, „Bekannte 
 
 ---
 
-## 5. Der Ort entscheidet über die Wirkung
+## 5. Der Ort entscheidet über die Wirkung — **erledigt am 12.08.2026**
+
+Nach CLAUDE.md gewandert sind vier Dinge, jedes mit demselben Prüfmaß: Verhindert es
+beim Bauen einen Fehler, den man sonst erst im fertigen Code sähe?
+
+- **Regel 13 und 14** als Stichpunkte unter „Harte Regeln". Beide betreffen genau das,
+  was beim maschinellen Schreiben ungefragt entsteht — das abfangende `try/except` und
+  der Schalter für später. Eine Regel, die erst beim Nachlesen von dokumentation.md §4
+  auffiele, käme für beide zu spät
+- **Modulkarte und Importregel** als ein Stichpunkt unter „Architektur", weil sie die
+  erste Zeile Anwendungscode verorten
+- **Regel 15** ist nicht neu dazugekommen: Die Lizenzpflicht stand dort schon als
+  Stichpunkt und hat nur die Regelnummer bekommen
+- Die Zahl der Regeln, von zwölf auf fünfzehn
+
+Nur verwiesen wird alles Begründende: warum die Module so geschnitten sind (technik.md
+§7), warum `entities` nicht `model` heißt, warum Regel 9 nur zur Hälfte prüfbar ist
+(dokumentation.md §5). Nichts davon ändert eine Entscheidung beim Tippen — es beantwortet
+Rückfragen, und dafür genügt der Verweis.
+
+Der zweite Punkt unten ist damit erfüllt, bleibt aber als Gewohnheit bestehen: „Aktueller
+Stand" ist keine Zustandsbeschreibung des Repositorys, sondern die Antwort auf „woran
+wird gerade gearbeitet". Er ist nachzuziehen, sobald sich das ändert.
+
+<details>
+<summary>Ursprüngliche Fassung des Punktes</summary>
 
 Eine Regel wirkt nur dort, wo beim Bauen tatsächlich hingesehen wird. CLAUDE.md wird
 jede Sitzung geladen, dokumentation.md nicht zwangsläufig — deshalb gehören die wenigen
@@ -220,9 +249,11 @@ ist, ohne sie abzuschreiben.
 
 **Zu tun**
 
-- [ ] Nach den Entscheidungen 1 bis 4 prüfen, welcher Satz nach CLAUDE.md gehört und
+- [x] Nach den Entscheidungen 1 bis 4 prüfen, welcher Satz nach CLAUDE.md gehört und
       welcher nur verwiesen wird
-- [ ] CLAUDE.md, „Aktueller Stand" nachziehen, sobald Phase 1 beginnt
+- [x] CLAUDE.md, „Aktueller Stand" nachziehen, sobald Phase 1 beginnt
+
+</details>
 
 ---
 

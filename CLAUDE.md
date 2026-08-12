@@ -46,7 +46,7 @@ Projekt deutsch ist:
   Bezeichner damit entsteht. Dort nachsehen, statt einen zweiten Namen für dasselbe Ding
   zu erfinden
 
-**Die zwölf Regeln aus dokumentation.md §4** sind vor jeder Codeänderung dort
+**Die fünfzehn Regeln aus dokumentation.md §4** sind vor jeder Codeänderung dort
 nachzulesen; im Code werden sie als `# REGEL (quelle, „stichwort"): …` markiert, damit
 `grep -rn REGEL .` sie auflistet. Beim Bauen am ehesten relevant:
 
@@ -58,6 +58,11 @@ nachzulesen; im Code werden sie als `# REGEL (quelle, „stichwort"): …` marki
   Hauptbedeutungen)
 - Bei jedem Modellaufruf `reasoning_effort: "none"`
 - NLP- und Modellaufrufe nie im Oberflächen-Thread
+- **Kein `except`, das den Fehler nur protokolliert und weiterläuft.** Ein Fehlschlag wird
+  im Ergebnis sichtbar — Abbruch mit Meldung oder markierter Eintrag (`uncertain`)
+- **Gebaut wird, was die aktuelle Phase verlangt.** Kein Konfigurationsschalter ohne
+  zweiten Anwendungsfall, keine Abstraktion über einer einzigen Umsetzung, kein
+  Zwischenspeicher ohne gemessenen Anlass
 
 **Wo eine Regel prüfbar ist, ist sie zu prüfen** (dokumentation.md §5). Testnamen
 englisch, Docstring im Wortlaut des Abnahmekriteriums oder der Regel.
@@ -65,14 +70,17 @@ englisch, Docstring im Wortlaut des Abnahmekriteriums oder der Regel.
 **Dateien immer mit `encoding="utf-8"` öffnen.** Unter Windows zerstört die
 Systemkodierung sonst still typografische Zeichen im Buchtext.
 
-## Architektur (technik.md §1)
+## Architektur (technik.md §1 und §7)
 
 - **Python als einzige Sprache**, Oberfläche Qt Quick über PySide6
 - Der **Kern** — EPUB-Einlesen, Wortschatzextraktion, Profil, Übersetzung, Export — ist
   ein eigenständiges Python-Paket **ohne jeden Bezug zur Oberfläche**. Die Oberfläche
   ruft ihn nur auf. Diese Regel hält den späteren Hybrid, die Testbarkeit und den
   Kommandozeilenzugang offen
-- **Lizenz jeder neuen Bibliothek vor der Aufnahme prüfen** (starkes Copyleft)
+- **Modulkarte und Importregel:** zehn Module entlang der sechs Schritte des Kernablaufs.
+  Jeder Schritt importiert nur `entities`, verkettet wird allein in `pipeline`. Die Karte
+  sagt, wo etwas hingehört — Module entstehen, wenn sie gebraucht werden, nicht vorab
+- **Lizenz jeder neuen Bibliothek vor der Aufnahme prüfen** (Regel 15, starkes Copyleft)
 
 ## Prüfen vor „fertig" (technik.md §6)
 
@@ -133,15 +141,18 @@ Adressen ab (llama-server, LM Studio, Ollama, …) oder nehmen `--url`. Testtext
 
 ## Aktueller Stand
 
+**Entscheidung 7 ist am 12.08.2026 gefallen: die Modulaufteilung des Kerns samt
+Importregel** (technik.md §7), zusammen mit den Regeln 13 bis 15 in dokumentation.md §4.
+Damit sind die Vorarbeiten abgeschlossen und **die nächste Aufgabe ist Phase 1 selbst** —
+der erste Anwendungscode. Die Importregel ist keine Absichtserklärung mehr:
+`tests/test_architecture.py` prüft sie.
+
 **Entscheidung 6 ist am 12.08.2026 gefallen: Python 3.12 mit uv, ruff, pytest und mypy**
 (technik.md §6). Das Gerüst steht, das Tor oben gilt ab sofort, und **das ganze
 Repository besteht es** — `tools/` ist am selben Tag nachgezogen worden. Dass die
 Messwerte davon unberührt sind, ist durch einen Vorher-Nachher-Lauf belegt, nicht
 angenommen (technik.md §6, „Der Bestand ist nachgezogen"). Die verbliebenen offenen
 Punkte stehen dort.
-
-Die nächste Aufgabe ist die **Modulaufteilung des Kerns**: `libreverbum/` ist bewusst
-leer, damit die Aufteilung entschieden und nicht nebenbei erfunden wird.
 
 **Entscheidung 5 ist am 12.08.2026 gefallen: spaCy mit `en_core_web_md`** (technik.md
 §5). Damit sind alle technischen Vorfragen beantwortet und **Phase 1 kann beginnen**.
