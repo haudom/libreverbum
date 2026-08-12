@@ -1,0 +1,179 @@
+# LibreVerbum — Dokumentation und Schreibweise
+
+> Stand: 12.08.2026 · Ergänzt [konzept.md](konzept.md) (*was*) und
+> [technik.md](technik.md) (*womit*). Hier steht, **wie** geschrieben und dokumentiert wird.
+
+## Grundsatz
+
+> Die Dokumente beantworten **warum**. Der Code beantwortet **was und wie**.
+> Wo der Code das Warum braucht, **verweist** er darauf — er schreibt es nicht ab.
+
+Ein Verweis wie `# siehe technik.md §3, „Datenfalle"` bleibt richtig, wenn die Begründung
+dort überarbeitet wird. Ein abgeschriebener Absatz wird still falsch.
+
+---
+
+## 1. Sprachregel
+
+> **Was der Übersetzer liest, ist englisch. Was ein Mensch in Sätzen liest, ist deutsch.**
+
+| Englisch | Deutsch |
+|---|---|
+| Bezeichner, Dateinamen, Tabellen- und Spaltennamen | Docstrings, Kommentare, Commit-Nachrichten |
+| | Oberflächentexte, Fehlermeldungen, Protokollausgaben |
+
+**Namen aus fremden Quellen werden nie übersetzt**: `token.lemma_`, `token.pos_` sowie die
+WikDict-Spalten `sense`, `score`, `lexentry`, `written_rep`. Eine Übersetzung erzeugte zwei
+Namen für dasselbe Ding — die Verwechslung, die laut `technik.md` §3 schon einmal zu
+falschen Messergebnissen geführt hat.
+
+> Eigene Felder mit einer **Momentaufnahme** aus WikDict tragen das Präfix `wikdict_`
+> (`wikdict_sense`, `wikdict_score`). So bleibt sichtbar, was eigener Bestand ist und was
+> aus einer austauschbaren Fremdquelle stammt — vgl. Regel 3.
+
+### Folge für das Schema
+
+`technik.md` §4 benennt die Tabellen noch deutsch. Verbindlich ist ab jetzt:
+
+| technik.md | Code und Schema |
+|---|---|
+| `buch`, `kapitel` | `book`, `chapter` |
+| `lemma` | `lemma` |
+| `bedeutung` | `sense` |
+| `vorkommen` | `occurrence` |
+| `ereignis` | `event` |
+| `karte` | `card` |
+
+`technik.md` bekommt dazu einen datierten Nachtrag. Achtung bei `sense`: Die eigene Tabelle
+ist die **Bedeutung als Gegenstand**, WikDicts `sense` nur ein **englischer Kurztext** —
+deshalb `wikdict_sense` für dessen Feld.
+
+---
+
+## 2. Begriffe
+
+Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinander entstehen.
+
+| Deutsch | Code |
+|---|---|
+| Grundform, Lemma | `lemma` |
+| Wortart | `pos` |
+| Wortform, Beugungsform | `word_form` |
+| Bedeutung | `sense` |
+| Belegsatz | `example_sentence` |
+| Vorkommen, Häufigkeit | `occurrence`, `frequency` |
+| Eigenname | `proper_noun` |
+| Mehrwortausdruck, Wendung | `multiword_expression` / `mwe` |
+| Profil, Kenntnisstand | `profile`, `knowledge_state` |
+| bekannt / lernt / zurückgestellt / vergessen | `known` / `learning` / `deferred` / `forgotten` |
+| Herkunft (einer Kenntnisangabe) | `origin` |
+| Triage, Sammelaktion, Wortobergrenze | `triage`, `bulk_mark`, `word_limit` |
+| Wörterbuch, Nachschlagen | `dictionary`, `lookup` |
+| Karte, Deck, Kartenrichtung | `card`, `deck`, `card_direction` |
+| unsicher (markierter Eintrag) | `uncertain` |
+
+Neue Begriffe kommen hierher, **bevor** der erste Bezeichner damit entsteht.
+
+---
+
+## 3. Modul-Docstring
+
+Feste Abschnitte, überflüssige weglassen statt leer füllen.
+
+```python
+"""Wortschatzextraktion — Kapiteltext zu Grundformen.
+
+Aufgabe
+-------
+Schritt 2 des Kernablaufs (konzept.md): Tokenisierung, Wortart, Lemmatisierung,
+Eigennamenfilter, Häufigkeiten, Belegsätze.
+
+Voraussetzungen
+---------------
+Erwartet Fließtext ohne Inhaltsverzeichnis, Impressum und Fußnoten. Das trennt
+der EPUB-Leser, nicht dieses Modul.
+
+Liefert
+-------
+Grundformen mit Wortart und Belegsatz. Im Wörterbuch wird hier **nicht**
+nachgeschlagen — das tut `dictionary.py`.
+
+Regeln
+------
+Reihenfolge Wortart → Grundform → Nachschlagen ist verbindlich. Begründung:
+technik.md, „Warum die Reihenfolge zwingend ist".
+"""
+```
+
+**Voraussetzungen** ist der wichtigste Abschnitt — der `saw`-Fehler ist eine verletzte
+Vorbedingung. **Liefert** sagt auch, was das Modul *nicht* tut; nur so hält die
+Architekturregel aus §1 (Kern ohne Bezug zur Oberfläche).
+
+Funktions-Docstrings: ein Satz, dann nur, was nicht aus der Signatur hervorgeht —
+Vorbedingungen, Randfälle, Begründungen. Keine Parameterlisten, die Typannotationen
+abschreiben. Für `werkzeuge/` gilt weiter das dortige Muster *Hintergrund / Verfahren /
+Aufruf*.
+
+---
+
+## 4. Regel-Kommentare
+
+Die einzige bewusste Redundanz zum Dokument — dort, wo die Verletzung verlockend und der
+Schaden unsichtbar ist. Marker, Quelle, zwei bis vier Zeilen Begründung:
+
+```python
+# REGEL (technik.md §3, „Datenfalle"): Zeilen ohne sense-Text nicht wegfiltern.
+# 36 % aller Zeilen, systematisch die Hauptbedeutungen (watch → Uhr).
+# Wer sie entfernt, erzeugt scheinbare Wörterbuchlücken.
+rows = cursor.fetchall()  # bewusst ungefiltert
+```
+
+`grep -rn REGEL .` listet damit alle heiklen Stellen auf.
+
+| # | Regel | Quelle |
+|---|---|---|
+| 1 | Zeilen ohne `sense`-Text gehören **immer** in die Auswahlliste, nach `score` absteigend | §3 |
+| 2 | Lemmatisierung **vor** dem Nachschlagen; Wortart vor Grundform | „Warum die Reihenfolge…" |
+| 3 | Keine Fremdschlüssel ins Wörterbuch — nur Momentaufnahmen | §4 |
+| 4 | Profil und Wörterbuch in **getrennten Dateien** | §4 |
+| 5 | `PRAGMA user_version` ab der ersten Fassung, bei jeder Schemaänderung erhöhen | §4 |
+| 6 | Anki-GUID beim Export in `card` mitschreiben | §4 |
+| 7 | Bei jedem Modellaufruf `reasoning_effort: "none"` | §3 |
+| 8 | Wörterbuchquellen getrennt halten, nie verschmelzen (CC BY-SA / GPL) | §2 |
+| 9 | NLP- und Modellaufrufe nie im Oberflächen-Thread | §1 |
+| 10 | Wendungen ohne Wörterbucheintrag als `uncertain` markieren | „Messung: Mehrwortausdrücke" |
+| 11 | Das Modell **wählt aus einer Liste**, es erzeugt nie frei | §3, „Messung…" |
+
+---
+
+## 5. Tests als ausführbare Dokumentation
+
+Abnahmekriterien und Regeln werden zu Tests — Name englisch, Docstring im Wortlaut:
+
+```python
+def test_acceptance_6_known_words_are_not_asked_again():
+    """Abnahmekriterium 6: Beim zweiten Durchlauf desselben Kapitels werden als
+    bekannt markierte Wörter nicht erneut abgefragt — das Profil greift."""
+```
+
+Dokumentation, die lügen kann, lügt irgendwann; ein Test kann es nicht.
+
+---
+
+## 6. Nicht dokumentiert wird
+
+Keine erzeugte Schnittstellenreferenz (Sphinx, pdoc) — Pflege ohne Leser. Keine
+Wiederholung von Typannotationen, keine Änderungshistorie in Dateiköpfen (dafür ist Git
+da), keine Kommentare, die die Zeile darunter nacherzählen. Ersetzt ein Kommentar einen
+guten Namen, wird stattdessen umbenannt.
+
+---
+
+## 7. Kleinigkeiten
+
+- **Dateien immer mit `encoding="utf-8"` öffnen.** Unter Windows liest Python sonst in der
+  Kodierung der Systemumgebung und zerstört still typografische Anführungszeichen und
+  Gedankenstriche im Buchtext
+- Verweisform: `technik.md §3, „Datenfalle"` — Nummer und Überschrift, nie eine Zeilennummer
+- Widerspricht eine Messung einem Dokument: **datierter Nachtrag**, alte Aussage bleibt
+  stehen

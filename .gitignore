@@ -1,0 +1,16 @@
+# Heruntergeladene Wörterbuchdaten — werden beim ersten Start bezogen,
+# siehe technik.md, Abschnitt 2. Gehören nicht in die Versionsverwaltung.
+werkzeuge/en-de.sqlite3
+*.sqlite3
+
+# Nutzerprofil — persönliche Daten, gehören nie ins Repository
+profil.sqlite3
+
+# Testtexte (Project Gutenberg u. a.)
+werkzeuge/*.txt
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
