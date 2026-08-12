@@ -87,21 +87,39 @@ WikDict-Werte nur als Momentaufnahme (`wikdict_*`). Begründung: technik.md §4.
 
 ## `tools/` — die Messskripte
 
-Reproduzieren die Messungen, auf die sich technik.md stützt. Nur Standardbibliothek,
-keine Projektumgebung nötig. Die Wörterbuchdatei erwarten sie neben sich in `tools/`.
+Reproduzieren die Messungen, auf die sich technik.md stützt. Die Wörterbuchdatei
+erwarten sie neben sich in `tools/`.
 
 ```
 python tools/coverage_check.py --fetch-dictionary     # Wörterbuch herunterladen
 python tools/coverage_check.py buch.txt               # Abdeckung des Wörterbuchs
 python tools/sense_check.py                           # Bedeutungsauswahl durch das Modell
 python tools/mwe_check.py buch.txt                    # Mehrwortausdrücke
+python tools/nlp_check.py buch.txt                    # spaCy gegen Stanza
 ```
+
+Die ersten drei kommen mit der Standardbibliothek aus, brauchen also keine
+Projektumgebung. **`nlp_check.py` ist die Ausnahme** und verlangt spaCy oder Stanza samt
+Modellen: Ein Vergleich der beiden lässt sich nur an den echten Modellen führen, nicht
+nachbilden. Das Skript nennt die Installationsbefehle in seinem Kopf.
 
 `sense_check.py` und `mwe_check.py` suchen einen lokalen Modellserver auf den üblichen
 Adressen ab (llama-server, LM Studio, Ollama, …) oder nehmen `--url`. Testtexte
 (`*.txt`) und `*.sqlite3` sind bewusst nicht versioniert.
 
 ## Aktueller Stand
+
+**Entscheidung 5 ist am 12.08.2026 gefallen: spaCy mit `en_core_web_md`** (technik.md
+§5). Damit sind alle technischen Vorfragen beantwortet und **Phase 1 kann beginnen**.
+Zwei Ergebnisse der Messung wirken sich unmittelbar aufs Bauen aus:
+
+- Der **Eigennamenfilter wirkt auf das Vorkommen, nie auf die Grundform**. Sonst
+  verschwinden `red`, `orange`, `street` ganz aus der Triage (technik.md §5)
+- Die getrennten Phrasal Verbs sind **gelöst und betrafen 21 %, nicht ~51 %** — die alte
+  Zahl steht mit Nachtrag in technik.md, „Messung: Mehrwortausdrücke"
+
+Die Messumgebung liegt in `.venv/` (spaCy + `en_core_web_sm`/`md`), die Testtexte in
+`tools/*.txt`. Beides ungetrackt.
 
 Die Sprachregel aus dokumentation.md §1 ist am 12.08.2026 auf den Bestand angewandt
 worden: `werkzeuge/` → `tools/`, die drei Skripte englisch benannt, Bezeichner und
@@ -115,9 +133,11 @@ Code arbeitet, folgt dem Bestand, nicht der Regel.
   werden nacheinander besprochen. Nicht ungefragt mit Code beginnen — offene Punkte
   stehen in den Dokumenten unter „Offene Punkte" und werden erst entschieden, dann
   gebaut
-- **Widerspricht eine Messung einem Dokument: datierter Nachtrag**, die alte Aussage
-  bleibt stehen. So wie der Nachtrag vom 11.08.2026 in konzept.md §5, den die
-  Wendungsmessung erzwungen hat
+- **Korrigieren: Nachtrag oder überschreiben** (dokumentation.md §7). Eine widerlegte,
+  aber plausible Annahme bekommt einen datierten Nachtrag — so wie in konzept.md §5,
+  wo die Wendungsmessung eine Konzeptaussage gekippt hat. Ersetzte Festlegungen werden
+  dagegen überschrieben; die Historie hat Git. In beiden Fällen gilt: **der gültige
+  Stand steht oben**, nie die überholte Fassung zuerst
 - **Keine erzeugte Schnittstellenreferenz, keine Änderungshistorie in Dateiköpfen**
   (dafür ist Git da), keine Kommentare, die die Zeile darunter nacherzählen
 - Datumsangaben im Format `TT.MM.JJJJ`

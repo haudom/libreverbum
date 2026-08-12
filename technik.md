@@ -15,6 +15,11 @@ am saubersten auf:
 | 2 | Wörterbuch- und Häufigkeitsdaten samt Lizenzlage | **entschieden** (11.08.2026) |
 | 3 | Lokales Modell und Betriebsart | **entschieden** (11.08.2026) |
 | 4 | Ablage des Profils (Datenbankform) | **entschieden** (11.08.2026) |
+| 5 | Lemmatisierung und Eigennamenerkennung (spaCy oder Stanza) | **entschieden** (12.08.2026) |
+
+Frage 5 stand anfangs nicht auf der Liste. Sie ist aus Frage 2 entstanden, deren Messung
+mit der Folgerung endete, nicht die Datenquelle sei der Engpass, sondern die
+Lemmatisierung — siehe Abschnitt 5.
 
 Frage 2 stand bewusst weit oben, weil sie das Konzept hätte kippen können: Ein freies,
 offline nutzbares EN→DE-Wörterbuch mit sauberer Lizenz **und** Bedeutungsangaben ist
@@ -118,8 +123,8 @@ Das hat drei Folgen:
 
 Innerhalb dieser Festlegung bleibt bewusst offen und wird später bestimmt:
 
-- **spaCy oder Stanza**, und in welcher Modellgröße — Genauigkeit gegen Geschwindigkeit
-  und Speicherbedarf. Entscheidet sich am besten an echtem Buchtext
+- ~~**spaCy oder Stanza**, und in welcher Modellgröße~~ — **entschieden am 12.08.2026**,
+  siehe Abschnitt 5
 - Konkrete Bibliotheken für EPUB, Anki-Export und Druckausgabe, jeweils **samt
   Lizenzprüfung**
 - Aufteilung zwischen Qt Quick und klassischen Qt-Widgets, falls einzelne Ansichten
@@ -447,38 +452,35 @@ vergessen".
 ### Tabellen im Überblick
 
 ```
-buch ──< kapitel ──< vorkommen >── lemma ──< bedeutung
-                         │                      │
-                    (Belegsatz,             (Momentaufnahme aus
-                     Häufigkeit)             dem Wörterbuch,
-                                             eigene Korrektur)
+book ──< chapter ──< occurrence >── lemma ──< sense
+                          │                     │
+                     (Belegsatz,           (Momentaufnahme aus
+                      Häufigkeit)           dem Wörterbuch,
+                                            eigene Korrektur)
                                                 │
-                         ereignis ──────────────┤   Verlauf: kennt / lernt /
+                         event ─────────────────┤   Verlauf: kennt / lernt /
                                                 │   zurückgestellt / vergessen
                                                 │   + Herkunft + Zeitpunkt
-                         karte ─────────────────┘   Anki-Kennung für den Rückkanal
+                         card ──────────────────┘   Anki-Kennung für den Rückkanal
 ```
 
 | Tabelle | Zweck |
 |---|---|
 | `lemma` | Grundform + Wortart. Die Klammer, nicht die Kenntniseinheit |
-| `bedeutung` | Eine Bedeutung eines Lemmas. Trägt die Wörterbuch-Momentaufnahme und die eigene Korrektur |
-| `ereignis` | Der Verlauf. Art, Herkunft, Zeitpunkt, Bezug auf Buch/Kapitel |
-| `vorkommen` | Belegsatz und Häufigkeit je Kapitel — dasselbe Wort hat in Kapitel 2 einen anderen Belegsatz als in Kapitel 9 |
-| `buch`, `kapitel` | Was bereits verarbeitet wurde |
-| `karte` | Exportierte Anki-Karten samt deren Kennung |
+| `sense` | Eine Bedeutung eines Lemmas. Trägt die Wörterbuch-Momentaufnahme und die eigene Korrektur |
+| `event` | Der Verlauf. Art, Herkunft, Zeitpunkt, Bezug auf Buch/Kapitel |
+| `occurrence` | Belegsatz und Häufigkeit je Kapitel — dasselbe Wort hat in Kapitel 2 einen anderen Belegsatz als in Kapitel 9 |
+| `book`, `chapter` | Was bereits verarbeitet wurde |
+| `card` | Exportierte Anki-Karten samt deren Kennung |
 
-> **Nachtrag 12.08.2026 — Benennung:** Nach der Sprachregel in
-> [dokumentation.md](dokumentation.md) sind Bezeichner im Code englisch, Prosa deutsch.
-> Die Tabellen heißen im Schema daher `book`, `chapter`, `lemma`, `sense`, `occurrence`,
-> `event`, `card`. Die deutschen Namen oben bleiben die Begriffe der Prosa und gelten
-> unverändert weiter; die Zuordnung steht in dokumentation.md, Abschnitt 1.
->
-> Zu unterscheiden: Die eigene Tabelle `sense` ist die **Bedeutung als Gegenstand** — mit
-> Verlauf, eigener Korrektur und Kartenbezug. WikDicts `sense` ist dagegen nur der
-> **englische Kurztext**. Er wird als `wikdict_sense` mitgeführt. Das Präfix `wikdict_`
-> markiert alle Momentaufnahmen aus der Fremdquelle und hält damit die Regel „keine
-> Fremdschlüssel ins Wörterbuch" beim Abfragen sichtbar.
+Die Namen sind englisch, die Prosa bleibt deutsch — Zuordnung und Begründung in
+[dokumentation.md](dokumentation.md), Abschnitt 1.
+
+> **Achtung, zwei Dinge namens `sense`:** Die eigene Tabelle ist die **Bedeutung als
+> Gegenstand** — mit Verlauf, eigener Korrektur und Kartenbezug. WikDicts `sense` ist
+> dagegen nur der **englische Kurztext**. Er wird als `wikdict_sense` mitgeführt. Das
+> Präfix `wikdict_` markiert alle Momentaufnahmen aus der Fremdquelle und hält damit die
+> Regel „keine Fremdschlüssel ins Wörterbuch" beim Abfragen sichtbar.
 
 Der aktuelle Kenntnisstand ist eine **Sicht** auf die Ereignistabelle (jeweils
 jüngstes Ereignis je Bedeutung), keine eigene Tabelle. Bei der zu erwartenden Größe —
@@ -487,7 +489,7 @@ materialisierte Zwischentabelle wäre verfrühte Optimierung.
 
 ### Jetzt billig, später teuer: die Anki-Kennung
 
-> Beim Export jeder Karte wird deren **Anki-GUID** in `karte` mitgespeichert.
+> Beim Export jeder Karte wird deren **Anki-GUID** in `card` mitgespeichert.
 
 Das kostet heute eine Spalte. Ohne sie lässt sich der Anki-Rückkanal aus Phase 3
 später nicht anschließen, ohne alle bereits exportierten Decks neu zu erzeugen — was
@@ -520,6 +522,122 @@ Migrationen wird es geben, weil Phase 2 und 3 neue Felder brauchen.
   Leerzeichen im Text, oder eine eigene Kennzeichnung
 - Umgang mit gleichzeitigem Zugriff, falls später eine Weboberfläche hinzukommt
   (siehe Architekturregel in Abschnitt 1)
+
+---
+
+## 5. Lemmatisierung und Eigennamenerkennung — entschieden
+
+**spaCy mit `en_core_web_md`. Stanza und `en_core_web_trf` bleiben vorgemerkt, nicht
+verworfen.**
+
+Die letzte Entscheidung vor Phase 1.
+
+### Gemessene Ergebnisse
+
+Geprüft am 12.08.2026 mit [`tools/nlp_check.py`](tools/nlp_check.py) an denselben zwei
+Romanen wie die Abdeckungsmessung, jeweils vollständig statt in Stichproben:
+
+| | sm · Holmes | **md · Holmes** | sm · Dorian | **md · Dorian** |
+|---|---|---|---|---|
+| Restlücke | 0,85 % | **0,81 %** | 0,90 % | **0,86 %** |
+| Reihenfolge (18 Fallen) | 17 | 17 | 17 | 17 |
+| **stille Fehlschläge verhindert** | 4/5 | **5/5** | 4/5 | **5/5** |
+| übersehene Eigennamen | 2 | 3 | 5 | 3 |
+| getrennte Phrasal Verbs | 21 % | 21 % | 19 % | 19 % |
+| Durchsatz | 4.350 W/s | 4.085 W/s | 4.305 W/s | 3.668 W/s |
+| Platte | 15 MB | 54 MB | | |
+
+Lizenz: spaCy MIT, Modelle `en_core_web_*` MIT. Unkritisch auch für eine spätere
+Veröffentlichung.
+
+### Der Unterschied liegt in der Fehlerart, nicht in der Trefferzahl
+
+Beide Größen machen einen Fehler von achtzehn — aber nicht denselben, und das entscheidet:
+
+```
+sm:   wound (VERB)  →  wound    statt wind    „wound" steht im Wörterbuch
+md:   geese (NOUN)  →  geese    statt goose   „geese" steht nicht drin
+```
+
+sm erzeugt damit genau die Fehlerart, die dieses Dokument unter „Die Falle: es scheitert
+nicht laut, sondern leise" beschreibt: eine falsche Übersetzung ohne jedes Anzeichen von
+Unsicherheit. mds Fehler dagegen läuft in eine erkennbare Wörterbuchlücke und wird als
+solche gemeldet.
+
+> Ausgewählt wird nach verhinderten **stillen** Fehlschlägen, nicht nach der
+> Trefferquote. Der Unterschied 5/5 gegen 4/5 wiegt schwerer als 0,04 Prozentpunkte
+> Restlücke.
+
+Die 6 % geringere Geschwindigkeit und 39 MB mehr auf der Platte sind demgegenüber
+gegenstandslos: Ein Kapitel dauert rund **eine Sekunde**, ein ganzes Buch 26.
+
+### Die Restlücke ist kleiner als geschätzt
+
+Die 0,81 % bestätigen die Schätzung von „≈ 1,0 %" aus Abschnitt 2 — und sind selbst noch
+zu pessimistisch. Von den rund 820 verbleibenden Wörtern entfallen 335 auf `could` (287)
+und `having` (48): spaCy führt Modalverben nicht auf `can` zurück, und WikDict führt
+weder `could` noch `having` als Stichwort. Beides sind Funktionswörter, die nie
+Lernvokabeln werden.
+
+> **Bereinigt liegt die echte Lücke bei etwa 0,5 %.**
+
+Was übrig bleibt, ist genau das, was Abschnitt 2 vorhergesagt hat: `hansom`, `gipsy`,
+`reasoner`, `assize`, `brougham` — selten und randständig.
+
+### Warum nicht Stanza
+
+Stanza wurde **nicht gemessen**. Es hätte ein Ergebnis schlagen müssen, das die
+selbstgesetzten Kriterien bereits nimmt, und dafür rund 650 MB samt PyTorch gekostet.
+Diese Begründung ist ausdrücklich eine Aufwandsabwägung, keine Qualitätsaussage über
+Stanza — deshalb bleibt es vorgemerkt.
+
+Gleiches gilt für **`en_core_web_trf`**, die genaueste spaCy-Stufe. Beide kommen in
+Frage, falls beim Bauen Lemmatisierungsfehler auffallen. `en_core_web_lg` dagegen
+scheidet aus: Es unterscheidet sich von `md` im Wesentlichen durch mehr Wortvektoren, und
+Wortvektoren braucht dieses Programm an keiner Stelle.
+
+Zur Hardware: Der Zielrechner aus Abschnitt 3 (RX 5700, RDNA1) hat kein CUDA. Ein zweiter
+Rechner mit NVIDIA MX450 hat es, dort aber mit 2 GB Grafikspeicher der Einsteigerklasse —
+eine `trf`-Messung dort wäre nicht auf den Zielrechner übertragbar. Solange beide
+Maschinen gelten, darf der Kern CUDA ohnehin nicht voraussetzen.
+
+### Neuer Befund: der Eigennamenfilter muss pro Vorkommen greifen
+
+Die Messung hat eine Falle aufgedeckt, die das Konzept so nicht vorgesehen hat.
+
+In die eine Fehlerrichtung ist die Erkennung ausgezeichnet: Nur drei Wortformen wurden
+übersehen, und alle drei sind Nationalitätsadjektive (`indian`, `british`, `bohemian`),
+also ohnehin lernbare Vokabeln.
+
+In die andere Richtung greift sie jedoch weit: **216 Wortformen gelten *manchmal* als
+Eigenname, kommen aber auch als gewöhnliches Wort vor.**
+
+| Wortform | als Eigenname / gesamt |
+|---|---|
+| `street` | 61 / 83 |
+| `sir` | 38 / 78 |
+| `red` | 10 / 51 |
+| `doctor` | 16 / 39 |
+| `orange` | 8 / 11 |
+
+> **Regel:** Der Eigennamenfilter wirkt auf das **Vorkommen**, nie auf die Grundform.
+> Ein Wort, das irgendwo im Buch als gewöhnliches Wort auftritt, bleibt Lernvokabel —
+> auch wenn es anderswo Teil eines Namens ist.
+
+Wer pro Grundform filtert, verliert `red` und `orange` vollständig aus der Triage. Das
+passt zur Datenablage aus Abschnitt 4: Kenntnis hängt an der Bedeutung, und `occurrence`
+ist ohnehin die Ebene, auf der Belegsatz und Häufigkeit geführt werden.
+
+### Offene Punkte
+
+- **`could`, `would`, `having`** und die übrigen Hilfsverbformen sollten vor dem
+  Nachschlagen ausgesteuert werden, statt als Wörterbuchlücke zu erscheinen. Wortart
+  `AUX` genügt dafür vermutlich
+- Über-Lemmatisierung von Eigennamen (`Holmes` → `holme`) — harmlos, solange der Filter
+  aus dem vorigen Abschnitt greift, aber beim Anlegen der Liste „Figuren & Orte" zu
+  beachten
+- Ob die Wortart als Vorfilter für lange Auswahllisten taugt (Abschnitt 3, `run` mit 48
+  Bedeutungen) — die Wortart liegt jetzt vor, gemessen ist die Wirkung noch nicht
 
 ---
 
@@ -658,21 +776,37 @@ auseinanderliegen:
 Der Eigennamen-Ausschluss ist nötig, weil `Sherlock Holmes` als `Proper_noun` im
 Wörterbuch steht und sonst 101× als Lernvokabel erschiene.
 
-### Grenze: rund die Hälfte der Phrasal Verbs steht getrennt
+### Grenze: rund ein Fünftel der Phrasal Verbs steht getrennt
 
-| | Vorkommen |
-|---|---|
-| zusammenhängend (`gave up the idea`) | 196 |
-| auseinandergerissen (`gave the idea up`) | 205 |
+Gemessen am 12.08.2026 mit [`tools/nlp_check.py`](tools/nlp_check.py) über spaCys
+Abhängigkeitsanalyse, an denselben zwei Romanen:
 
-**Rund 51 %** entgehen dem n-Gramm-Abgleich vollständig. Die Zahl ist eine grobe
-Schätzung — der Testdetektor sucht ohne Wortartbestimmung im Satzzusammenhang und
-erzeugt dadurch Scheintreffer. Die Größenordnung steht aber: Es ist etwa die Hälfte,
-nicht ein Randfall.
+| | Sherlock Holmes | Dorian Gray |
+|---|---|---|
+| zusammenhängend (`gave up the idea`) | 391 | 238 |
+| auseinandergerissen (`gave the idea up`) | 101 | 57 |
+| **Anteil getrennt** | **21 %** | **19 %** |
+
+Dem reinen n-Gramm-Abgleich entgeht dieses Fünftel vollständig. Der
+Abhängigkeitsanalyse nicht: Sie findet `„work it out"`, `„shut the business up"`,
+`„settling himself down"` samt Einschub.
 
 > **Folgerung:** Phrasal Verbs brauchen spaCys Abhängigkeitsanalyse, nicht nur
-> Wortfolgenabgleich. Für Phase 1 ist das der wichtigste noch ungelöste Punkt der
-> Wortschatzextraktion.
+> Wortfolgenabgleich. Mit Entscheidung 5 (Abschnitt 5) steht sie zur Verfügung, der
+> Punkt ist damit erledigt.
+
+Offen bleibt ein anderer: **394 Vorkommen mit Partikel haben keinen
+Wörterbucheintrag** — `take up`, `throw down`, `bring in`, `start off`. Sie gehören
+nach Regel 10 als `uncertain` markiert, nicht verworfen.
+
+> **Nachtrag 12.08.2026 — warum hier vorher 51 % stand.** Die erste Messung vom
+> 11.08.2026 zählte 196 zusammenhängend gegen 205 getrennt und schloss auf „rund 51 %,
+> etwa die Hälfte, nicht ein Randfall". Das war mehr als doppelt zu hoch. Ursache ist
+> die Schwäche, die `mwe_check.py` an sich selbst schon vermerkt hatte: Es sucht Verb
+> und Partikel ohne Wortartbestimmung im Satzzusammenhang und zählt Wortpaare mit, die
+> gar kein Phrasal Verb bilden. Festgehalten, weil derselbe Fehler bei jedem künftigen
+> Wortfolgen-Detektor genauso entstünde — eine Zahl aus einem Detektor ohne
+> Wortartbestimmung ist eine Obergrenze, keine Messung.
 
 ### Das LLM darf Wendungen nicht frei suchen
 
@@ -722,7 +856,7 @@ Konzept bereits ein Verfahren vor, nämlich die **Triage durch den Nutzer**.
 | Aufgabe | zuständig | Stand |
 |---|---|---|
 | zusammenhängende Wendungen finden | Wörterbuch + n-Gramm + Filter | **gemessen, funktioniert** |
-| getrennte Phrasal Verbs finden | spaCy-Abhängigkeitsanalyse | **ungelöst**, betrifft ~51 % |
+| getrennte Phrasal Verbs finden | spaCy-Abhängigkeitsanalyse | **gemessen, funktioniert** — betrifft 21 % |
 | Bedeutung im Kontext wählen | LLM, Auswahl aus Liste | **gemessen, 11/11** |
 | Lernwürdigkeit entscheiden | **Nutzer**, nicht Modell | Konzept sieht es vor |
 | Wendungen ohne Wörterbucheintrag | LLM, frei erzeugend | **unzuverlässig** — nur mit Markierung „unsicher" verwenden |

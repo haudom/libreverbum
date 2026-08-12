@@ -38,9 +38,10 @@ was hier gefordert wird. Eine vom eigenen Bestand widerlegte Regel gilt faktisch
 
 ### Folge für das Schema
 
-`technik.md` §4 benennt die Tabellen noch deutsch. Verbindlich ist ab jetzt:
+Die Tabellen heißen im Schema englisch. Die deutschen Namen bleiben die Begriffe der
+Prosa und gelten unverändert weiter:
 
-| technik.md | Code und Schema |
+| Prosa | Code und Schema |
 |---|---|
 | `buch`, `kapitel` | `book`, `chapter` |
 | `lemma` | `lemma` |
@@ -49,9 +50,8 @@ was hier gefordert wird. Eine vom eigenen Bestand widerlegte Regel gilt faktisch
 | `ereignis` | `event` |
 | `karte` | `card` |
 
-`technik.md` bekommt dazu einen datierten Nachtrag. Achtung bei `sense`: Die eigene Tabelle
-ist die **Bedeutung als Gegenstand**, WikDicts `sense` nur ein **englischer Kurztext** —
-deshalb `wikdict_sense` für dessen Feld.
+Achtung bei `sense`: Die eigene Tabelle ist die **Bedeutung als Gegenstand**, WikDicts
+`sense` nur ein **englischer Kurztext** — deshalb `wikdict_sense` für dessen Feld.
 
 ---
 
@@ -151,6 +151,7 @@ rows = cursor.fetchall()  # bewusst ungefiltert
 | 9 | NLP- und Modellaufrufe nie im Oberflächen-Thread | §1 |
 | 10 | Wendungen ohne Wörterbucheintrag als `uncertain` markieren | „Messung: Mehrwortausdrücke" |
 | 11 | Das Modell **wählt aus einer Liste**, es erzeugt nie frei | §3, „Messung…" |
+| 12 | Eigennamenfilter wirkt auf das **Vorkommen**, nie auf die Grundform | §5 |
 
 ---
 
@@ -179,6 +180,7 @@ prüfbar ist, ist sie zu prüfen — sonst bleibt sie eine Absichtserklärung:
 | 6 Anki-GUID | nach dem Export steht zu jeder Karte eine Kennung in `card` |
 | 7 `reasoning_effort` | jeder Modellaufruf setzt `"none"` |
 | 10, 11 unsichere Wendungen | Wendung ohne Wörterbucheintrag ist `uncertain` |
+| 12 Eigennamen je Vorkommen | `red` bleibt Lernvokabel, obwohl es auch in einem Namen steht |
 
 Regeln 3, 8 und 9 sind Bauentscheidungen ohne sinnvollen Testpunkt — sie bleiben beim
 Regel-Kommentar.
@@ -194,11 +196,40 @@ guten Namen, wird stattdessen umbenannt.
 
 ---
 
-## 7. Kleinigkeiten
+## 7. Korrigieren: überschreiben oder Nachtrag
+
+Zwei Fälle, die auseinanderzuhalten sind.
+
+**Nachtrag bei Erkenntnis.** War die alte Aussage plausibel und schlüge sie jemand sonst
+erneut vor, bleibt sie stehen und bekommt einen datierten Nachtrag. Der Musterfall ist
+der Nachtrag zum LLM-Ansatz bei Wendungen (konzept.md, Abschnitt 5): „Wendungen ohne
+Wörterbucheintrag bleiben dem LLM allein überlassen" klingt einleuchtend — ohne die
+Notiz, dass die Messung genau daran gescheitert ist, wird es wieder so gebaut. Der
+Nachtrag kostet acht Zeilen und spart einen Messdurchlauf.
+
+**Überschreiben bei ersetzter Festlegung.** Benennungen, Formalia und abgelöste
+Entscheidungen werden im Text geändert. Die Historie hat Git. Niemand wird `bedeutung`
+zurückholen wollen, und falls doch, steht die Begründung in Abschnitt 1.
+
+> **Prüffrage:** Träfe jemand, der die alte Fassung nie zu sehen bekommt, eine
+> schlechtere Entscheidung? Ja → Nachtrag. Nein → überschreiben.
+
+**Der gültige Stand steht immer oben.** Auch wo ein Nachtrag bleibt, wird der Text
+darüber mitkorrigiert; der Nachtrag erklärt dann nur noch, *warum* die frühere Annahme
+falsch war. Sonst liest man zuerst die überholte Fassung — und wer die Datei stückweise
+oder per `grep` liest, erreicht den Nachtrag womöglich nie. Das ist derselbe Mechanismus
+wie in Abschnitt 1: Was im Bestand steht, gilt faktisch, auch wenn weiter unten etwas
+anderes gefordert wird.
+
+**Am Phasenende einfalten.** Ist eine Phase abgeschlossen, wandern die noch nützlichen
+Nachträge in den Fließtext, der Rest fällt weg. Sonst wird aus einzelnen Nachträgen über
+zwanzig Entscheidungen hinweg eine Sedimentschicht.
+
+---
+
+## 8. Kleinigkeiten
 
 - **Dateien immer mit `encoding="utf-8"` öffnen.** Unter Windows liest Python sonst in der
   Kodierung der Systemumgebung und zerstört still typografische Anführungszeichen und
   Gedankenstriche im Buchtext
 - Verweisform: `technik.md §3, „Datenfalle"` — Nummer und Überschrift, nie eine Zeilennummer
-- Widerspricht eine Messung einem Dokument: **datierter Nachtrag**, alte Aussage bleibt
-  stehen
