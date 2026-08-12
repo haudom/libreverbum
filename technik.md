@@ -1,6 +1,6 @@
 # LibreVerbum — Technische Entscheidungen
 
-> Stand: 11.08.2026 · Ergänzt [konzept.md](konzept.md), das die inhaltliche Seite
+> Stand: 12.08.2026 · Ergänzt [konzept.md](konzept.md), das die inhaltliche Seite
 > beschreibt. Hier steht nur, **womit** gebaut wird — und warum.
 > Wie geschrieben und dokumentiert wird, steht in [dokumentation.md](dokumentation.md).
 
@@ -16,10 +16,16 @@ am saubersten auf:
 | 3 | Lokales Modell und Betriebsart | **entschieden** (11.08.2026) |
 | 4 | Ablage des Profils (Datenbankform) | **entschieden** (11.08.2026) |
 | 5 | Lemmatisierung und Eigennamenerkennung (spaCy oder Stanza) | **entschieden** (12.08.2026) |
+| 6 | Projektgerüst und Werkzeuge | **entschieden** (12.08.2026) |
 
 Frage 5 stand anfangs nicht auf der Liste. Sie ist aus Frage 2 entstanden, deren Messung
 mit der Folgerung endete, nicht die Datenquelle sei der Engpass, sondern die
 Lemmatisierung — siehe Abschnitt 5.
+
+Frage 6 ist von anderer Art als 1 bis 5: keine inhaltliche Vorfrage, sondern das Gerüst,
+in dem gebaut wird. Sie kommt zuletzt, weil sie erst beantwortbar war, als die
+Abhängigkeiten feststanden — und sie kommt überhaupt, weil der Code zum großen Teil
+maschinell entsteht. Siehe Abschnitt 6.
 
 Frage 2 stand bewusst weit oben, weil sie das Konzept hätte kippen können: Ein freies,
 offline nutzbares EN→DE-Wörterbuch mit sauberer Lizenz **und** Bedeutungsangaben ist
@@ -638,6 +644,148 @@ ist ohnehin die Ebene, auf der Belegsatz und Häufigkeit geführt werden.
   beachten
 - Ob die Wortart als Vorfilter für lange Auswahllisten taugt (Abschnitt 3, `run` mit 48
   Bedeutungen) — die Wortart liegt jetzt vor, gemessen ist die Wirkung noch nicht
+
+---
+
+## 6. Projektgerüst und Werkzeuge — entschieden
+
+**Python 3.12. `uv` für Umgebung und Abhängigkeiten, `ruff` zum Formatieren und Prüfen,
+`pytest` für Tests, `mypy` für Typen. `pyproject.toml` ist die einzige Quelle.**
+
+### Warum das eine Entscheidung ist und keine Formsache
+
+Die Abschnitte 1 bis 5 beantworten, *womit* gebaut wird. Dieser beantwortet, *woran sich
+das Gebaute messen lassen muss* — und das ist hier keine Nebensache, weil der Code zum
+großen Teil maschinell entsteht. Dabei verschiebt sich der Engpass vom Schreiben zum
+**Prüfen**: Code fällt schneller an, als ein Mensch ihn lesen kann.
+
+Ein Tor, das jede Änderung passieren muss, wirkt darum stärker als jede Regel, die nur
+gelesen wird. Es ist zugleich die Anwendung des Maßstabs aus dokumentation.md §5 auf die
+Werkzeugfrage:
+
+> Was eine Maschine prüfen kann, gehört in ein Werkzeug und nicht in ein Dokument.
+> Eine Regel, die niemand prüft, ist eine Absichtserklärung.
+
+Der Nebengewinn ist konkret: Die Kleinigkeit „Dateien immer mit `encoding="utf-8"`
+öffnen" (dokumentation.md §8) steht bisher in einer Aufzählung, die man beim Schreiben
+gelesen haben muss. Sie ist maschinell prüfbar — siehe „Offene Punkte".
+
+### Python 3.12 — Messgrundlage, nicht bloß zulässige Fassung
+
+Beide Kernabhängigkeiten lassen einen breiten Bereich zu:
+
+| Paket | zulässig |
+|---|---|
+| spaCy 3.8.15 | `>=3.9,<3.15` |
+| PySide6 6.11.1 | `>=3.10,<3.15` |
+
+3.10 bis 3.14 wären also möglich. Festgelegt wird **3.12**, weil die Messumgebung unter
+`.venv/` auf 3.12.10 läuft und die Zahlen aus Abschnitt 5 dort entstanden sind. Eine
+andere Fassung zöge die Grundlage einer bereits getroffenen Entscheidung weg, ohne dafür
+etwas einzubringen. `requires-python` ist entsprechend eng auf `>=3.12,<3.13` gesetzt;
+3.13 und 3.14 bleiben später offen, keine Abhängigkeit blockiert sie.
+
+### Die Werkzeuge und ihre Lizenzlage
+
+Geprüft am 12.08.2026, wie in Abschnitt 1 gefordert **vor** der Aufnahme:
+
+| Zweck | Werkzeug | Fassung | Lizenz |
+|---|---|---|---|
+| Formatieren und Linten | ruff | 0.16.2 | MIT |
+| Tests | pytest | 9.1.1 | MIT |
+| Typprüfung | mypy | 2.3.0 | MIT |
+| Umgebung und Abhängigkeiten | uv | 0.12.3 | MIT oder Apache-2.0 |
+
+Kein starkes Copyleft, keine Einschränkung für eine spätere quelloffene Veröffentlichung.
+
+Nachtrag zu Abschnitt 1: PySide6 wird auf PyPI nicht schlicht „unter LGPL" angeboten,
+sondern als Wahl aus `LGPL-3.0-only`, `GPL-2.0-only` und `GPL-3.0-only`. LGPL ist davon
+eine — die Aussage dort bleibt richtig, sie beschreibt nur eine von drei Möglichkeiten.
+
+### Warum diese und keine anderen
+
+- **ruff statt black + isort + flake8.** Ein Werkzeug, eine Konfiguration, ein Aufruf.
+  Drei Werkzeuge, die sich in Randfällen widersprechen, sind für ein Projekt dieser
+  Größe reiner Verwaltungsaufwand
+- **mypy statt pyright.** pyright ist schneller und schließt besser, bringt aber Node.js
+  als zweite Laufzeit mit. Das widerspräche Abschnitt 1, „Python als einzige Sprache" —
+  und die Einsprachigkeit ist dort mit Bedacht gewählt worden, nicht aus Bequemlichkeit
+- **uv statt pip.** Entscheidend ist `uv.lock`: Sie hält die vollständige Auflösung aller
+  60 Pakete fest. Erst damit ist die Messgrundlage aus Abschnitt 5 wiederherstellbar und
+  nicht nur ungefähr beschrieben. Die Sperrdatei gehört deshalb **ins Repository**
+- **Das spaCy-Modell hängt an seiner Prüfsumme.** `en_core_web_md` liegt nicht auf PyPI;
+  in `pyproject.toml` steht die Wheel-Adresse samt `sha256`. Abschnitt 5 gilt für dieses
+  Artefakt, nicht für „irgendein `md`-Modell"
+
+### Die Architekturregel steht jetzt in der Umgebung
+
+Die Regel aus Abschnitt 1 — der Kern kennt die Oberfläche nicht — ist bisher eine
+Absicht. In `pyproject.toml` wird sie zum Zustand: **PySide6 steht nicht bei
+`dependencies`, sondern in einer eigenen Gruppe `gui`.** Wer nur den Kern installiert,
+hat Qt gar nicht zur Verfügung; ein versehentlicher Import scheitert dann sofort und
+nicht erst im Gespräch über die Architektur.
+
+### Falle: `uv sync` beschneidet die Messumgebung
+
+`uv sync` bringt die Umgebung auf genau den Stand von `pyproject.toml` — und entfernt,
+was dort nicht steht. In `.venv/` liegt aber neben `en_core_web_md` auch
+`en_core_web_sm` aus dem Vergleich in Abschnitt 5.
+
+> **Regel:** Die Werkzeuge wurden mit `pip` in die bestehende `.venv/` gelegt, nicht mit
+> `uv sync`. Wer die Umgebung synchronisiert, verliert das Vergleichsmodell und muss es
+> nachladen, bevor `nlp_check.py` wieder läuft.
+
+### Zwei Prüfregeln arbeiten gegen die Hausordnung
+
+Beim ersten Lauf über den Bestand haben sich zwei Regeln als unbrauchbar erwiesen. Beide
+sind mit Begründung in `pyproject.toml` abgeschaltet:
+
+| Regel | Warum sie hier stört |
+|---|---|
+| `RUF001`–`RUF003` | halten Gedankenstrich und typografische Anführungszeichen für verwechselbare Zeichen. In deutschen Kommentaren (dokumentation.md §1) meldet die Regel als Fehler, was die Sprachregel verlangt |
+| `SIM905` | will `"""be am is are …""".split()` zum Listenliteral machen — aus einem überschaubaren Wortblock würden mehrere hundert Zeilen |
+
+Dazu eine Formatiereinstellung: `skip-magic-trailing-comma`. Ohne sie sprengt ein
+abschließendes Komma jede mehrzeilige Sammlung in eine Zeile je Eintrag, was die
+kompakten Wortlisten in `tools/` unlesbar macht.
+
+`E501` bleibt dagegen **an**, obwohl der Formatierer die Zeilenlänge schon regelt: Er
+bricht Code um, aber keine Prosa. Die langen deutschen Docstrings aus dokumentation.md §3
+liefen sonst ungeprüft.
+
+### Der Bestand ist nachgezogen
+
+Das ganze Repository besteht das Tor: `ruff format`, `ruff check`, `mypy` und `pytest`
+laufen sauber durch. Der erste Lauf hatte 13 Verstöße und rund 500 Zeilen Umformatierung
+ergeben, sämtlich in `tools/`; beides ist am 12.08.2026 nachgezogen worden — aus
+demselben Grund wie `werkzeuge/` → `tools/`: Ein Bestand, der der Regel widerspricht,
+setzt die Regel außer Kraft (dokumentation.md §1).
+
+Inhaltlich behoben wurden: zweimal `SIM115` (Datei ohne Kontextverwalter geöffnet),
+zweimal `B904` (`raise` im `except` ohne `from`), je einmal `SIM105`, `UP035`, `I001`,
+dazu sechs zu lange Zeilen.
+
+**Die Messwerte in diesem Dokument sind davon nicht berührt** — und das ist nicht
+angenommen, sondern nachgemessen: `coverage_check.py` und `nlp_check.py` wurden vor und
+nach dem Eingriff an `sherlock.txt` laufen gelassen. Die Ausgaben sind bis auf die
+Laufzeitzeilen (Ladezeit, Durchsatz, Hochrechnung) zeichengleich; Restlücke 0,98 %,
+17/18 und 21 % stehen unverändert.
+
+Zwei Wortlisten — `CONTRACTIONS` und `PARTICLES` — hat der Formatierer dabei in eine
+Zeile je Eintrag zerlegt. Sie stehen jetzt in derselben Blockschreibweise wie
+`IRREGULAR_FORMS` daneben. Dass die Mengen dabei unverändert geblieben sind, ist gegen
+den Stand in Git geprüft.
+
+### Offene Punkte
+
+- **`encoding="utf-8"` maschinell erzwingen.** ruff kennt dafür `PLW1514`; ob die Regel
+  ohne `preview` verfügbar ist, ist noch nicht geprüft. Gelänge es, wanderte eine
+  Kleinigkeit aus dokumentation.md §8 aus der Prosa in das Tor
+- **Ob `mypy --strict` trägt**, sobald spaCy-Typen im Spiel sind. Bisher sind nur eigene,
+  triviale Dateien geprüft. `tools/` ist von der Typprüfung ausgenommen — Messskripte,
+  reine Standardbibliothek
+- **Auslieferung** (Nuitka, PyInstaller) bleibt offen wie in Abschnitt 1; sie berührt das
+  Gerüst erst, wenn das Programm an Fremde geht
 
 ---
 

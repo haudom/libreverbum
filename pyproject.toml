@@ -1,0 +1,75 @@
+# Projektgerüst — Begründung in technik.md §6, „Projektgerüst und Werkzeuge".
+# Die Fassungen sind eng gefasst: Auf ihnen beruhen die Messungen zu Entscheidung 5.
+
+[project]
+name = "libreverbum"
+version = "0.1.0"
+description = "Bereitet den Wortschatz eines Buchkapitels vor dem Lesen auf"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "spacy>=3.8,<3.9",
+    # Das Modell liegt nicht auf PyPI. Die Prüfsumme hängt an der Adresse, damit
+    # Entscheidung 5 an genau diesem Artefakt reproduzierbar bleibt.
+    "en_core_web_md @ https://github.com/explosion/spacy-models/releases/download/en_core_web_md-3.8.0/en_core_web_md-3.8.0-py3-none-any.whl#sha256=5e6329fe3fecedb1d1a02c3ea2172ee0fede6cea6e4aefb6a02d832dba78a310",
+]
+
+# REGEL (technik.md §1, „Architekturregel"): Der Kern kennt die Oberfläche nicht.
+# Deshalb steht PySide6 nicht bei dependencies, sondern in einer eigenen Gruppe. Wer den
+# Kern installiert, bekommt Qt nicht mit — die Trennung ist damit nicht bloß Absicht,
+# sondern Zustand der Umgebung, und ein versehentlicher Import fällt sofort auf.
+[project.optional-dependencies]
+gui = ["PySide6>=6.11,<7"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.16,<0.17",
+    "pytest>=9.1,<10",
+    "mypy>=2.3,<3",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.format]
+# Ohne diese Einstellung sprengt ein abschließendes Komma jede mehrzeilige Sammlung in
+# eine Zeile je Eintrag. Die kompakten Wortblöcke in tools/ würden dadurch hundertfach
+# länger, ohne lesbarer zu werden.
+skip-magic-trailing-comma = true
+
+[tool.ruff.lint]
+# E501 bleibt bewusst an: Der Formatierer bricht Code um, aber keine Prosa. Die langen
+# deutschen Docstrings aus dokumentation.md §3 fielen sonst durch jede Prüfung.
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+ignore = [
+    # RUF001–003 halten Gedankenstrich und typografische Anführungszeichen für
+    # verwechselbare Zeichen. In einem Projekt, dessen Kommentare und Docstrings
+    # deutsche Prosa sind (dokumentation.md §1), meldet die Regel genau das als Fehler,
+    # was die Sprachregel verlangt.
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    # SIM905 will aus `"""be am is are …""".split()` ein Listenliteral machen. Aus einem
+    # überschaubaren Wortblock würden mehrere hundert Zeilen.
+    "SIM905",
+]
+
+[tool.ruff.lint.isort]
+# Muss zu skip-magic-trailing-comma oben passen, sonst sortiert der Linter Importe
+# anders, als der Formatierer sie anschließend setzt.
+split-on-trailing-comma = false
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["libreverbum", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["spacy.*", "en_core_web_md.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

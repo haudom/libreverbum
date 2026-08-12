@@ -10,8 +10,9 @@ Triage durch den Nutzer → Hybrid-Übersetzung (Wörterbuch + LLM) → Export n
 Druck. Einzelheiten in [konzept.md](konzept.md).
 
 **Stand:** Es gibt noch **keinen Anwendungscode**. Im Repository liegen drei
-Entscheidungsdokumente und drei Messskripte unter `tools/`. Phase 1 (ein vollständiger
-Durchlauf für ein Kapitel) ist noch nicht begonnen.
+Entscheidungsdokumente, vier Messskripte unter `tools/` und seit dem 12.08.2026 das
+Projektgerüst: `pyproject.toml`, das leere Kernpaket `libreverbum/` und `tests/`.
+Phase 1 (ein vollständiger Durchlauf für ein Kapitel) ist noch nicht begonnen.
 
 ## Die drei Dokumente und ihre Zuständigkeit
 
@@ -45,7 +46,7 @@ Projekt deutsch ist:
   Bezeichner damit entsteht. Dort nachsehen, statt einen zweiten Namen für dasselbe Ding
   zu erfinden
 
-**Die elf Regeln aus dokumentation.md §4** sind vor jeder Codeänderung dort
+**Die zwölf Regeln aus dokumentation.md §4** sind vor jeder Codeänderung dort
 nachzulesen; im Code werden sie als `# REGEL (quelle, „stichwort"): …` markiert, damit
 `grep -rn REGEL .` sie auflistet. Beim Bauen am ehesten relevant:
 
@@ -72,6 +73,29 @@ Systemkodierung sonst still typografische Zeichen im Buchtext.
   ruft ihn nur auf. Diese Regel hält den späteren Hybrid, die Testbarkeit und den
   Kommandozeilenzugang offen
 - **Lizenz jeder neuen Bibliothek vor der Aufnahme prüfen** (starkes Copyleft)
+
+## Prüfen vor „fertig" (technik.md §6)
+
+Python 3.12, Abhängigkeiten in `pyproject.toml`, Sperrdatei `uv.lock`. Diese vier
+Befehle laufen bei aktiver `.venv/`, **bevor** eine Änderung als fertig gilt — alle vier
+müssen durchgehen:
+
+```
+ruff format .      # formatiert
+ruff check .       # prüft Regeln
+mypy               # prüft Typen (nur libreverbum/ und tests/)
+pytest             # führt Tests aus
+```
+
+> **Nicht `uv sync` und nicht `uv run`.** Beide bringen die Umgebung auf den Stand von
+> `pyproject.toml` und entfernen dabei `en_core_web_sm`, das `nlp_check.py` für den
+> Vergleich aus technik.md §5 braucht. Neue Pakete mit `pip` in die bestehende `.venv/`,
+> danach `uv lock`. Begründung: technik.md §6, „Falle: `uv sync` beschneidet die
+> Messumgebung".
+
+Zwei Prüfregeln sind abgeschaltet, weil sie gegen die Sprachregel arbeiten (`RUF001`–`003`
+melden Gedankenstrich und typografische Anführungszeichen). Wer sie wieder anschaltet,
+liest erst technik.md §6, „Zwei Prüfregeln arbeiten gegen die Hausordnung".
 
 ## Daten
 
@@ -109,6 +133,16 @@ Adressen ab (llama-server, LM Studio, Ollama, …) oder nehmen `--url`. Testtext
 
 ## Aktueller Stand
 
+**Entscheidung 6 ist am 12.08.2026 gefallen: Python 3.12 mit uv, ruff, pytest und mypy**
+(technik.md §6). Das Gerüst steht, das Tor oben gilt ab sofort, und **das ganze
+Repository besteht es** — `tools/` ist am selben Tag nachgezogen worden. Dass die
+Messwerte davon unberührt sind, ist durch einen Vorher-Nachher-Lauf belegt, nicht
+angenommen (technik.md §6, „Der Bestand ist nachgezogen"). Die verbliebenen offenen
+Punkte stehen dort.
+
+Die nächste Aufgabe ist die **Modulaufteilung des Kerns**: `libreverbum/` ist bewusst
+leer, damit die Aufteilung entschieden und nicht nebenbei erfunden wird.
+
 **Entscheidung 5 ist am 12.08.2026 gefallen: spaCy mit `en_core_web_md`** (technik.md
 §5). Damit sind alle technischen Vorfragen beantwortet und **Phase 1 kann beginnen**.
 Zwei Ergebnisse der Messung wirken sich unmittelbar aufs Bauen aus:
@@ -133,6 +167,16 @@ Code arbeitet, folgt dem Bestand, nicht der Regel.
   werden nacheinander besprochen. Nicht ungefragt mit Code beginnen — offene Punkte
   stehen in den Dokumenten unter „Offene Punkte" und werden erst entschieden, dann
   gebaut
+- **Fertig heißt committet.** Was abgeschlossen ist **und das Tor aus „Prüfen vor
+  »fertig«" besteht**, wird committet — ohne Rückfrage; diese Regel ist die Erlaubnis.
+  „Läuft" ist dabei kein Eindruck, sondern sind die vier grünen Befehle
+  - **Ein Commit je abgeschlossener Sache**, nicht je Sitzung. Liegen zwei Anliegen im
+    Arbeitsbaum, werden es zwei Commits
+  - Auf `main` und **ohne zu pushen**. Veröffentlichen bleibt eine eigene Entscheidung
+  - Nachricht deutsch (dokumentation.md §1). Der Betreff sagt, *was* sich ändert; das
+    dauerhafte *warum* gehört in die Dokumente, nicht in die Nachricht
+  - **Halbfertiges wird nicht committet**, um einen Stand zu haben. Läuft es nicht, ist
+    das zu melden und nicht zu verbuchen
 - **Korrigieren: Nachtrag oder überschreiben** (dokumentation.md §7). Eine widerlegte,
   aber plausible Annahme bekommt einen datierten Nachtrag — so wie in konzept.md §5,
   wo die Wendungsmessung eine Konzeptaussage gekippt hat. Ersetzte Festlegungen werden
