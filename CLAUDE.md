@@ -10,17 +10,19 @@ Triage durch den Nutzer → Hybrid-Übersetzung (Wörterbuch + LLM) → Export n
 Druck. Einzelheiten in [konzept.md](konzept.md).
 
 **Stand:** Es gibt noch **keinen Anwendungscode**. Im Repository liegen drei
-Entscheidungsdokumente, vier Messskripte unter `tools/` und seit dem 12.08.2026 das
-Projektgerüst: `pyproject.toml`, das leere Kernpaket `libreverbum/` und `tests/`.
-Phase 1 (ein vollständiger Durchlauf für ein Kapitel) ist noch nicht begonnen.
+Entscheidungsdokumente, der Bauplan für Phase 1, vier Messskripte unter `tools/` und seit
+dem 12.08.2026 das Projektgerüst: `pyproject.toml`, das leere Kernpaket `libreverbum/`
+und `tests/`. Phase 1 (ein vollständiger Durchlauf für ein Kapitel) ist noch nicht
+begonnen.
 
-## Die drei Dokumente und ihre Zuständigkeit
+## Die Dokumente und ihre Zuständigkeit
 
 | Datei | beantwortet |
 |---|---|
 | [konzept.md](konzept.md) | **Was** gebaut wird und warum — Kernablauf, Phasenplan, Abnahmekriterien |
 | [technik.md](technik.md) | **Womit** — Sprache, Wörterbuchquelle, Modell, Datenablage, samt Messwerten |
 | [dokumentation.md](dokumentation.md) | **Wie** geschrieben und dokumentiert wird — Sprachregel, Begriffe, Docstrings, Regel-Kommentare |
+| [bauplan.md](bauplan.md) | **In welcher Reihenfolge** — Teilaufgaben der Phase 1, was parallel geht. Auf Phase 1 begrenzt und fällt mit deren Abnahme weg |
 
 > Die Dokumente beantworten **warum**. Der Code beantwortet **was und wie**.
 > Wo der Code das Warum braucht, **verweist** er darauf — er schreibt es nicht ab.
@@ -140,6 +142,13 @@ Adressen ab (llama-server, LM Studio, Ollama, …) oder nehmen `--url`. Testtext
 (`*.txt`) und `*.sqlite3` sind bewusst nicht versioniert.
 
 ## Aktueller Stand
+
+**Der Bauplan für Phase 1 steht seit dem 12.08.2026 in [bauplan.md](bauplan.md).** Er
+teilt Phase 1 in achtzehn Teilaufgaben, hält fest, welche davon gleichzeitig gebaut werden
+dürfen, und nennt die vier Vorentscheidungen, die noch Code blockieren — die drei
+Bibliotheken aus technik.md §1 samt Lizenzprüfung und die Ablage zur Laufzeit. **Vor der
+ersten Zeile Anwendungscode dort nachsehen**, welche Teilaufgabe an der Reihe ist. Die
+Triage läuft in Phase 1 über die Kommandozeile; die Qt-Oberfläche kommt nach der Abnahme.
 
 **Entscheidung 7 ist am 12.08.2026 gefallen: die Modulaufteilung des Kerns samt
 Importregel** (technik.md §7), zusammen mit den Regeln 13 bis 15 in dokumentation.md §4.
