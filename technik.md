@@ -19,6 +19,7 @@ am saubersten auf:
 | 6 | Projektgerüst und Werkzeuge | **entschieden** (12.08.2026) |
 | 7 | Modulaufteilung des Kerns und Importregel | **entschieden** (12.08.2026) |
 | 8 | EPUB-Leser | **entschieden** (12.08.2026) |
+| 9 | Ablage und Konfiguration zur Laufzeit | **entschieden** (12.08.2026) |
 
 Frage 5 stand anfangs nicht auf der Liste. Sie ist aus Frage 2 entstanden, deren Messung
 mit der Folgerung endete, nicht die Datenquelle sei der Engpass, sondern die
@@ -983,6 +984,68 @@ leeres Ergebnis (Regel 13):
   offen — der Fall kam nicht vor
 - **Bindestrich- und Sonderzeichen der Verlagsdateien** gegenüber Gutenberg sind nicht
   gesondert geprüft; die Abweichung von 0,08 % ist an einer Gutenberg-Datei gemessen
+
+---
+
+## 9. Ablage und Konfiguration zur Laufzeit — entschieden
+
+**Profil, Wörterbuch und Einstellungen liegen im plattformüblichen Nutzerverzeichnis. Der
+Kern bekommt jeden Pfad als Argument; die Vorgabe setzt der Aufrufer. Einstellungen stehen
+in `config.toml`, gelesen mit `tomllib` aus der Standardbibliothek.**
+
+### Wohin die Dateien gehören
+
+| Plattform | Verzeichnis |
+|---|---|
+| Windows | `%LOCALAPPDATA%\LibreVerbum\` |
+| Linux | `$XDG_DATA_HOME/libreverbum/`, ersatzweise `~/.local/share/libreverbum/` |
+
+Darin `profil.sqlite3`, `en-de.sqlite3` und `config.toml`. Das Profil ist laut konzept.md
+der langfristige Wert des Programms und soll jedes Programmverzeichnis überleben; ein
+Ordner neben dem Programm ist unter Windows nicht verlässlich beschreibbar, sobald es
+einmal in `Program Files` liegt.
+
+Die Trennung aus Abschnitt 4 bleibt unberührt: gemeinsames Verzeichnis, **getrennte
+Dateien**.
+
+### Der Kern kennt keine Vorgabe
+
+> Jede Stelle des Kerns, die eine Datei braucht, bekommt den **Pfad als Argument**. Welches
+> Verzeichnis vorgegeben ist, weiß nur der Aufrufer.
+
+Das ist die Datei-Hälfte der Architekturregel aus Abschnitt 1 und zahlt zweifach: Tests
+fassen nie das echte Profil an, sondern bekommen ein Wegwerfverzeichnis; und die
+Oberfläche muss die Vorgabe später nicht beim Kern erfragen, sondern setzt ihre eigene.
+
+### Einstellungen: `config.toml`
+
+| Schlüssel | Zweck | Vorgabe |
+|---|---|---|
+| `model.url` | Adresse des Modellservers | `http://localhost:11434/v1` |
+| `model.name` | Modellname | leer — dann das erste, das der Server nennt |
+| `paths.dictionary`, `paths.profile` | abweichende Ablage | leer — dann das Verzeichnis oben |
+
+Warum eine Datei und nicht bloß ein Aufrufargument: Der Modellserver dieses Projekts läuft
+**nicht** auf `localhost`, sondern auf einer festen Adresse im Heimnetz. Eine Einstellung,
+die bei jedem Aufruf zu wiederholen wäre, ist keine — das ist der zweite Anwendungsfall,
+den Regel 14 verlangt, bevor ein Schalter entsteht. Die Autosuche aus `tools/` ist
+ausdrücklich **nicht** das Vorbild: Sie findet diesen Server nicht und nähme im
+Zweifelsfall stillschweigend einen anderen (Regel 13).
+
+`tomllib` liest TOML seit Python 3.11 in der Standardbibliothek — keine neue Abhängigkeit.
+Geschrieben wird die Datei nicht: Fehlt sie, legt der Aufrufer sie einmalig aus einer
+Vorlage an und ändert sie danach der Nutzer von Hand. Damit bleibt es beim Lesen, wofür die
+Standardbibliothek reicht.
+
+**`reasoning_effort` steht nicht darin.** Regel 7 ist eine Regel, keine Einstellung — sie
+gehört nach Abschnitt 7 in `translation` und nirgendwo sonst hin.
+
+### Offene Punkte
+
+- Ob Kartenrichtung und Wortobergrenze in die Datei gehören oder Aufrufargumente bleiben.
+  Erst zu beantworten, wenn die Kommandozeile steht
+- Der Menüpunkt für eine konsistente Sicherung (Abschnitt 4) braucht das Verzeichnis oben,
+  ist aber selbst noch nicht gebaut
 
 ---
 

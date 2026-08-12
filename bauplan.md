@@ -39,19 +39,17 @@ daneben. Die Modulkarte deckt das nicht ab, weil sie nur den Kern beschreibt.
 
 ## Tor 0 — Vorentscheidungen, die Code blockieren
 
-Kein Code. Regel 15 verlangt die Lizenzprüfung **vor** der Aufnahme, technik.md §1 nennt
-die drei Bibliotheken ausdrücklich als noch offen.
+Kein Code. Regel 15 verlangt die Lizenzprüfung **vor** der Aufnahme.
 
-| # | Entscheidung | blockiert | Anmerkung |
+| # | Entscheidung | blockiert | Stand |
 |---|---|---|---|
-| **E8a** | EPUB-Leser | T12 | `ebooklib` steht unter AGPL-3.0 — genau der Copyleft-Fall aus technik.md §1. Gegenentwurf ohne Lizenzfrage: `zipfile` und `xml.etree` aus der Standardbibliothek |
-| **E8b** | Anki-Erzeugung | T13 | Ausschlusskriterium: Die Bibliothek muss die **GUID zugänglich** machen, sonst ist Regel 6 nicht erfüllbar |
-| **E8c** | Druckausgabe | T14 | Erzeugtes HTML im Browser drucken wäre die abhängigkeitsfreie Möglichkeit |
-| **E9** | Ablage zur Laufzeit | T5, T8, T11 | Wo `profil.sqlite3` und `en-de.sqlite3` liegen; wie die Modelladresse konfiguriert wird — der Modellserver läuft nicht auf `localhost`, die Autosuche der Messskripte findet ihn nicht |
+| **E8a** | EPUB-Leser | T12 | **entschieden am 12.08.2026** (technik.md §8): keine Bibliothek, Standardbibliothek genügt — gemessen an zwölf Dateien |
+| **E9** | Ablage und Konfiguration | T5, T8, T11 | **entschieden am 12.08.2026** (technik.md §9): plattformübliches Verzeichnis, Pfade als Argument, `config.toml` |
+| **E8b** | Anki-Erzeugung | T13 | offen. Ausschlusskriterium: Die Bibliothek muss die **GUID zugänglich** machen, sonst ist Regel 6 nicht erfüllbar |
+| **E8c** | Druckausgabe | T14 | offen. Erzeugtes HTML im Browser drucken wäre die abhängigkeitsfreie Möglichkeit |
 
-**Reihenfolge:** E8a und E9 vor Tor 1 — sie blockieren den ersten Schritt des Ablaufs und
-die Randstellen dreier Module. E8b und E8c erst kurz vor T13 und T14, denn dann ist bekannt,
-welche Felder eine Karte wirklich trägt.
+**Damit ist Tor 0 für Tor 1 und Tor 2 offen.** E8b und E8c bleiben liegen bis kurz vor T13
+und T14 — dann ist bekannt, welche Felder eine Karte wirklich trägt.
 
 ---
 
@@ -60,7 +58,7 @@ welche Felder eine Karte wirklich trägt.
 | # | Teilaufgabe | Prüfung |
 |---|---|---|
 | **T1** | `entities`: die sieben Gegenstände aus technik.md §4 als Datenklassen, dazu die Aufzählungen `known` / `learning` / `deferred` / `forgotten`, `origin`, `card_direction`, `uncertain`. Kein I/O, importiert nichts aus dem Kern. Dabei den Docstring in `libreverbum/__init__.py` nachziehen — „Aufteilung noch nicht festgelegt" stimmt seit Entscheidung 7 nicht mehr | `mypy` streng, `test_architecture` bleibt grün |
-| **T2** | Testgrundlage: ein Mini-Wörterbuch im WikDict-Schema, das der Test selbst anlegt (`watch`, `draw`, `saw`, `bank`, `give up`, `red`, `street`), ein Mini-EPUB, eine Attrappe für den Modellserver, dazu die Marken `needs_dictionary` und `needs_model` | Ohne T2 hängt die halbe Testsuite an einer unversionierten 20-MB-Datei und einem laufenden Modellserver |
+| **T2** | Testgrundlage: ein Mini-Wörterbuch im WikDict-Schema, das der Test selbst anlegt (`watch`, `draw`, `saw`, `bank`, `give up`, `red`, `street`), ein Mini-EPUB, das der Test selbst als ZIP zusammensetzt — einmal mit und einmal ohne Navigation —, eine Attrappe für den Modellserver, dazu die Marken `needs_dictionary` und `needs_model` | Ohne T2 hängt die halbe Testsuite an unversionierten Dateien und einem laufenden Modellserver |
 
 T2 darf neben T1 laufen: Die Wörterbuch-Vorrichtung braucht WikDicts Schema, nicht
 `entities`.
@@ -108,9 +106,11 @@ Vorstufe zu melden — der `saw`-Fall aus technik.md §3.
 
 | # | Teilaufgabe | Prüfung |
 |---|---|---|
-| **T12** | Öffnen, Metadaten, Kapitelstruktur, Fließtext von Inhaltsverzeichnis, Impressum und Fußnoten trennen. Nur DRM-freie Dateien | Abnahmekriterium 1 gegen das Mini-EPUB |
+| **T12** | Struktur: `container.xml` → OPF → Metadaten, `spine`, Navigation. Kapitelliste nach **eindeutigen Zielen**; fehlt die Navigation, gilt jedes Dokument als Kapitel — mit Hinweis (technik.md §8) | Abnahmekriterium 1; Datei ohne Navigation ergibt Kapitel **und** Hinweis |
+| **T12b** | Fließtext mit `html.parser`, Vorspann und Impressum aussteuern. Die drei Ablehnfälle melden statt leer zurückgeben: kein ZIP-Archiv, Bildband ohne Text, verschlüsselt | Regel 13 an allen drei Fällen |
 
-Braucht E8a.
+`tools/epub_check.py` hat beide Schritte an zwölf Dateien vorgeführt — es ist die Vorlage,
+nicht der Kern: Es misst, T12 baut.
 
 ### Strang F — `anki` und `printout`
 
@@ -129,7 +129,7 @@ Brauchen E8b und E8c. Bei T14 fällt der offene Punkt aus technik.md §7 an, woh
 | # | Teilaufgabe |
 |---|---|
 | **T15** | `pipeline`: ein Durchlauf für ein Kapitel. Sinnvollerweise als Durchstich angelegt, sobald T3, T5 und T8 stehen — dann zeigt sich früh, ob `entities` trägt |
-| **T16** | Kommandozeilenzugang, Triage über die Tastatur |
+| **T16** | Kommandozeilenzugang, Triage über die Tastatur. Hier liegen die Vorgaben aus technik.md §9: Verzeichnis bestimmen, `config.toml` mit `tomllib` lesen, fehlende Datei einmalig aus einer Vorlage anlegen — der Kern bekommt nur fertige Pfade und Adressen |
 
 ---
 
@@ -183,4 +183,4 @@ am stärksten festlegen.
   eigenes Paket daneben. Zu entscheiden bei T16, nicht vorher
 - **Ob der Durchstich in T15 genügt** oder `pipeline` je Schritt eine Zwischenablage
   braucht (technik.md §7, offener Punkt). Erst messen, dann bauen
-- **E8a bis E9 sind offen** und stehen oben in Tor 0
+- **E8b und E8c sind offen** und stehen oben in Tor 0

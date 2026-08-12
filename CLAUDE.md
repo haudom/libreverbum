@@ -10,7 +10,7 @@ Triage durch den Nutzer → Hybrid-Übersetzung (Wörterbuch + LLM) → Export n
 Druck. Einzelheiten in [konzept.md](konzept.md).
 
 **Stand:** Es gibt noch **keinen Anwendungscode**. Im Repository liegen drei
-Entscheidungsdokumente, der Bauplan für Phase 1, vier Messskripte unter `tools/` und seit
+Entscheidungsdokumente, der Bauplan für Phase 1, fünf Messskripte unter `tools/` und seit
 dem 12.08.2026 das Projektgerüst: `pyproject.toml`, das leere Kernpaket `libreverbum/`
 und `tests/`. Phase 1 (ein vollständiger Durchlauf für ein Kapitel) ist noch nicht
 begonnen.
@@ -119,6 +119,11 @@ WikDict-Werte nur als Momentaufnahme (`wikdict_*`). Begründung: technik.md §4.
 `PRAGMA user_version` ab der ersten Fassung. Tabellen heißen im Schema `book`,
 `chapter`, `lemma`, `sense`, `occurrence`, `event`, `card`.
 
+Zur Laufzeit liegen beide samt `config.toml` im plattformüblichen Nutzerverzeichnis
+(`%LOCALAPPDATA%\LibreVerbum\`, unter Linux `~/.local/share/libreverbum/`). **Der Kern
+bekommt jeden Pfad als Argument** und kennt keine Vorgabe — die setzt der Aufrufer.
+Begründung: technik.md §9.
+
 ## `tools/` — die Messskripte
 
 Reproduzieren die Messungen, auf die sich technik.md stützt. Die Wörterbuchdatei
@@ -130,9 +135,11 @@ python tools/coverage_check.py buch.txt               # Abdeckung des Wörterbuc
 python tools/sense_check.py                           # Bedeutungsauswahl durch das Modell
 python tools/mwe_check.py buch.txt                    # Mehrwortausdrücke
 python tools/nlp_check.py buch.txt                    # spaCy gegen Stanza
+python tools/epub_check.py buch.epub                  # EPUB-Struktur und Fließtext
+python tools/epub_check.py --summary *.epub           # eine Zeile je Buch
 ```
 
-Die ersten drei kommen mit der Standardbibliothek aus, brauchen also keine
+Alle bis auf eines kommen mit der Standardbibliothek aus, brauchen also keine
 Projektumgebung. **`nlp_check.py` ist die Ausnahme** und verlangt spaCy oder Stanza samt
 Modellen: Ein Vergleich der beiden lässt sich nur an den echten Modellen führen, nicht
 nachbilden. Das Skript nennt die Installationsbefehle in seinem Kopf.
@@ -142,6 +149,19 @@ Adressen ab (llama-server, LM Studio, Ollama, …) oder nehmen `--url`. Testtext
 (`*.txt`) und `*.sqlite3` sind bewusst nicht versioniert.
 
 ## Aktueller Stand
+
+**Entscheidungen 8 und 9 sind am 12.08.2026 gefallen** (technik.md §8 und §9):
+
+- **EPUB ohne Bibliothek** — `zipfile`, `xml.etree`, `html.parser`. EbookLib steht unter
+  AGPL-3.0 und scheidet nach Regel 15 aus; gemessen an zwölf Dateien liest die
+  Standardbibliothek **570 von 570** Inhaltsdokumenten, und der gewonnene Wortschatz weicht
+  um 0,08 % von der Textfassung ab, auf der die Entscheidungen 2 und 5 beruhen
+- **Kapitel kommen aus der Navigation**, gezählt nach eindeutigen Zielen. Fehlt sie, gilt
+  jedes Dokument der Lesereihenfolge als Kapitel — **mit sichtbarem Hinweis**. Ein Rückfall
+  auf Überschriften wurde gemessen und verworfen: Jede Datei mit Überschriften hat auch ein
+  Inhaltsverzeichnis. `epub:type` kommt in der Praxis nicht vor, die Trennung von Vorspann
+  und Impressum bleibt Heuristik
+- **Ablage und Konfiguration** stehen unter „Daten" oben
 
 **Der Bauplan für Phase 1 steht seit dem 12.08.2026 in [bauplan.md](bauplan.md).** Er
 teilt Phase 1 in achtzehn Teilaufgaben, hält fest, welche davon gleichzeitig gebaut werden

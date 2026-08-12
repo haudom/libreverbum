@@ -85,6 +85,8 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | Durchlauf, Verkettung der Schritte | `pipeline` |
 | Lesereihenfolge, Manifest (EPUB) | `spine`, `manifest` |
 | Inhaltsverzeichnis einer Datei | `navigation` |
+| Datenverzeichnis | `data_dir` |
+| Einstellungen | `config` |
 
 Neue Begriffe kommen hierher, **bevor** der erste Bezeichner damit entsteht.
 
