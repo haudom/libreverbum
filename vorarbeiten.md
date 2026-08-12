@@ -81,7 +81,26 @@ auffallen.
 
 ---
 
-## 2. Modulaufteilung und Importregel
+## 2. Modulaufteilung und Importregel — **erledigt am 12.08.2026**
+
+Entschieden und abgelegt als *Abschnitt 7* in technik.md: zehn Module entlang der sechs
+Schritte des Kernablaufs, dazu die Importregel. Geprüft wird sie in
+`tests/test_architecture.py`; Regel 9 steht damit zur Hälfte in der Prüftabelle von
+dokumentation.md §5. `libreverbum/` bleibt leer — die Karte sagt, wo etwas hingehört, und
+legt keine Dateien auf Vorrat an (Regel 14).
+
+Die neuen Modulnamen sind vorab in die Begriffstabelle dokumentation.md §2 eingetragen
+worden, wie es §2 verlangt. Dabei ist ein Name ausgeschieden: Der Träger der Datentypen
+heißt `entities` und nicht `model`, weil „das Modell" in diesem Projekt durchgehend das
+LLM meint. Begründung in technik.md §7, „Warum `entities` und nicht `model`".
+
+**Beim Bauen des Tests aufgefallen und behoben:** `ast.parse` scheitert an einer BOM, die
+Python in Quelldateien selbst zulässt — unter Windows erzeugt sie jedes `Out-File`. Der
+Test liest deshalb mit `utf-8-sig` statt `utf-8` und weicht damit begründet von
+dokumentation.md §8 ab. Ohne das wäre er an gültigem Code abgestürzt, statt ihn zu prüfen.
+
+<details>
+<summary>Ursprüngliche Fassung des Punktes</summary>
 
 **Lücke:** technik.md §1, „Architekturregel" fordert den Kern „ohne jeden Bezug zur
 Oberfläche" — aber welche Module es gibt und wer wen importieren darf, steht nirgends.
@@ -98,11 +117,13 @@ wird. Damit wird aus einer Absichtserklärung eine geprüfte Zusage.
 
 **Zu tun**
 
-- [ ] Modulkarte für Phase 1 festlegen — je Modul ein Satz, entlang der sechs Schritte
+- [x] Modulkarte für Phase 1 festlegen — je Modul ein Satz, entlang der sechs Schritte
       des Kernablaufs (konzept.md, „Der Kernablauf")
-- [ ] Importrichtung festhalten: Oberfläche → Kern, nie umgekehrt
-- [ ] Test schreiben, der den Kern auf Freiheit von Oberflächen-Importen prüft
-- [ ] Prüftabelle in dokumentation.md §5 um Regel 9 ergänzen
+- [x] Importrichtung festhalten: Oberfläche → Kern, nie umgekehrt
+- [x] Test schreiben, der den Kern auf Freiheit von Oberflächen-Importen prüft
+- [x] Prüftabelle in dokumentation.md §5 um Regel 9 ergänzen
+
+</details>
 
 ---
 

@@ -17,6 +17,7 @@ am saubersten auf:
 | 4 | Ablage des Profils (Datenbankform) | **entschieden** (11.08.2026) |
 | 5 | Lemmatisierung und Eigennamenerkennung (spaCy oder Stanza) | **entschieden** (12.08.2026) |
 | 6 | Projektgerüst und Werkzeuge | **entschieden** (12.08.2026) |
+| 7 | Modulaufteilung des Kerns und Importregel | **entschieden** (12.08.2026) |
 
 Frage 5 stand anfangs nicht auf der Liste. Sie ist aus Frage 2 entstanden, deren Messung
 mit der Folgerung endete, nicht die Datenquelle sei der Engpass, sondern die
@@ -26,6 +27,11 @@ Frage 6 ist von anderer Art als 1 bis 5: keine inhaltliche Vorfrage, sondern das
 in dem gebaut wird. Sie kommt zuletzt, weil sie erst beantwortbar war, als die
 Abhängigkeiten feststanden — und sie kommt überhaupt, weil der Code zum großen Teil
 maschinell entsteht. Siehe Abschnitt 6.
+
+Frage 7 gehört zu 6 und steht unmittelbar vor der ersten Zeile Anwendungscode: nicht
+womit gebaut wird, sondern wohin das Gebaute kommt. Sie wird vorab entschieden, weil eine
+Aufteilung, die nebenbei entsteht, in jeder Sitzung neu entsteht — und sich nicht mehr
+ändern lässt, sobald anderer Code auf ihr aufbaut. Siehe Abschnitt 7.
 
 Frage 2 stand bewusst weit oben, weil sie das Konzept hätte kippen können: Ein freies,
 offline nutzbares EN→DE-Wörterbuch mit sauberer Lizenz **und** Bedeutungsangaben ist
@@ -786,6 +792,84 @@ den Stand in Git geprüft.
   reine Standardbibliothek
 - **Auslieferung** (Nuitka, PyInstaller) bleibt offen wie in Abschnitt 1; sie berührt das
   Gerüst erst, wenn das Programm an Fremde geht
+
+---
+
+## 7. Modulaufteilung des Kerns und Importregel — entschieden
+
+**Zehn Module entlang der sechs Schritte des Kernablaufs. Jeder Schritt kennt nur
+`entities`; verkettet werden die Schritte allein in `pipeline`.**
+
+### Warum eine Karte und nicht mehr
+
+Abschnitt 1 fordert den Kern „ohne jeden Bezug zur Oberfläche", nennt aber weder die
+Module noch die erlaubten Importe. Die Karte schließt diese Lücke und tut sonst nichts:
+ein Satz je Modul, dazu die Importrichtung. Sie sagt, **wo** etwas hingehört, nicht wie es
+auszusehen hat — Entwürfe für Code, der noch nicht geschrieben ist, wären genau die
+Vorratsarbeit, die Regel 14 untersagt.
+
+### Die Module
+
+| Modul | Zuständigkeit |
+|---|---|
+| `entities` | Die Gegenstände des Kernablaufs — `book`, `chapter`, `lemma`, `sense`, `occurrence`, `event`, `card` aus Abschnitt 4. Importiert selbst nichts aus dem Kern |
+| `epub` | Schritt 1: EPUB öffnen, Metadaten und Kapitelstruktur lesen, Fließtext von Inhaltsverzeichnis, Impressum und Fußnoten trennen |
+| `extraction` | Schritt 2: Kapiteltext zu Grundformen — Tokenisierung, Wortart, Lemmatisierung, Eigennamenfilter, Häufigkeit, Belegsatz. Schlägt **nicht** nach |
+| `profile` | Schritt 3: der einzige Zugriff auf `profil.sqlite3` — Ereignisfolge, daraus abgeleiteter Kenntnisstand, Abgleich gegen den Kapitelwortschatz |
+| `triage` | Schritt 4, soweit er im Kern liegt: Häufigkeitssortierung, Wortobergrenze, Sammelaktion. Die Entscheidung selbst trifft der Nutzer |
+| `dictionary` | Schritt 5, erste Hälfte: der einzige Zugriff auf `en-de.sqlite3` samt dessen Erstbezug — liefert je Grundform die Auswahlliste |
+| `translation` | Schritt 5, zweite Hälfte: der einzige Ort, an dem das Modell angesprochen wird — Auswahl aus der vorgelegten Liste |
+| `anki` | Schritt 6: Anki-Deck samt GUID je Karte |
+| `printout` | Schritt 6: Kapitelliste als Druckseite |
+| `pipeline` | Verkettet die Schritte zu einem Durchlauf für ein Kapitel — dem Abnahmeziel der Phase 1 |
+
+Vier dieser Grenzen sind keine Geschmacksfrage. Sie machen Regeln aus den Abschnitten 1
+bis 5 zu Modulgrenzen, und das ist ihr eigentlicher Zweck: Eine Regel, die auf einer
+Dateigrenze liegt, wird nicht versehentlich verletzt, sondern nur absichtlich.
+
+- **`extraction` und `dictionary` getrennt**, weil die Reihenfolge Wortart → Grundform →
+  Nachschlagen zwingend ist („Warum die Reihenfolge zwingend ist"). Ein Modul, das beides
+  täte, könnte den Schritt dazwischen überspringen — und der `saw`-Fall scheitert leise
+- **`profile` und `dictionary` getrennt**, weil die Dateien es sind (Abschnitt 4). Damit
+  ist Regel 4 an der Datei ablesbar und nicht erst am Verhalten
+- **`translation` als einziger Ort mit Modellzugriff.** Sonst verteilt sich
+  `reasoning_effort: "none"` (Regel 7) über den Kern und fehlt irgendwann an einer Stelle
+- **`triage` liegt größtenteils nicht im Kern.** Sortierung, Obergrenze und Sammelaktion
+  sind Rechenschritte; die Triage selbst ist Bedienung
+
+### Die Importregel
+
+> **Oberfläche → Kern, nie umgekehrt.** Innerhalb des Kerns importiert jeder Schritt nur
+> `entities`. Wer mehrere Schritte kennt, ist `pipeline` — und sonst niemand.
+
+Der erste Satz ist die Architekturregel aus Abschnitt 1. Der zweite ist neu und zahlt
+zweifach: Solange die Schritte einander nicht aufrufen, lässt sich jeder für sich prüfen —
+`translation` bekommt seine Auswahlliste als Argument und braucht dafür keine
+Wörterbuchdatei. Und der Ablauf steht an einer Stelle statt verteilt in der Oberfläche,
+womit der Kommandozeilenzugang aus Abschnitt 1 wirklich geschenkt ist, statt nachgebaut zu
+werden.
+
+Die äußere Hälfte der Regel setzt `pyproject.toml` bereits durch (Abschnitt 6, „Die
+Architekturregel steht jetzt in der Umgebung"). Geprüft wird sie in
+`tests/test_architecture.py`; damit verlässt Regel 9 zur Hälfte die Liste der
+Bauentscheidungen ohne Testpunkt (dokumentation.md §5).
+
+### Warum `entities` und nicht `model`
+
+Der naheliegende Name wäre `model` — er ist vergeben. „Das Modell" bezeichnet in diesem
+Projekt durchgehend das LLM (Abschnitt 3). Ein `model.py` neben `translation.py` erzeugte
+genau die Doppelbedeutung, gegen die die Begriffstabelle in dokumentation.md §2 angelegt
+ist.
+
+### Offene Punkte
+
+- **Wohin die Liste „Figuren & Orte" gehört.** Sie fällt in `extraction` an, ist aber
+  Ausgabe und keine Lernvokabel. Zu entscheiden, wenn die Druckausgabe gebaut wird
+- **Ob `pipeline` je Schritt eine eigene Zwischenablage braucht** oder ein Durchlauf am
+  Stück genügt. Für ein Kapitel von einer Sekunde Rechenzeit (Abschnitt 5) genügt er
+  vermutlich; gemessen ist es nicht
+- **Die Oberfläche ist nicht aufgeteilt.** Sie liegt außerhalb des Kernpakets, ihre
+  Gliederung wird entschieden, wenn sie gebaut wird
 
 ---
 

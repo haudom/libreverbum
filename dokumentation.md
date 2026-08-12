@@ -69,13 +69,19 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | Vorkommen, Häufigkeit | `occurrence`, `frequency` |
 | Eigenname | `proper_noun` |
 | Mehrwortausdruck, Wendung | `multiword_expression` / `mwe` |
+| Wortschatzextraktion | `extraction` |
 | Profil, Kenntnisstand | `profile`, `knowledge_state` |
 | bekannt / lernt / zurückgestellt / vergessen | `known` / `learning` / `deferred` / `forgotten` |
 | Herkunft (einer Kenntnisangabe) | `origin` |
 | Triage, Sammelaktion, Wortobergrenze | `triage`, `bulk_mark`, `word_limit` |
 | Wörterbuch, Nachschlagen | `dictionary`, `lookup` |
+| Auswahlliste, Kandidat | `candidate` |
+| Übersetzung | `translation` |
 | Karte, Deck, Kartenrichtung | `card`, `deck`, `card_direction` |
+| Druckausgabe | `printout` |
 | unsicher (markierter Eintrag) | `uncertain` |
+| Gegenstand des Kernablaufs | `entity` |
+| Durchlauf, Verkettung der Schritte | `pipeline` |
 
 Neue Begriffe kommen hierher, **bevor** der erste Bezeichner damit entsteht.
 
@@ -184,12 +190,18 @@ prüfbar ist, ist sie zu prüfen — sonst bleibt sie eine Absichtserklärung:
 | 5 `PRAGMA user_version` | ist gesetzt und passt zum erwarteten Stand |
 | 6 Anki-GUID | nach dem Export steht zu jeder Karte eine Kennung in `card` |
 | 7 `reasoning_effort` | jeder Modellaufruf setzt `"none"` |
+| 9 Kern ohne Oberfläche | unter `libreverbum/` wird keine Oberflächenbibliothek importiert |
 | 10, 11 unsichere Wendungen | Wendung ohne Wörterbucheintrag ist `uncertain` |
 | 12 Eigennamen je Vorkommen | `red` bleibt Lernvokabel, obwohl es auch in einem Namen steht |
 | 13 nichts scheitert leise | unerreichbarer Modellserver ergibt einen sichtbaren Fehlschlag, kein stilles Loch in der Wortliste |
 
-Regeln 3, 8, 9, 14 und 15 sind Bauentscheidungen ohne sinnvollen Testpunkt — sie bleiben
-beim Regel-Kommentar.
+Regeln 3, 8, 14 und 15 sind Bauentscheidungen ohne sinnvollen Testpunkt — sie bleiben beim
+Regel-Kommentar.
+
+Regel 9 zerfällt dagegen in zwei Hälften, und nur eine davon ist Baudisziplin: Dass NLP-
+und Modellaufrufe nicht im Oberflächen-Thread laufen, lässt sich nicht sinnvoll prüfen —
+dass der Kern die Oberfläche überhaupt nicht kennt, sehr wohl. Die strukturelle Hälfte
+steht deshalb in der Tabelle und ist damit keine Absichtserklärung mehr.
 
 ---
 
