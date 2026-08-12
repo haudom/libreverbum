@@ -47,11 +47,13 @@ from __future__ import annotations
 
 import argparse
 import collections
+import contextlib
 import os
 import re
 import sys
 import time
-from typing import Callable, Iterable, Iterator, NamedTuple
+from collections.abc import Callable, Iterable, Iterator
+from typing import NamedTuple
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_DB = os.path.join(HERE, "en-de.sqlite3")
@@ -71,10 +73,14 @@ DEFAULT_LIMIT = 25_000
 # die Projekte selbst nennen; die Modellpakete tragen eigene Lizenzen und sind der
 # eigentlich heikle Teil.
 LICENSES = {
-    "spacy": ("spaCy: MIT · Modelle en_core_web_*: MIT",
-              "unkritisch, auch für eine spätere Veröffentlichung"),
-    "stanza": ("Stanza: Apache 2.0 · Modelle aus UD-Baumbanken",
-               "Baumbank-Lizenzen weichen voneinander ab — vor Aufnahme einzeln prüfen"),
+    "spacy": (
+        "spaCy: MIT · Modelle en_core_web_*: MIT",
+        "unkritisch, auch für eine spätere Veröffentlichung",
+    ),
+    "stanza": (
+        "Stanza: Apache 2.0 · Modelle aus UD-Baumbanken",
+        "Baumbank-Lizenzen weichen voneinander ab — vor Aufnahme einzeln prüfen",
+    ),
 }
 
 # spaCy nennt die Verbpartikel „prt", Stanza folgt Universal Dependencies mit
@@ -125,10 +131,10 @@ class Token(NamedTuple):
 
     text: str
     lemma: str
-    pos: str     # UPOS (NOUN, VERB, PROPN …); spaCy und Stanza stimmen hier überein
+    pos: str  # UPOS (NOUN, VERB, PROPN …); spaCy und Stanza stimmen hier überein
     dep: str
-    head: int    # satzinterner Index des Kopfes
-    index: int   # satzinterner Index dieses Wortes
+    head: int  # satzinterner Index des Kopfes
+    index: int  # satzinterner Index dieses Wortes
 
 
 class Engine(NamedTuple):
@@ -143,6 +149,7 @@ class Engine(NamedTuple):
 
 # --------------------------------------------------------------------------- Modelle
 
+
 def directory_size_mb(path: str | None) -> float:
     """Belegter Platz eines Modellverzeichnisses; 0, wenn nicht bestimmbar."""
     if not path or not os.path.isdir(path):
@@ -150,10 +157,8 @@ def directory_size_mb(path: str | None) -> float:
     total = 0
     for root, _, files in os.walk(path):
         for name in files:
-            try:
+            with contextlib.suppress(OSError):
                 total += os.path.getsize(os.path.join(root, name))
-            except OSError:
-                pass
     return total / 1024 / 1024
 
 
@@ -166,9 +171,17 @@ def build_spacy(model: str) -> tuple[Callable, float]:
         for doc in nlp.pipe(chunks):
             for sentence in doc.sents:
                 start = sentence.start
-                yield [Token(t.text, (t.lemma_ or t.text), t.pos_, t.dep_,
-                             max(0, t.head.i - start), t.i - start)
-                       for t in sentence]
+                yield [
+                    Token(
+                        t.text,
+                        (t.lemma_ or t.text),
+                        t.pos_,
+                        t.dep_,
+                        max(0, t.head.i - start),
+                        t.i - start,
+                    )
+                    for t in sentence
+                ]
 
     return analyze, directory_size_mb(str(nlp.path) if nlp.path else None)
 
@@ -179,8 +192,13 @@ def build_stanza(package: str) -> tuple[Callable, float]:
     # Ohne Abhängigkeitsanalyse fiele Teil 4 aus; Eigennamen liefert bereits die
     # Wortart, deshalb kein eigener NER-Schritt — das hielte den Vergleich mit spaCy
     # nicht sauber und kostete nur Zeit.
-    nlp = stanza.Pipeline("en", processors="tokenize,pos,lemma,depparse",
-                          package=package, download_method=None, verbose=False)
+    nlp = stanza.Pipeline(
+        "en",
+        processors="tokenize,pos,lemma,depparse",
+        package=package,
+        download_method=None,
+        verbose=False,
+    )
 
     def analyze(chunks: Iterable[str]) -> Iterator[list[Token]]:
         for chunk in chunks:
@@ -189,8 +207,9 @@ def build_stanza(package: str) -> tuple[Callable, float]:
                 for i, word in enumerate(sentence.words):
                     # Stanza zählt ab 1, die Wurzel trägt den Kopf 0.
                     head = word.head - 1 if word.head > 0 else i
-                    tokens.append(Token(word.text, word.lemma or word.text, word.upos,
-                                        word.deprel, head, i))
+                    tokens.append(
+                        Token(word.text, word.lemma or word.text, word.upos, word.deprel, head, i)
+                    )
                 yield tokens
 
     model_dir = os.path.join(os.path.expanduser("~"), "stanza_resources", "en")
@@ -211,14 +230,19 @@ def load_engine(spec: str) -> Engine:
         else:
             analyze, size = build_stanza(model or "default")
     except ImportError as e:
-        hint = ("pip install spacy && python -m spacy download en_core_web_sm"
-                if library == "spacy" else
-                'pip install stanza && python -c "import stanza; stanza.download(\'en\')"')
-        raise SystemExit(f"{spec}: {e}\nInstallation:  {hint}")
+        hint = (
+            "pip install spacy && python -m spacy download en_core_web_sm"
+            if library == "spacy"
+            else "pip install stanza && python -c \"import stanza; stanza.download('en')\""
+        )
+        raise SystemExit(f"{spec}: {e}\nInstallation:  {hint}") from e
     except Exception as e:
-        hint = (f"python -m spacy download {model}" if library == "spacy" else
-                'python -c "import stanza; stanza.download(\'en\')"')
-        raise SystemExit(f"{spec}: Modell nicht ladbar ({e})\nVermutlich nötig:  {hint}")
+        hint = (
+            f"python -m spacy download {model}"
+            if library == "spacy"
+            else "python -c \"import stanza; stanza.download('en')\""
+        )
+        raise SystemExit(f"{spec}: Modell nicht ladbar ({e})\nVermutlich nötig:  {hint}") from e
 
     return Engine(spec, library, analyze, time.perf_counter() - started, size)
 
@@ -227,11 +251,13 @@ def peak_memory_mb() -> float | None:
     """Aktueller Speicherbedarf des Prozesses, sofern messbar."""
     try:
         import psutil
+
         return psutil.Process().memory_info().rss / 1024 / 1024
     except Exception:
         pass
     try:
-        import resource   # nur unter Linux/macOS, dort in KiB bzw. Byte
+        import resource  # nur unter Linux/macOS, dort in KiB bzw. Byte
+
         peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         return peak / 1024 if sys.platform != "darwin" else peak / 1024 / 1024
     except Exception:
@@ -239,6 +265,7 @@ def peak_memory_mb() -> float | None:
 
 
 # --------------------------------------------------------------------------- Text
+
 
 def split_chunks(text: str, limit_words: int, chunk_chars: int = 40_000) -> tuple[list[str], int]:
     """Zerlegt an Absatzgrenzen, damit kein Satz zerschnitten wird.
@@ -278,6 +305,7 @@ def analyze_one(engine: Engine, text: str) -> list[Token]:
 
 # --------------------------------------------------------------------------- Teil 1
 
+
 def part_lemmas(sentences: list[list[Token]], headwords: set[str], examples: int) -> dict:
     """Restlücke mit echter Lemmatisierung, gegen Rohform und Suffix-Heuristik."""
     forms: collections.Counter = collections.Counter()
@@ -309,8 +337,9 @@ def part_lemmas(sentences: list[list[Token]], headwords: set[str], examples: int
         return {}
 
     raw_forms = {f for f in forms if f in headwords}
-    suffix_forms = {f for f in forms
-                    if any(c in headwords for c in coverage_check.lemma_candidates(f))}
+    suffix_forms = {
+        f for f in forms if any(c in headwords for c in coverage_check.lemma_candidates(f))
+    }
 
     def row(hit_forms: set[str]) -> tuple[float, float]:
         hit_tokens = sum(forms[f] for f in hit_forms)
@@ -322,33 +351,48 @@ def part_lemmas(sentences: list[list[Token]], headwords: set[str], examples: int
     print(f"  Wörter gesamt (ohne Eigennamen)  {total:>8,}")
     print(f"  davon als Eigenname erkannt      {proper_tokens:>8,}  (nicht mitgezählt)")
     print(f"  Wortformen (types)               {len(forms):>8,}")
-    print(f"  Grundformen (lemma types)        {len(lemmas):>8,}"
-          f"   → {1 - len(lemmas)/len(forms):.0%} weniger Einträge in der Triage")
+    print(
+        f"  Grundformen (lemma types)        {len(lemmas):>8,}"
+        f"   → {1 - len(lemmas) / len(forms):.0%} weniger Einträge in der Triage"
+    )
 
-    print(f"\n  {'Rückführung auf die Grundform':<34}{'Treffer':>10}{'Abdeckung':>12}"
-          f"{'Restlücke':>12}")
-    for label, hits in (("gar keine, Wortform direkt", raw_forms),
-                        ("Suffix-Heuristik (coverage_check)", suffix_forms)):
+    print(
+        f"\n  {'Rückführung auf die Grundform':<34}{'Treffer':>10}{'Abdeckung':>12}"
+        f"{'Restlücke':>12}"
+    )
+    for label, hits in (
+        ("gar keine, Wortform direkt", raw_forms),
+        ("Suffix-Heuristik (coverage_check)", suffix_forms),
+    ):
         types_rate, token_rate = row(hits)
-        print(f"  {label:<34}{types_rate:>9.1%}{token_rate:>12.1%}{1-token_rate:>12.2%}")
+        print(f"  {label:<34}{types_rate:>9.1%}{token_rate:>12.1%}{1 - token_rate:>12.2%}")
     lemma_type_rate = len(lemma_hit_forms) / len(forms)
     lemma_token_rate = lemma_hit_tokens / total
-    print(f"  {'Lemmatisierung (dieses Modell)':<34}{lemma_type_rate:>9.1%}"
-          f"{lemma_token_rate:>12.1%}{1-lemma_token_rate:>12.2%}")
+    print(
+        f"  {'Lemmatisierung (dieses Modell)':<34}{lemma_type_rate:>9.1%}"
+        f"{lemma_token_rate:>12.1%}{1 - lemma_token_rate:>12.2%}"
+    )
 
-    print(f"\n  Restlücke: {1-lemma_token_rate:.2%} der Wörter"
-          f"   (Schätzung in technik.md §2: ≈ 1,0 %)")
+    print(
+        f"\n  Restlücke: {1 - lemma_token_rate:.2%} der Wörter"
+        f"   (Schätzung in technik.md §2: ≈ 1,0 %)"
+    )
 
     if gaps:
         print("\n  Häufigste verbleibende Lücken (Grundform, Vorkommen):")
         top = ", ".join(f"{lemma} ({count})" for lemma, count in gaps.most_common(examples))
         print("    " + top)
 
-    return {"gap": 1 - lemma_token_rate, "forms": len(forms), "lemmas": len(lemmas),
-            "tokens": total}
+    return {
+        "gap": 1 - lemma_token_rate,
+        "forms": len(forms),
+        "lemmas": len(lemmas),
+        "tokens": total,
+    }
 
 
 # --------------------------------------------------------------------------- Teil 2
+
 
 def part_order(engine: Engine, headwords: set[str]) -> dict:
     """Der `saw`-Fall: Führt Wortart → Grundform an der richtigen Stelle vorbei?"""
@@ -361,8 +405,9 @@ def part_order(engine: Engine, headwords: set[str]) -> dict:
 
     correct = silent_failures = prevented = 0
     for sentence, form, expected_lemma, expected_pos in ORDER_CASES:
-        found = next((t for t in analyze_one(engine, sentence)
-                      if t.text.lower() == form.lower()), None)
+        found = next(
+            (t for t in analyze_one(engine, sentence) if t.text.lower() == form.lower()), None
+        )
         if found is None:
             print(f"  [??]   {form:<10} nicht im analysierten Satz gefunden")
             continue
@@ -383,17 +428,22 @@ def part_order(engine: Engine, headwords: set[str]) -> dict:
         marker = "!" if trap else " "
         print(f"  {marker}[{mark:<6}] {form:<10} → ({found.pos}) {found.lemma}")
         if not (lemma_ok and pos_ok):
-            print(f"            erwartet: ({expected_pos}) {expected_lemma}"
-                  f"   „{sentence}“")
+            print(f"            erwartet: ({expected_pos}) {expected_lemma}   „{sentence}“")
 
     print(f"\n  {correct}/{len(ORDER_CASES)} richtig")
-    print(f"  Stille Fehlschläge: {prevented}/{silent_failures} verhindert"
-          f" — Fälle, in denen die falsche Grundform ohne Fehlermeldung durchgelaufen wäre")
-    return {"order": f"{correct}/{len(ORDER_CASES)}", "prevented": prevented,
-            "traps": silent_failures}
+    print(
+        f"  Stille Fehlschläge: {prevented}/{silent_failures} verhindert"
+        f" — Fälle, in denen die falsche Grundform ohne Fehlermeldung durchgelaufen wäre"
+    )
+    return {
+        "order": f"{correct}/{len(ORDER_CASES)}",
+        "prevented": prevented,
+        "traps": silent_failures,
+    }
 
 
 # --------------------------------------------------------------------------- Teil 3
+
 
 def part_proper_nouns(sentences: list[list[Token]], examples: int) -> dict:
     """Abnahmekriterium 2: keine Figurennamen als Lernvokabeln — und keine Verluste."""
@@ -426,16 +476,19 @@ def part_proper_nouns(sentences: list[list[Token]], examples: int) -> dict:
     print("\n" + "=" * 72)
     print("TEIL 3 — Eigennamen")
     print("=" * 72)
-    print(f"  Als Eigenname erkannt: {sum(proper.values()):,} Vorkommen,"
-          f" {len(proper):,} verschiedene")
+    print(
+        f"  Als Eigenname erkannt: {sum(proper.values()):,} Vorkommen, {len(proper):,} verschiedene"
+    )
     print("\n  Häufigste — diese Wörter erscheinen nicht in der Triage:")
     print("    " + ", ".join(f"{w} ({n})" for w, n in proper.most_common(examples)))
 
     # Fehlerrichtung 1: übersehen. Wörter, die fast immer großgeschrieben stehen, aber
     # nie als Eigenname bestimmt wurden — Kandidaten, die als Lernvokabel durchrutschen.
-    missed = [w for w, n in total.items()
-              if w not in proper and w in content and n >= 3
-              and capitalized[w] / n > CAPITAL_RATIO]
+    missed = [
+        w
+        for w, n in total.items()
+        if w not in proper and w in content and n >= 3 and capitalized[w] / n > CAPITAL_RATIO
+    ]
     missed.sort(key=lambda w: -total[w])
     print(f"\n  Übersehen (immer groß, nie als Eigenname bestimmt): {len(missed)}")
     if missed:
@@ -443,11 +496,9 @@ def part_proper_nouns(sentences: list[list[Token]], examples: int) -> dict:
 
     # Fehlerrichtung 2: zu viel. Wörter, die auch kleingeschrieben im Text vorkommen und
     # trotzdem irgendwo als Eigenname gelten — dort geht eine echte Vokabel verloren.
-    overreach = [w for w in proper
-                 if other[w] and capitalized[w] / total[w] < CAPITAL_RATIO]
+    overreach = [w for w in proper if other[w] and capitalized[w] / total[w] < CAPITAL_RATIO]
     overreach.sort(key=lambda w: -proper[w])
-    print(f"  Zu viel (kommt auch klein vor, gilt aber teils als Eigenname):"
-          f" {len(overreach)}")
+    print(f"  Zu viel (kommt auch klein vor, gilt aber teils als Eigenname): {len(overreach)}")
     if overreach:
         print("    " + ", ".join(f"{w} ({proper[w]}/{total[w]})" for w in overreach[:examples]))
 
@@ -455,6 +506,7 @@ def part_proper_nouns(sentences: list[list[Token]], examples: int) -> dict:
 
 
 # --------------------------------------------------------------------------- Teil 4
+
 
 def part_phrasal_verbs(sentences: list[list[Token]], mwes: dict, examples: int) -> dict:
     """Die auseinandergerissenen Phrasal Verbs — diesmal gemessen, nicht geschätzt."""
@@ -480,7 +532,7 @@ def part_phrasal_verbs(sentences: list[list[Token]], mwes: dict, examples: int) 
             else:
                 separated[key] += 1
                 if len(separated_examples) < examples:
-                    span = " ".join(t.text for t in sentence[verb.index:token.index + 1])
+                    span = " ".join(t.text for t in sentence[verb.index : token.index + 1])
                     separated_examples.append(f"{key:<18} „{span}“")
 
     total = sum(contiguous.values()) + sum(separated.values())
@@ -491,10 +543,14 @@ def part_phrasal_verbs(sentences: list[list[Token]], mwes: dict, examples: int) 
     print(f"  zusammenhängend („gave up the idea“):   {sum(contiguous.values()):>6,}")
     print(f"  getrennt      („gave the idea up“):     {sum(separated.values()):>6,}")
     if total:
-        print(f"  → {sum(separated.values())/total:.0%} stehen getrennt"
-              f"   (Schätzung in technik.md, „Messung: Mehrwortausdrücke“: ~51 %)")
-    print(f"\n  Ohne Wörterbucheintrag: {sum(unknown.values()):,} Vorkommen,"
-          f" {len(unknown):,} verschiedene")
+        print(
+            f"  → {sum(separated.values()) / total:.0%} stehen getrennt"
+            f"   (Schätzung in technik.md, „Messung: Mehrwortausdrücke“: ~51 %)"
+        )
+    print(
+        f"\n  Ohne Wörterbucheintrag: {sum(unknown.values()):,} Vorkommen,"
+        f" {len(unknown):,} verschiedene"
+    )
     print("  Diese gehören nach Regel 10 als `uncertain` markiert, nicht verworfen.")
     if unknown:
         print("    " + ", ".join(f"{k} ({n})" for k, n in unknown.most_common(examples)))
@@ -504,22 +560,26 @@ def part_phrasal_verbs(sentences: list[list[Token]], mwes: dict, examples: int) 
         for line in separated_examples:
             print("    " + line)
 
-    return {"contiguous": sum(contiguous.values()), "separated": sum(separated.values()),
-            "separated_share": sum(separated.values()) / total if total else 0.0,
-            "unknown": sum(unknown.values())}
+    return {
+        "contiguous": sum(contiguous.values()),
+        "separated": sum(separated.values()),
+        "separated_share": sum(separated.values()) / total if total else 0.0,
+        "unknown": sum(unknown.values()),
+    }
 
 
 # --------------------------------------------------------------------------- Ablauf
 
-def measure(engine: Engine, chunks: list[str], words: int, headwords: set[str],
-            mwes: dict, examples: int) -> dict:
+
+def measure(
+    engine: Engine, chunks: list[str], words: int, headwords: set[str], mwes: dict, examples: int
+) -> dict:
     print("\n\n" + "#" * 72)
     print(f"# {engine.spec}")
     print("#" * 72)
 
     memory_before = peak_memory_mb()
-    result: dict = {"spec": engine.spec, "load": engine.load_seconds,
-                    "size": engine.size_mb}
+    result: dict = {"spec": engine.spec, "load": engine.load_seconds, "size": engine.size_mb}
 
     sentences: list[list[Token]] = []
     if chunks:
@@ -543,12 +603,16 @@ def measure(engine: Engine, chunks: list[str], words: int, headwords: set[str],
     print(f"  Modell auf der Platte  {engine.size_mb:>8.0f} MB")
     if "rate" in result:
         rate = result["rate"]
-        print(f"  Durchsatz              {rate:>8,.0f} Wörter/s"
-              f"   ({result['seconds']:.1f} s für {words:,} Wörter)")
+        print(
+            f"  Durchsatz              {rate:>8,.0f} Wörter/s"
+            f"   ({result['seconds']:.1f} s für {words:,} Wörter)"
+        )
         if rate:
-            print(f"  Hochrechnung           {5_000/rate:>8.1f} s je Kapitel (5.000 Wörter)")
-            print(f"                         {108_163/rate:>8.1f} s je Buch"
-                  f" (Sherlock Holmes, 108.163 Wörter)")
+            print(f"  Hochrechnung           {5_000 / rate:>8.1f} s je Kapitel (5.000 Wörter)")
+            print(
+                f"                         {108_163 / rate:>8.1f} s je Buch"
+                f" (Sherlock Holmes, 108.163 Wörter)"
+            )
     memory_after = peak_memory_mb()
     if memory_before is not None and memory_after is not None:
         result["memory"] = memory_after - memory_before
@@ -560,16 +624,19 @@ def print_summary(results: list[dict], licensed: set[str]) -> None:
     print("\n\n" + "=" * 72)
     print("ZUSAMMENFASSUNG")
     print("=" * 72)
-    header = (f"  {'Modell':<26}{'Restlücke':>11}{'Reihenf.':>10}{'übersehen':>11}"
-              f"{'getrennt':>10}{'Wörter/s':>10}")
+    header = (
+        f"  {'Modell':<26}{'Restlücke':>11}{'Reihenf.':>10}{'übersehen':>11}"
+        f"{'getrennt':>10}{'Wörter/s':>10}"
+    )
     print(header)
     for r in results:
         gap = f"{r['gap']:.2%}" if "gap" in r else "—"
         missed = str(r["missed"]) if "missed" in r else "—"
         share = f"{r['separated_share']:.0%}" if "separated_share" in r else "—"
         rate = f"{r['rate']:,.0f}" if "rate" in r else "—"
-        print(f"  {r['spec']:<26}{gap:>11}{r.get('order', '—'):>10}{missed:>11}"
-              f"{share:>10}{rate:>10}")
+        print(
+            f"  {r['spec']:<26}{gap:>11}{r.get('order', '—'):>10}{missed:>11}{share:>10}{rate:>10}"
+        )
 
     print("\n  Lizenzlage — vor der Aufnahme zu prüfen:")
     for library in sorted(licensed):
@@ -587,23 +654,37 @@ def main() -> int:
 
     p = argparse.ArgumentParser(
         description="Vergleicht spaCy und Stanza an echtem Buchtext.",
-        epilog="Bereitet Entscheidung 5 in technik.md vor.")
+        epilog="Bereitet Entscheidung 5 in technik.md vor.",
+    )
     p.add_argument("file", nargs="?", help="Textdatei (UTF-8); ohne sie laufen nur Teil 2 und 5")
-    p.add_argument("--models", default=DEFAULT_MODELS,
-                   help=f"kommagetrennt, z. B. spacy:en_core_web_md,stanza:default "
-                        f"(Vorgabe: {DEFAULT_MODELS})")
+    p.add_argument(
+        "--models",
+        default=DEFAULT_MODELS,
+        help=f"kommagetrennt, z. B. spacy:en_core_web_md,stanza:default "
+        f"(Vorgabe: {DEFAULT_MODELS})",
+    )
     p.add_argument("--db", default=DEFAULT_DB, help="Pfad zur WikDict-Datenbank")
-    p.add_argument("--limit", type=int, default=DEFAULT_LIMIT,
-                   help=f"Wörter je Lauf, 0 = ganzer Text (Vorgabe: {DEFAULT_LIMIT:,})")
-    p.add_argument("--min-score", type=float, default=mwe_check.DEFAULT_MIN_SCORE,
-                   help="Schwelle für Wendungen, wie in mwe_check.py")
+    p.add_argument(
+        "--limit",
+        type=int,
+        default=DEFAULT_LIMIT,
+        help=f"Wörter je Lauf, 0 = ganzer Text (Vorgabe: {DEFAULT_LIMIT:,})",
+    )
+    p.add_argument(
+        "--min-score",
+        type=float,
+        default=mwe_check.DEFAULT_MIN_SCORE,
+        help="Schwelle für Wendungen, wie in mwe_check.py",
+    )
     p.add_argument("--examples", type=int, default=15, help="Anzahl gezeigter Beispiele")
     args = p.parse_args()
 
     if not os.path.exists(args.db):
         print(f"Wörterbuch fehlt: {args.db}", file=sys.stderr)
-        print("Mit  python tools/coverage_check.py --fetch-dictionary  herunterladen.",
-              file=sys.stderr)
+        print(
+            "Mit  python tools/coverage_check.py --fetch-dictionary  herunterladen.",
+            file=sys.stderr,
+        )
         return 1
 
     headwords = coverage_check.load_headwords(args.db)
@@ -620,8 +701,10 @@ def main() -> int:
         text = coverage_check.read_text(args.file)
         chunks, words = split_chunks(text, args.limit)
         available = len(coverage_check.WORD.findall(text))
-        print(f"Text: {os.path.basename(args.file)} · {words:,} Wörter"
-              f"{f' von {available:,} (gekürzt durch --limit)' if words < available else ''}")
+        print(
+            f"Text: {os.path.basename(args.file)} · {words:,} Wörter"
+            f"{f' von {available:,} (gekürzt durch --limit)' if words < available else ''}"
+        )
     else:
         print("Kein Buchtext angegeben — nur Teil 2 und 5.")
 

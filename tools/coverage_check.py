@@ -51,7 +51,8 @@ DEFAULT_DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "en-de.sql
 # Unregelmäßige Formen, die die Suffix-Heuristik nicht zurückführen kann.
 # Keine vollständige Liste — sie muss nur die häufigsten Fälle abdecken, damit die
 # Restlücke nicht künstlich aufgebläht wird.
-IRREGULAR_FORMS = set("""
+IRREGULAR_FORMS = set(
+    """
 be am is are was were been being have has had do does did done
 go went gone come came become became get got gotten give gave given take took taken
 make made say said see saw seen know knew known think thought find found
@@ -75,14 +76,17 @@ wear wore worn tear tore torn bear bore borne swear swore sworn
 can could will would shall should may might must ought
 child children foot feet tooth teeth goose geese mouse mice man men woman women
 person people ox oxen louse lice
-""".split())
+""".split()
+)
 
 # Reste von Verkürzungen, die eine naive Tokenisierung übriglässt.
-CONTRACTIONS = {
-    "ll", "ve", "re", "t", "s", "d", "m", "n",
-    "didn", "don", "isn", "wasn", "couldn", "wouldn", "shouldn", "doesn",
-    "hadn", "hasn", "haven", "aren", "weren", "ain", "mustn", "needn", "shan",
-}
+CONTRACTIONS = set(
+    """
+ll ve re t s d m n
+didn don isn wasn couldn wouldn shouldn doesn hadn hasn haven aren weren ain mustn
+needn shan
+""".split()
+)
 
 # Buchstaben statt [A-Za-z], sonst zerfallen Ligaturen und Akzente in Bruchstücke:
 # "encyclopædia" -> "encyclop" + "dia", "mediæval" -> "medi" + "val".
@@ -106,8 +110,9 @@ def fetch_dictionary(target: str) -> None:
 
 def load_headwords(db_path: str) -> set[str]:
     with sqlite3.connect(db_path) as con:
-        return {row[0].lower() for row in con.execute(
-            "SELECT DISTINCT written_rep FROM translation")}
+        return {
+            row[0].lower() for row in con.execute("SELECT DISTINCT written_rep FROM translation")
+        }
 
 
 def lemma_candidates(word: str):
@@ -122,26 +127,27 @@ def lemma_candidates(word: str):
     if word.endswith("ed"):
         yield word[:-2]
         yield word[:-1]
-        if len(word) > 4 and word[-3] == word[-4]:   # stopped -> stop
+        if len(word) > 4 and word[-3] == word[-4]:  # stopped -> stop
             yield word[:-3]
     if word.endswith("ing"):
         yield word[:-3]
-        yield word[:-3] + "e"                        # shutting -> shut / making -> make
+        yield word[:-3] + "e"  # shutting -> shut / making -> make
         if len(word) > 5 and word[-4] == word[-5]:
             yield word[:-4]
     for suffix in ("ly", "er", "est"):
         if word.endswith(suffix):
-            yield word[:-len(suffix)]
-    if "-" in word:                                  # arm-chair -> armchair
+            yield word[: -len(suffix)]
+    if "-" in word:  # arm-chair -> armchair
         yield word.replace("-", "")
 
 
 def read_text(path: str) -> str:
-    text = open(path, encoding="utf-8-sig", errors="replace").read()
-    if (start := GUTENBERG_START.search(text)):
-        text = text[start.end():]
-    if (end := GUTENBERG_END.search(text)):
-        text = text[:end.start()]
+    with open(path, encoding="utf-8-sig", errors="replace") as fh:
+        text = fh.read()
+    if start := GUTENBERG_START.search(text):
+        text = text[start.end() :]
+    if end := GUTENBERG_END.search(text):
+        text = text[: end.start()]
     return text
 
 
@@ -161,8 +167,10 @@ def check_file(path: str, headwords: set[str], example_count: int) -> None:
         bucket.append(word)
 
     groups: dict[str, list[str]] = {
-        "Eigennamen": [], "unregelmäßige Formen": [],
-        "Verkürzungen": [], "verbleibende Lücken": [],
+        "Eigennamen": [],
+        "unregelmäßige Formen": [],
+        "Verkürzungen": [],
+        "verbleibende Lücken": [],
     }
     for word in misses:
         plain = word.replace("-", "").replace("'", "")
@@ -184,14 +192,16 @@ def check_file(path: str, headwords: set[str], example_count: int) -> None:
     print(f"\n=== {os.path.basename(path)} ===")
     print(f"  Wortformen (types)          {word_forms:>8,}")
     print(f"  Wörter gesamt (tokens)      {total_tokens:>8,}")
-    print(f"  Stichworttreffer            {len(hits):>8,}  ({len(hits)/word_forms:6.1%})")
-    print(f"  Textabdeckung roh           {hit_tokens/total_tokens:>13.1%}")
+    print(f"  Stichworttreffer            {len(hits):>8,}  ({len(hits) / word_forms:6.1%})")
+    print(f"  Textabdeckung roh           {hit_tokens / total_tokens:>13.1%}")
     print("\n  Fehltreffer nach Ursache:")
     for name, words in groups.items():
-        print(f"    {name:<24} {len(words):>6,}  ({len(words)/word_forms:5.1%} der Wortformen)")
+        print(f"    {name:<24} {len(words):>6,}  ({len(words) / word_forms:5.1%} der Wortformen)")
 
-    print(f"\n  Restlücke nach Lemmatisierung + Eigennamenfilter: "
-          f"{gap_tokens/total_tokens:.2%} der Wörter  (Obergrenze)")
+    print(
+        f"\n  Restlücke nach Lemmatisierung + Eigennamenfilter: "
+        f"{gap_tokens / total_tokens:.2%} der Wörter  (Obergrenze)"
+    )
 
     if gaps:
         most_frequent = sorted(gaps, key=lambda w: -frequency[w])[:example_count]
@@ -205,11 +215,18 @@ def main() -> int:
 
     p = argparse.ArgumentParser(
         description="Misst die Wörterbuchabdeckung an echtem Buchtext.",
-        epilog="Siehe technik.md, Abschnitt 2, für die Einordnung der Zahlen.")
+        epilog="Siehe technik.md, Abschnitt 2, für die Einordnung der Zahlen.",
+    )
     p.add_argument("files", nargs="*", help="Textdateien (UTF-8), z. B. aus Project Gutenberg")
-    p.add_argument("--db", default=DEFAULT_DB, help=f"Pfad zur WikDict-Datenbank (Vorgabe: {DEFAULT_DB})")
-    p.add_argument("--examples", type=int, default=30, help="Anzahl gezeigter Fehltreffer (Vorgabe: 30)")
-    p.add_argument("--fetch-dictionary", action="store_true", help="Datenbank herunterladen und beenden")
+    p.add_argument(
+        "--db", default=DEFAULT_DB, help=f"Pfad zur WikDict-Datenbank (Vorgabe: {DEFAULT_DB})"
+    )
+    p.add_argument(
+        "--examples", type=int, default=30, help="Anzahl gezeigter Fehltreffer (Vorgabe: 30)"
+    )
+    p.add_argument(
+        "--fetch-dictionary", action="store_true", help="Datenbank herunterladen und beenden"
+    )
     args = p.parse_args()
 
     if args.fetch_dictionary:

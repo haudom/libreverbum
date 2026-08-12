@@ -72,13 +72,17 @@ TEST_CASES = [
     ("light", "The parcel was surprisingly light for its size.", {"leicht"}),
     ("spring", "In spring the whole valley turns green.", {"Frühling", "Frühjahr", "Lenz"}),
     ("spring", "The spring in the old clock had snapped.", {"Feder", "Sprungfeder"}),
-    ("watch", "He forgot to wind his watch before going to bed.",
-     {"Uhr", "Armbanduhr", "Taschenuhr"}),
+    (
+        "watch",
+        "He forgot to wind his watch before going to bed.",
+        {"Uhr", "Armbanduhr", "Taschenuhr"},
+    ),
     ("draw", "She began to draw his portrait in charcoal.", {"zeichnen", "malen"}),
 ]
 
 
 # --------------------------------------------------------------------------- Server
+
 
 def find_server(preset: str | None) -> tuple[str, str, str] | None:
     """Sucht einen erreichbaren, OpenAI-kompatiblen Modellserver.
@@ -93,7 +97,8 @@ def find_server(preset: str | None) -> tuple[str, str, str] | None:
             with urllib.request.urlopen(f"{url}/v1/models", timeout=2) as r:
                 data = json.load(r)
             models = [m.get("id", "?") for m in data.get("data", [])]
-            return url, (models[0] if models else ""), f"{name} · {', '.join(models[:3]) or 'unbenannt'}"
+            label = f"{name} · {', '.join(models[:3]) or 'unbenannt'}"
+            return url, (models[0] if models else ""), label
         except Exception:
             continue
     return None
@@ -103,11 +108,12 @@ def find_server(preset: str | None) -> tuple[str, str, str] | None:
 THINK_BLOCK = re.compile(r"<think>.*?</think>", re.S | re.I)
 
 
-def ask_model(url: str, model: str, prompt: str, option_count: int,
-              timeout: int) -> tuple[int | None, str]:
+def ask_model(
+    url: str, model: str, prompt: str, option_count: int, timeout: int
+) -> tuple[int | None, str]:
     """Fragt das Modell nach einer Bedeutungsnummer. Gibt (nummer, rohantwort) zurück."""
     body = {
-        "model": model,           # Ollama verlangt das Feld; llama-server ignoriert es
+        "model": model,  # Ollama verlangt das Feld; llama-server ignoriert es
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0,
         # Denkschritt abschalten. Ohne das verbrauchen Modelle wie Qwen3.5 ihr ganzes
@@ -126,8 +132,9 @@ def ask_model(url: str, model: str, prompt: str, option_count: int,
                 "strict": True,
                 "schema": {
                     "type": "object",
-                    "properties": {"choice": {"type": "integer",
-                                              "minimum": 1, "maximum": option_count}},
+                    "properties": {
+                        "choice": {"type": "integer", "minimum": 1, "maximum": option_count}
+                    },
                     "required": ["choice"],
                     "additionalProperties": False,
                 },
@@ -150,8 +157,9 @@ def ask_model(url: str, model: str, prompt: str, option_count: int,
         # Server, die "reasoning_effort" oder das JSON-Schema nicht kennen, lehnen die
         # Anfrage ab. Dann ohne diese Felder erneut versuchen.
         if e.code in (400, 422):
-            reduced = {k: v for k, v in body.items()
-                       if k not in ("reasoning_effort", "response_format")}
+            reduced = {
+                k: v for k, v in body.items() if k not in ("reasoning_effort", "response_format")
+            }
             try:
                 response = send(reduced)
             except Exception as e2:
@@ -197,11 +205,13 @@ def senses(con: sqlite3.Connection, word: str) -> list[tuple[str, str, str]]:
     """
     rows = con.execute(
         "SELECT lexentry, sense, trans_list FROM translation "
-        "WHERE written_rep = ? ORDER BY score DESC", (word,)).fetchall()
+        "WHERE written_rep = ? ORDER BY score DESC",
+        (word,),
+    ).fetchall()
     seen, result = set(), []
     for lexentry, wikdict_sense, translation in rows:
         pos = lexentry.split("__")[1].replace("_", " ") if lexentry and "__" in lexentry else "?"
-        key = (wikdict_sense or "").strip().lower() or f"\0{pos}"   # je Wortart nur einmal
+        key = (wikdict_sense or "").strip().lower() or f"\0{pos}"  # je Wortart nur einmal
         if key in seen:
             continue
         seen.add(key)
@@ -210,8 +220,10 @@ def senses(con: sqlite3.Connection, word: str) -> list[tuple[str, str, str]]:
 
 
 def build_prompt(word: str, sentence: str, options: list[tuple[str, str, str]]) -> str:
-    lines = [f"{i}. ({pos}) {sense} → {translation}"
-             for i, (pos, sense, translation) in enumerate(options, 1)]
+    lines = [
+        f"{i}. ({pos}) {sense} → {translation}"
+        for i, (pos, sense, translation) in enumerate(options, 1)
+    ]
     return (
         "You are helping a German learner of English.\n"
         f'In the sentence below, which listed meaning does the word "{word}" have?\n\n'
@@ -223,13 +235,15 @@ def build_prompt(word: str, sentence: str, options: list[tuple[str, str, str]]) 
 
 # --------------------------------------------------------------------------- Ablauf
 
+
 def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
 
     p = argparse.ArgumentParser(
         description="Prüft, ob das lokale Modell die richtige Wörterbuchbedeutung wählt.",
-        epilog="Setzt Abnahmekriterium 3 aus konzept.md um.")
+        epilog="Setzt Abnahmekriterium 3 aus konzept.md um.",
+    )
     p.add_argument("--url", help="Adresse des Modellservers (sonst automatische Suche)")
     p.add_argument("--db", default=DEFAULT_DB, help="Pfad zur WikDict-Datenbank")
     p.add_argument("--model", help="Modellname (sonst das erste, das der Server nennt)")
@@ -240,16 +254,17 @@ def main() -> int:
 
     if not os.path.exists(args.db):
         print(f"Wörterbuch fehlt: {args.db}", file=sys.stderr)
-        print("Mit  python tools/coverage_check.py --fetch-dictionary  herunterladen.",
-              file=sys.stderr)
+        print(
+            "Mit  python tools/coverage_check.py --fetch-dictionary  herunterladen.",
+            file=sys.stderr,
+        )
         return 1
 
     found = find_server(args.url)
     if not found:
         print("Kein Modellserver erreichbar.\n", file=sys.stderr)
         print("Erwartet wird eine OpenAI-kompatible Schnittstelle, zum Beispiel:", file=sys.stderr)
-        print("  llama-server -m modell.gguf -c 8192 --host 127.0.0.1 --port 8080",
-              file=sys.stderr)
+        print("  llama-server -m modell.gguf -c 8192 --host 127.0.0.1 --port 8080", file=sys.stderr)
         print("\nGesucht wurde auf: " + ", ".join(u for u, _ in SERVER_CANDIDATES), file=sys.stderr)
         return 1
 
@@ -295,7 +310,7 @@ def main() -> int:
         # Bewertung am Ergebnis: reicht eine der gelieferten Übersetzungen aus?
         offered = {t.strip() for t in (translation or "").split("|")}
         if expected is None:
-            mark = "?"           # von Hand zu beurteilen
+            mark = "?"  # von Hand zu beurteilen
             manual += 1
         elif offered & expected:
             mark = "ok"

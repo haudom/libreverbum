@@ -50,8 +50,11 @@ DEFAULT_MIN_SCORE = 50.0
 EXCLUDED_POS = {"Proper_noun"}
 
 # Partikeln, die bei Phrasal Verbs vom Verb getrennt stehen können.
-PARTICLES = {"up", "down", "out", "off", "on", "in", "away", "back", "over",
-             "through", "along", "around", "about", "apart", "aside", "forward"}
+PARTICLES = set(
+    """
+up down out off on in away back over through along around about apart aside forward
+""".split()
+)
 
 
 def load_mwes(db: str, min_score: float) -> tuple[dict, dict]:
@@ -59,8 +62,9 @@ def load_mwes(db: str, min_score: float) -> tuple[dict, dict]:
     con = sqlite3.connect(db)
     all_mwes: dict[str, dict] = {}
     for written_rep, lexentry, wikdict_sense, translation, score in con.execute(
-            "SELECT written_rep, lexentry, sense, trans_list, score FROM translation "
-            "WHERE written_rep LIKE '% %'"):
+        "SELECT written_rep, lexentry, sense, trans_list, score FROM translation "
+        "WHERE written_rep LIKE '% %'"
+    ):
         try:
             value = float(score)
         except (TypeError, ValueError):
@@ -69,10 +73,18 @@ def load_mwes(db: str, min_score: float) -> tuple[dict, dict]:
         key = written_rep.lower()
         existing = all_mwes.get(key)
         if existing is None or value > existing["score"]:
-            all_mwes[key] = {"text": written_rep, "pos": pos, "wikdict_sense": wikdict_sense,
-                             "translation": translation, "score": value}
-    filtered = {k: v for k, v in all_mwes.items()
-                if v["score"] >= min_score and v["pos"] not in EXCLUDED_POS}
+            all_mwes[key] = {
+                "text": written_rep,
+                "pos": pos,
+                "wikdict_sense": wikdict_sense,
+                "translation": translation,
+                "score": value,
+            }
+    filtered = {
+        k: v
+        for k, v in all_mwes.items()
+        if v["score"] >= min_score and v["pos"] not in EXCLUDED_POS
+    }
     return all_mwes, filtered
 
 
@@ -83,7 +95,7 @@ def find_contiguous(tokens: list[str], mwes: dict) -> collections.Counter:
     i = 0
     while i < len(tokens):
         for n in range(min(max_len, len(tokens) - i), 1, -1):
-            candidate = " ".join(tokens[i:i + n])
+            candidate = " ".join(tokens[i : i + n])
             if candidate in mwes:
                 found[candidate] += 1
                 i += n
@@ -140,8 +152,10 @@ def ask_model(url: str, model: str, passage: str, timeout: int) -> tuple[list[st
 
     def send(payload):
         request = urllib.request.Request(
-            f"{url}/v1/chat/completions", data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"})
+            f"{url}/v1/chat/completions",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
         with urllib.request.urlopen(request, timeout=timeout) as r:
             return json.load(r)
 
@@ -179,8 +193,12 @@ def main() -> int:
     p = argparse.ArgumentParser(description="Misst die Erkennung von Mehrwortausdrücken.")
     p.add_argument("file", help="Textdatei (UTF-8)")
     p.add_argument("--db", default=DEFAULT_DB)
-    p.add_argument("--min-score", type=float, default=DEFAULT_MIN_SCORE,
-                   help=f"Schwelle gegen grammatisches Rauschen (Vorgabe: {DEFAULT_MIN_SCORE})")
+    p.add_argument(
+        "--min-score",
+        type=float,
+        default=DEFAULT_MIN_SCORE,
+        help=f"Schwelle gegen grammatisches Rauschen (Vorgabe: {DEFAULT_MIN_SCORE})",
+    )
     p.add_argument("--url", help="Modellserver — schaltet Teil 3 frei")
     p.add_argument("--model")
     p.add_argument("--sections", type=int, default=3, help="Textabschnitte für Teil 3")
@@ -191,13 +209,16 @@ def main() -> int:
         print(f"Wörterbuch fehlt: {args.db}", file=sys.stderr)
         return 1
 
-    text = open(args.file, encoding="utf-8-sig", errors="replace").read()
+    with open(args.file, encoding="utf-8-sig", errors="replace") as fh:
+        text = fh.read()
     tokens = [w.lower() for w in WORD.findall(text)]
 
     all_mwes, filtered = load_mwes(args.db, args.min_score)
-    print(f"Wörterbuch: {len(all_mwes):,} Mehrwortausdrücke, "
-          f"davon {len(filtered):,} nach Filter "
-          f"(score ≥ {args.min_score:g}, ohne {', '.join(EXCLUDED_POS)})")
+    print(
+        f"Wörterbuch: {len(all_mwes):,} Mehrwortausdrücke, "
+        f"davon {len(filtered):,} nach Filter "
+        f"(score ≥ {args.min_score:g}, ohne {', '.join(EXCLUDED_POS)})"
+    )
     print(f"Text: {len(tokens):,} Wörter\n")
 
     # ---------------------------------------------------------------- Teil 1
@@ -206,12 +227,18 @@ def main() -> int:
     print("=" * 72)
     raw_hits = find_contiguous(tokens, all_mwes)
     fine_hits = find_contiguous(tokens, filtered)
-    print(f"  ohne Filter: {sum(raw_hits.values()):>7,} Vorkommen, {len(raw_hits):>5,} verschiedene")
-    print(f"  mit  Filter: {sum(fine_hits.values()):>7,} Vorkommen, {len(fine_hits):>5,} verschiedene")
+    print(
+        f"  ohne Filter: {sum(raw_hits.values()):>7,} Vorkommen, {len(raw_hits):>5,} verschiedene"
+    )
+    print(
+        f"  mit  Filter: {sum(fine_hits.values()):>7,} Vorkommen, {len(fine_hits):>5,} verschiedene"
+    )
     removed = sum(raw_hits.values()) - sum(fine_hits.values())
     if sum(raw_hits.values()):
-        print(f"  → Filter entfernt {removed:,} Vorkommen "
-              f"({removed/sum(raw_hits.values()):.0%} des Rauschens)")
+        print(
+            f"  → Filter entfernt {removed:,} Vorkommen "
+            f"({removed / sum(raw_hits.values()):.0%} des Rauschens)"
+        )
 
     dropped = sorted(set(raw_hits) - set(fine_hits), key=lambda m: -raw_hits[m])[:12]
     print(f"\n  Vom Filter entfernt (häufigste): {', '.join(dropped)}")
@@ -225,15 +252,19 @@ def main() -> int:
     print("TEIL 2 — auseinandergerissene Phrasal Verbs")
     print("=" * 72)
     separated = find_separated(tokens, filtered)
-    contiguous_pv = {m: n for m, n in fine_hits.items()
-                     if len(m.split()) == 2 and m.split()[1] in PARTICLES
-                     and filtered[m]["pos"] == "Verb"}
+    contiguous_pv = {
+        m: n
+        for m, n in fine_hits.items()
+        if len(m.split()) == 2 and m.split()[1] in PARTICLES and filtered[m]["pos"] == "Verb"
+    }
     print(f"  zusammenhängend gefunden: {sum(contiguous_pv.values()):>5,} Vorkommen")
     print(f"  getrennt gefunden:        {sum(separated.values()):>5,} Vorkommen")
     total = sum(contiguous_pv.values()) + sum(separated.values())
     if total:
-        print(f"  → {sum(separated.values())/total:.0%} aller Phrasal Verbs stehen getrennt "
-              f"und entgehen dem n-Gramm-Abgleich")
+        print(
+            f"  → {sum(separated.values()) / total:.0%} aller Phrasal Verbs stehen getrennt "
+            f"und entgehen dem n-Gramm-Abgleich"
+        )
     print("\n  Beispiele getrennter Vorkommen:")
     for mwe, count in separated.most_common(15):
         print(f"    {count:>4}x  {mwe}")
@@ -258,11 +289,11 @@ def main() -> int:
         sentences = [s.strip() for s in SENTENCE.findall(text) if 40 < len(s.strip()) < 400]
         step = max(1, len(sentences) // (args.sections + 1))
         for k in range(args.sections):
-            passage = " ".join(sentences[k * step: k * step + 5])
+            passage = " ".join(sentences[k * step : k * step + 5])
             if not passage:
                 continue
             hits, raw = ask_model(url, model, passage, args.timeout)
-            print(f"  --- Abschnitt {k+1} ---")
+            print(f"  --- Abschnitt {k + 1} ---")
             print(f"  {passage[:300]}{'…' if len(passage) > 300 else ''}")
             if not hits:
                 print(f"  → keine verwertbare Antwort: {raw[:160]}")
