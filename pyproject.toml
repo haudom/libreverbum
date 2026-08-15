@@ -73,3 +73,10 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Bauplan.md T2: Tests ohne die jeweilige Voraussetzung werden in tests/conftest.py
+# übersprungen statt scheitern zu lassen; die Registrierung hier hält --strict-markers
+# ruhig.
+markers = [
+    "needs_dictionary: benötigt die echte WikDict-Datenbank (tools/en-de.sqlite3)",
+    "needs_model: benötigt einen erreichbaren, echten Modellserver (LIBREVERBUM_MODEL_URL)",
+]
