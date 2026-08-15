@@ -501,6 +501,12 @@ jüngstes Ereignis je Bedeutung), keine eigene Tabelle. Bei der zu erwartenden G
 Zehntausende Ereignisse — ist das für SQLite unproblematisch. Eine
 materialisierte Zwischentabelle wäre verfrühte Optimierung.
 
+**Eigennamen und Mehrwortausdrücke bekommen keine eigene Tabelle.** Ein Eigenname ist
+dieselbe Klammer `lemma` mit `pos` gleich `PROPN`, ein Mehrwortausdruck dieselbe Klammer
+mit Leerzeichen im Text (`give up`) — beides ohne eigene Kennzeichnung. Ob ein Vorkommen
+als Eigenname zählt, entscheidet nicht `lemma`, sondern `occurrence` (Abschnitt 5, „Neuer
+Befund: der Eigennamenfilter muss pro Vorkommen greifen").
+
 ### Jetzt billig, später teuer: die Anki-Kennung
 
 > Beim Export jeder Karte wird deren **Anki-GUID** in `card` mitgespeichert.
@@ -530,10 +536,6 @@ Migrationen wird es geben, weil Phase 2 und 3 neue Felder brauchen.
 ### Offene Punkte
 
 - Genaue Spalten und Datentypen — beim Bau festzulegen, nicht vorab
-- Ob Eigennamen („Figuren & Orte") als `lemma` mit Wortart *Eigenname* geführt werden
-  oder in einer eigenen Tabelle. Ersteres ist einfacher und vermutlich ausreichend
-- Wie Mehrwortausdrücke als `lemma` dargestellt werden — dieselbe Tabelle mit
-  Leerzeichen im Text, oder eine eigene Kennzeichnung
 - Umgang mit gleichzeitigem Zugriff, falls später eine Weboberfläche hinzukommt
   (siehe Architekturregel in Abschnitt 1)
 

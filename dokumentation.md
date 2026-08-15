@@ -73,12 +73,12 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | Wortschatzextraktion | `extraction` |
 | Profil, Kenntnisstand | `profile`, `knowledge_state` |
 | bekannt / lernt / zurückgestellt / vergessen | `known` / `learning` / `deferred` / `forgotten` |
-| Herkunft (einer Kenntnisangabe) | `origin` |
+| Herkunft und Zeitpunkt (einer Kenntnisangabe) | `origin`, `timestamp` |
 | Triage, Sammelaktion, Wortobergrenze | `triage`, `bulk_mark`, `word_limit` |
 | Wörterbuch, Nachschlagen | `dictionary`, `lookup` |
 | Auswahlliste, Kandidat | `candidate` |
 | Übersetzung | `translation` |
-| Karte, Deck, Kartenrichtung | `card`, `deck`, `card_direction` |
+| Karte, Deck, Kartenrichtung, Lückentext | `card`, `deck`, `card_direction`, `cloze` |
 | Druckausgabe | `printout` |
 | unsicher (markierter Eintrag) | `uncertain` |
 | Gegenstand des Kernablaufs | `entity` |

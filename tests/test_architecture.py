@@ -42,3 +42,49 @@ def test_rule_9_core_does_not_import_the_user_interface() -> None:
         if (found := imported_packages(module.read_text(encoding="utf-8-sig")) & GUI_PACKAGES)
     }
     assert not offenders, f"Oberflächen-Import im Kern: {offenders}"
+
+
+# Diese beiden Module verkettet die Importregel nicht: `__init__` trägt nur den
+# Paket-Docstring, `pipeline` ist nach technik.md §7 der einzige Ort, der mehrere Schritte
+# kennen darf. `entities` braucht die Ausnahme nicht: Es importiert nichts aus dem Kern.
+STEP_MODULE_EXEMPTIONS = frozenset({"__init__.py", "pipeline.py"})
+
+
+def core_siblings_imported(source: str) -> set[str]:
+    """Die Namen der `libreverbum`-Geschwistermodule, die eine Datei importiert — absolut
+    (`from libreverbum import entities`, `import libreverbum.entities`) wie relativ
+    (`from . import entities`, `from .entities import Lemma`)."""
+    names: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.ImportFrom):
+            if node.level > 0:
+                if node.module:
+                    names.add(node.module.split(".")[0])
+                else:
+                    names.update(alias.name for alias in node.names)
+            elif node.module == "libreverbum":
+                names.update(alias.name for alias in node.names)
+            elif node.module and node.module.startswith("libreverbum."):
+                names.add(node.module.split(".")[1])
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                parts = alias.name.split(".")
+                if parts[0] == "libreverbum" and len(parts) > 1:
+                    names.add(parts[1])
+    return names
+
+
+def test_rule_9_step_modules_import_only_entities() -> None:
+    """Regel 9, innere Hälfte: Innerhalb des Kerns importiert jeder Schritt nur `entities`.
+    Wer mehrere Schritte kennt, ist `pipeline` — und sonst niemand (technik.md §7, „Die
+    Importregel")."""
+    modules = sorted(CORE.rglob("*.py"))
+    assert modules, f"Kein Kernmodul unter {CORE} gefunden — dieser Test prüfte nichts."
+
+    offenders = {
+        module.relative_to(CORE.parent).as_posix(): sorted(found)
+        for module in modules
+        if module.name not in STEP_MODULE_EXEMPTIONS
+        and (found := core_siblings_imported(module.read_text(encoding="utf-8-sig")) - {"entities"})
+    }
+    assert not offenders, f"Schrittmodul kennt mehr als entities: {offenders}"
