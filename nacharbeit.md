@@ -29,16 +29,46 @@ sich erst, wenn mehrere Berichte nebeneinander liegen — dokumentation.md §9.
 
 # Teil A — Regeln und Arbeitsweise
 
-## A6 — leicht · Parallelität erzeugt Phantomfehler
+## A7 — mittel · Die T4-Zeile im Bauplan ist zweideutig
 
-**Beobachtet.** Der T3-Bearbeiter meldete zwei repoweite Fehlschläge, die es nicht gab — er
-hatte den Zwischenstand des gleichzeitig arbeitenden T5-Bearbeiters erwischt. Kein Schaden,
-aber verbrannter Kontext; im schlechteren Fall repariert ein Agent etwas, das gerade ein
-anderer korrekt baut.
+**Beobachtet (Review T4, 17.08.2026).** „zusammenhängende Kandidatenfolgen **und** getrennte
+Verb-Partikel-Paare aus der Abhängigkeitsanalyse" lässt sich als „beides aus der Analyse"
+lesen, während technik.md §3, „Arbeitsteilung nach der Messung" die zusammenhängenden
+ausdrücklich „Wörterbuch + n-Gramm + Filter" zuordnet. Die Prüfspalte nennt dann nur den
+getrennten Fall — wer sie als Auftragsumfang liest, baut folgerichtig die Hälfte.
 
-**Erledigt ohne Dokumentänderung.** Bauende prüfen ab jetzt torscharf nur ihre eigenen
-Dateien; den vollständigen Lauf macht die verkettende Stelle zwischen den Runden. Steht hier
-nur zur Kenntnis.
+**Kosten:** eine vollständige Reviewrunde plus Nachbesserung. Ein falsches Ergebnis wäre
+durchgegangen: 190 von 232 zusammenhängenden Wendungen eines Kapitels entstanden nie, rund
+3 % des Mehrwortbestands waren erreichbar — ohne Fehler und ohne Meldung. T7 hätte die
+fehlenden Kandidaten nicht vermissen können.
+
+**Vorschlag:** Wo eine Teilaufgabe zwei Wege verlangt, nennt die Prüfspalte **beide**. Zu
+entscheiden, ob die T4-Zeile zusätzlich in zwei Teilaufgaben getrennt wird.
+
+## A8 — mittel · Das Tor ist auf den Bauenden geschrieben, nicht auf den Prüfenden
+
+**Beobachtet (Review T8, 17.08.2026).** `ruff format .` und der volle `pytest`-Lauf sind für
+einen Prüfer unbrauchbar, solange ein zweiter Bearbeiter im Arbeitsbaum steht: Das erste
+formatiert fremde Arbeit mit, das zweite zeigt Rot, das dem anderen gehört — in derselben
+Sitzung vorgeführt, vier rote Tests in `test_extraction.py`, Minuten später von selbst grün.
+„Grün" ist bei zwei Bearbeitern nur je Datei eine Aussage.
+
+**Vorschlag:** Im Tor aus CLAUDE.md festhalten, dass Prüfende `ruff format --check` und den
+dateiweisen Testlauf nehmen; den vollständigen Lauf macht die verkettende Stelle zwischen den
+Runden. Das ist die Dokumentfassung des gestrichenen A6, das dasselbe nur als Absprache hielt.
+
+## A9 — leicht · Unversionierte Dateien haben beim Verfälschen kein Netz
+
+**Beobachtet (Review T8, 17.08.2026).** Die Verfälschungsprobe nach dokumentation.md §5 setzt
+voraus, dass der Ausgangsstand wiederherstellbar ist. Bei einer noch unversionierten Datei
+gibt es dafür kein Git, und `Path.write_text` verwandelte beim Wiederherstellen unter Windows
+LF in CRLF — gezeigt hat es allein der Hash-Vergleich, nicht der Augenschein.
+
+**Vorschlag:** Ein Satz in dokumentation.md §5 — wer an einer unversionierten Datei
+verfälscht, sichert sie binär und prüft die Wiederherstellung per Hash.
+
+> **A6 gestrichen am 17.08.2026** (Parallelität erzeugt Phantomfehler): als Absprache
+> erledigt, der Dokumentteil ist in A8 aufgegangen.
 
 ---
 
@@ -73,3 +103,29 @@ und Zahlwörter, nichts Lernbares.
 Der Filter ist zugleich der Grund, warum **T4 auf der Abhängigkeitsanalyse arbeiten muss**
 und nicht auf der Wortliste: Die Partikel der getrennten Verb-Partikel-Paare sind `ADP` und
 `PART` und damit aus der Liste verschwunden.
+
+## B6 — technik.md §2: `translation` hat keine Wortartspalte
+
+**Gemessen (Review T4, 17.08.2026):** Die Wortart steckt allein im `lexentry`
+(`eng/give_up__Verb__1`); die Tabelle `translation` führt keine eigene Spalte dafür, und
+**29,7 %** der Zeilen haben `lexentry = NULL` — dieselbe Messung wie B4. Das steht im
+Docstring von `dictionary.py`, aber nicht dort, wo technik.md §2 die Quelle beschreibt. Ein
+Satz dort spart jedem Prüfer den ersten Fehlversuch.
+
+## B7 — technik.md §3: der `prt`-Weg erreicht 3 % des Mehrwortbestands
+
+**Gemessen (Review T4, 17.08.2026)** gegen `tools/en-de.sqlite3`: 956 verschiedene
+Verb-Partikel-Stichwörter gegen 54.085 übrige Mehrwort-Stichwörter, mit `score ≥ 50` 652
+gegen 18.709. An `tools/sherlock.txt` (ein Kapitel, 60.000 Zeichen): 232 zusammenhängende
+Wörterbuch-Wendungen, davon 40 der Wortarten `Phrase` (691 Zeilen), `Prepositional_phrase`
+(638) und `Proverb` (309) — `as a rule`, `at all`, `after all`, `out of the way`, `all right`.
+
+Das ist die Zahl, die die Arbeitsteilung aus §3 belegt: Ohne den n-Gramm-Weg fehlen nicht
+Randfälle, sondern der Bestand. Gegengemessen mit dem neuen Code hält der getrennte Anteil
+dagegen: Sherlock 24 %, Dorian Gray 22 % — gegen die dokumentierten 21 % und 19 %.
+
+Dazu ein Nebenbefund für **T7**: Sein Filter `score ≥ 50` löscht 86 der 232 Treffer in
+Sherlock, darunter `bring back` (10 Vorkommen), `take up`, `keep out`, `light up` — also genau
+die Einträge, die §3 („394 Vorkommen mit Partikel") als `uncertain` behalten will. Der Filter
+gehört zum n-Gramm-Weg, nicht zum `prt`-Weg; die zwei Kandidatenarten sind in T7 getrennt zu
+behandeln.
