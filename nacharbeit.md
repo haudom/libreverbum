@@ -13,11 +13,21 @@
 
 ## Gewichtung
 
-| Stufe | Bedeutung |
+Die Stufe beantwortet **eine** Frage: *Was wäre passiert, wenn es niemand bemerkt hätte?*
+
+| Stufe | Folge, wenn unbemerkt |
 |---|---|
-| **schwer** | Hat in dieser Sitzung nachweislich Defekte durchgelassen oder Arbeit verbrannt |
-| **mittel** | Zweideutigkeit, die zwei Bearbeiter unterschiedlich auflösen werden |
-| **leicht** | Aufräumen, kein Schaden bekannt |
+| **schwer** | Ein falsches Ergebnis geht durch, ohne aufzufallen — der leise Fehlschlag. Oder es geht etwas verloren, das nicht wiederherstellbar ist |
+| **mittel** | Das Ergebnis stimmt, kostet aber spürbar: verdoppelte Arbeit, zwei Bearbeiter lösen dasselbe verschieden, oder es dauert unzumutbar lange |
+| **leicht** | Reibung ohne Folge |
+
+Dahinter steht `· schnell`, wo ein Punkt in einer Viertelstunde erledigt ist. Innerhalb
+einer Stufe wird das Schnelle zuerst gemacht — A3 ist der Fall, der das lohnt.
+
+**Die Stufe vergibt die kuratierende Stelle, nicht der Melder.** Wer eine Beobachtung
+meldet, nennt zwei Tatsachen, die er wirklich kennt: was es ihn gekostet hat, und ob dabei
+ein falsches Ergebnis hätte durchgehen können. Wie schwer das für das Projekt wiegt, zeigt
+sich erst, wenn mehrere Berichte nebeneinander liegen — siehe A7.
 
 ---
 
@@ -74,7 +84,7 @@ Bauenden wenige Minuten. Die vier Reviews dieser Sitzung haben in **vier von vie
 echte Defekte gefunden, keine Kosmetik — je mehr davon der Bauende selbst abfängt, desto
 billiger wird die Kette.
 
-## A3 — schwer · CLAUDE.md wird von jedem Agenten zuerst gelesen und ist falsch
+## A3 — mittel · schnell · CLAUDE.md wird von jedem Agenten zuerst gelesen und ist falsch
 
 **Beobachtet, zwei Stellen.**
 
@@ -127,6 +137,36 @@ nächste `# REGEL (Review): …` und die Liste wird unbrauchbar.
 **Vorschlag.** Die Form für Befund-Verweise in dokumentation.md §4 festhalten, zusammen mit
 dem Satz, warum `REGEL` reserviert bleibt.
 
+## A7 — mittel · schnell · Beobachtungen aus dem Bau haben keinen Rückweg
+
+**Beobachtet.** Was den Bauenden aufhält, erfährt niemand außer der verkettenden Stelle —
+und nur, wenn er es zufällig erwähnt. In dieser Sitzung haben **drei Bearbeiter unabhängig
+voneinander** herausgefunden, dass `pytest` blank nicht läuft (siehe A3); keiner konnte das
+irgendwo hinterlegen. Ein Bearbeiter legte eine `agent_status.json` im Projektverzeichnis
+ab — aufgefallen ist das erst einem Reviewer, der zufällig `git status` las.
+
+**Vorschlag.** Jeder Auftrag bekommt am Ende einen Pflichtabschnitt:
+
+> ## Beobachtungen zum Ablauf
+> Was hat dich aufgehalten, in die Irre geführt oder zu einer Entscheidung gezwungen, die
+> eigentlich woanders hingehört? Je Punkt eine Zeile, dazu: was es dich gekostet hat, und ob
+> dabei ein falsches Ergebnis hätte durchgehen können. Sonst „nichts".
+
+Die Frage ist absichtlich eng gestellt. Offen gefragt („hast du Verbesserungsvorschläge?")
+kommen allgemeine Ratschläge zurück, die niemand braucht.
+
+**Keine gemeinsame Datei, in die alle schreiben.** Es laufen dauernd zwei Bearbeiter
+parallel; beim Anhängen an dieselbe Datei gehen Einträge verloren, ohne dass es jemand
+merkt. Der Bericht ist der Kanal, die Kuration faltet ein. Reicht das nicht, ist die
+nächste Stufe ein **Verzeichnis** mit einer Datei je Beobachtung — konfliktfrei, weil jeder
+in seine eigene schreibt — und kein zweiter Sammeltext.
+
+**Der Punkt, an dem so etwas gewöhnlich stirbt**, ist nicht das Sammeln, sondern das
+Einfalten. Deshalb an die **Tore** aus `bauplan.md` hängen: Beim Abschluss jedes Tors wird
+diese Liste durchgegangen, Teil B eingefaltet, Teil A entschieden. Das ist dasselbe
+Verfahren, das dokumentation.md §7 unter „Am Phasenende einfalten" für den Bauplan
+vorsieht.
+
 ## A6 — leicht · Parallelität erzeugt Phantomfehler
 
 **Beobachtet.** Der T3-Bearbeiter meldete zwei repoweite Fehlschläge, die es nicht gab — er
@@ -144,7 +184,7 @@ nur zur Kenntnis.
 
 Unstrittig, nur noch nicht getan. Jeweils mit der Messung, auf die sie sich stützen.
 
-## B1 — schwer · technik.md §3: das Nachschlagen ist der Engpass
+## B1 — mittel · technik.md §3: das Nachschlagen ist der Engpass
 
 **Gemessen an `tools/en-de.sqlite3`:** **27,7 ms je Aufruf** von `candidates()`, davon 26 ms
 Abfrage und 0,3 ms Verbindungsaufbau. Die Datei hat **keinen einzigen Index**
