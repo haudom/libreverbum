@@ -237,6 +237,21 @@ Beim EPUB wäre es beinahe schon passiert: Die Testnavigation war von der Lesere
 nicht unterscheidbar. Eine Umsetzung, die die Navigation ignoriert, wäre damit grün
 durchgekommen — und genau sie ist die Kernregel aus technik.md §8.
 
+### Ein Test gilt erst als Test, wenn er einmal rot war
+
+Ein Test, der auch bei falscher Umsetzung grün bleibt, ist keine Prüfung, sondern eine
+Zeile. `assert not has_lemma(occurrences, "Sherlock")` konnte gar nicht fehlschlagen, weil
+Grundformen kleingeschrieben sind; ein Sortiertest blieb grün, obwohl das `ORDER BY score
+DESC` fehlte.
+
+> **Regel:** Ein neuer Test wird einmal gegen eine absichtlich falsche Umsetzung gehalten.
+> Erst wenn er dabei rot war, gilt er als Test.
+
+Verfälscht wird die **Umsetzung**, nicht der Test: Bedingung umdrehen, Sortierung
+entfernen, Filter weglassen. Welcher Test bei welcher Verfälschung gefallen ist, gehört in
+den Bericht (§9). Das kostet Minuten und ersetzt einen Teil der Durchsicht durch Mechanik —
+wo es getan wurde, hat der Bauende die Falle selbst gefunden, um die es ging.
+
 ---
 
 ## 6. Nicht dokumentiert wird

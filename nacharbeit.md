@@ -33,31 +33,6 @@ sich erst, wenn mehrere Berichte nebeneinander liegen — dokumentation.md §9.
 
 # Teil A — Regeln und Arbeitsweise
 
-## A2 — schwer · „Ein Test gilt erst als Test, wenn er einmal rot war"
-
-**Beobachtet.** Über alle vier Teilaufgaben derselbe wiederkehrende Befund: Tests, die
-**auch bei falscher Umsetzung grün bleiben**. Beispiele:
-
-- `assert not has_lemma(occurrences, "Sherlock")` — unerfüllbar, weil Grundformen
-  kleingeschrieben werden. Die Zusicherung konnte gar nicht fehlschlagen
-- der Sortiertest in T5 — grün ohne `ORDER BY score DESC`
-- die Wortartauflösung in T3 — der einzige nichttriviale Zweig, von keinem Test erreicht
-
-**Was nachweislich geholfen hat.** T4 und T8 bekamen den ausdrücklichen Auftrag, ihre
-wichtigsten Tests **kaputtzumachen und den roten Lauf vorzuweisen**. Beide haben es getan
-und berichtet, welcher Test bei welcher Verfälschung fällt. T4 hat dabei selbst entdeckt,
-dass drei seiner Tests rot werden, wenn man die Umsetzung auf die gefilterte Wortliste
-umstellt — die Falle, um die es ging. Die Befundlage dieser beiden Aufgaben sieht seitdem
-anders aus als die von T3 und T5.
-
-**Vorschlag.** Als Regel nach dokumentation.md §5: Ein neuer Test wird einmal gegen eine
-absichtlich falsche Umsetzung gehalten; erst wenn er dabei rot war, gilt er als Test.
-
-**Warum es sich lohnt.** Ersetzt einen Teil der Reviewarbeit durch Mechanik und kostet den
-Bauenden wenige Minuten. Die vier Reviews dieser Sitzung haben in **vier von vier** Fällen
-echte Defekte gefunden, keine Kosmetik — je mehr davon der Bauende selbst abfängt, desto
-billiger wird die Kette.
-
 ## A4 — mittel · Regel 14 trennt Struktur nicht von Funktion
 
 **Beobachtet an T8.** „Gebaut wird, was die aktuelle Phase verlangt" ist für Funktionen

@@ -71,6 +71,8 @@ darüber, *woran* geprüft wird:
 - Was über den **Inhalt einer Fremdquelle** behauptet wird, wird zusätzlich gegen das echte
   Gegenüber geprüft — `needs_dictionary` für `tools/en-de.sqlite3`, die echten `tools/*.epub`.
   Beim Modellserver stattdessen die **Attrappe abgleichen**, nicht die Trefferquote messen
+- Ein neuer Test gilt erst als Test, wenn er **einmal gegen eine absichtlich falsche
+  Umsetzung rot** war. Welcher Test bei welcher Verfälschung fiel, gehört in den Bericht
 
 **Dateien immer mit `encoding="utf-8"` öffnen.** Unter Windows zerstört die
 Systemkodierung sonst still typografische Zeichen im Buchtext.
