@@ -48,7 +48,8 @@ Projekt deutsch ist:
 
 **Die fünfzehn Regeln aus dokumentation.md §4** sind vor jeder Codeänderung dort
 nachzulesen; im Code werden sie als `# REGEL (quelle, „stichwort"): …` markiert, damit
-`grep -rn REGEL .` sie auflistet. Beim Bauen am ehesten relevant:
+`grep -rn REGEL .` sie auflistet. **Die Marke bleibt dafür reserviert** — ein Befund aus
+einer Durchsicht trägt `# (Befund 4, Review Runde 1): …`. Beim Bauen am ehesten relevant:
 
 - Reihenfolge **Wortart → Grundform → Nachschlagen** ist zwingend (technik.md, „Warum
   die Reihenfolge zwingend ist"). Der `saw`-Fall scheitert sonst *leise*

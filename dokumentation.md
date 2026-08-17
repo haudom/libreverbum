@@ -151,6 +151,19 @@ rows = cursor.fetchall()  # bewusst ungefiltert
 
 Quellenangaben ohne Dateinamen meinen technik.md.
 
+**Die Marke `REGEL` ist für die fünfzehn Regeln reserviert.** Auch ein Befund aus einer
+Durchsicht will im Code verankert werden — bekäme er dieselbe Marke, listete `grep` bald
+alles auf und damit nichts. Er trägt deshalb seine eigene Form, im Kommentar wie am Anfang
+eines Test-Docstrings:
+
+```python
+# (Befund 4, Review Runde 1): Grundformen werden kleingeschrieben (Regel 12), eine
+# Zusicherung auf „Sherlock" könnte also gar nicht fehlschlagen.
+```
+
+Der Unterschied ist nicht Formalie: Eine Regel gilt für das ganze Projekt, ein Befund
+erklärt **diese eine Stelle** und wird mit ihr hinfällig.
+
 | # | Regel | Quelle |
 |---|---|---|
 | 1 | Zeilen ohne `sense`-Text gehören **immer** in die Auswahlliste, nach `score` absteigend | §3 |

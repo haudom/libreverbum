@@ -33,19 +33,6 @@ sich erst, wenn mehrere Berichte nebeneinander liegen — dokumentation.md §9.
 
 # Teil A — Regeln und Arbeitsweise
 
-## A5 — mittel · Die Marke `# REGEL` bekommt Konkurrenz
-
-**Beobachtet.** `grep -rn REGEL .` soll die fünfzehn Regeln aus dokumentation.md §4
-auflisten. Review-Befunde wollen aber ebenfalls im Code verankert werden. Ein Bearbeiter hat
-von sich aus `# (Befund 4, Review Runde 1): …` erfunden — ausdrücklich, um die grep-Ausbeute
-sauber zu halten.
-
-Das war die richtige Entscheidung. Sie ist nur nirgends aufgeschrieben, also erfindet der
-nächste `# REGEL (Review): …` und die Liste wird unbrauchbar.
-
-**Vorschlag.** Die Form für Befund-Verweise in dokumentation.md §4 festhalten, zusammen mit
-dem Satz, warum `REGEL` reserviert bleibt.
-
 ## A6 — leicht · Parallelität erzeugt Phantomfehler
 
 **Beobachtet.** Der T3-Bearbeiter meldete zwei repoweite Fehlschläge, die es nicht gab — er
