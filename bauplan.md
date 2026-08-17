@@ -178,9 +178,9 @@ E8b vor T13, E8c vor T14 · T15 nach den Schritten · T17 zuletzt.
 
 **Grenze der Parallelität:** Jeder Strang schreibt Typen nach `entities`. Fehlt dort etwas,
 kollidieren gleichzeitig laufende Stränge an derselben Datei. Tragfähig sind etwa drei
-Stränge; zu beginnen ist mit A und B, weil sie die Unsicherheit tragen — ob `mypy` streng
-mit spaCy-Typen durchgeht, ist laut technik.md §6 ungeprüft — und weil sie die Gegenstände
-am stärksten festlegen.
+Stränge; begonnen wurde mit A und B, weil sie die Unsicherheit trugen und die Gegenstände
+am stärksten festlegen. Die Unsicherheit ist ausgeräumt: `mypy --strict` trägt die
+spaCy-Typen (technik.md §6, „Nachtrag 17.08.2026").
 
 ## Offene Punkte
 

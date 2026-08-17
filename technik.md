@@ -787,6 +787,20 @@ kompakten Wortlisten in `tools/` unlesbar macht.
 bricht Code um, aber keine Prosa. Die langen deutschen Docstrings aus dokumentation.md §3
 liefen sonst ungeprüft.
 
+### Nachtrag 17.08.2026: `mypy --strict` trägt die spaCy-Typen
+
+Ob die strenge Typprüfung mit spaCy im Spiel noch trägt, stand hier als offener Punkt und
+war der Grund, warum bauplan.md mit den Strängen A und B beginnt. Mit dem ersten Modul ist
+die Frage beantwortet: **ja**. spaCy liefert `py.typed` mit, mypy löst `token.pos_`,
+`token.lemma_` und `sent.text` zu `str` auf und `token.is_alpha` zu `bool`;
+`extraction.py` besteht `strict` ohne eine einzige Ausnahme.
+
+**Folge:** Die Ausnahme `ignore_missing_imports` für `spacy.*` und `en_core_web_md.*` ist
+aus `pyproject.toml` entfernt. Das Modellpaket bringt zwar kein `py.typed` mit, wird aber
+nirgends importiert — `spacy.load("en_core_web_md")` lädt es über seinen Namen, und
+`test_environment.py` prüft es mit `importlib.util.find_spec`. Wer es doch einmal
+importiert, holt die Ausnahme mit dieser Begründung zurück.
+
 ### Der Bestand ist nachgezogen
 
 Das ganze Repository besteht das Tor: `ruff format`, `ruff check`, `mypy` und `pytest`
@@ -815,9 +829,8 @@ den Stand in Git geprüft.
 - **`encoding="utf-8"` maschinell erzwingen.** ruff kennt dafür `PLW1514`; ob die Regel
   ohne `preview` verfügbar ist, ist noch nicht geprüft. Gelänge es, wanderte eine
   Kleinigkeit aus dokumentation.md §8 aus der Prosa in das Tor
-- **Ob `mypy --strict` trägt**, sobald spaCy-Typen im Spiel sind. Bisher sind nur eigene,
-  triviale Dateien geprüft. `tools/` ist von der Typprüfung ausgenommen — Messskripte,
-  reine Standardbibliothek
+- `tools/` bleibt von der Typprüfung ausgenommen — Messskripte, reine Standardbibliothek.
+  Ob das so bleibt, ist offen; berührt wird es erst, wenn ein Messskript in den Kern wandert
 - **Auslieferung** (Nuitka, PyInstaller) bleibt offen wie in Abschnitt 1; sie berührt das
   Gerüst erst, wenn das Programm an Fremde geht
 

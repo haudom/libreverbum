@@ -50,16 +50,6 @@ nur zur Kenntnis.
 
 Unstrittig, nur noch nicht getan. Jeweils mit der Messung, auf die sie sich stützen.
 
-## B2 — mittel · technik.md §6: mypy geht streng mit den spaCy-Typen durch
-
-Das war laut technik.md §6 ungeprüft und der ausdrückliche Grund, warum `bauplan.md` mit den
-Strängen A und B beginnen wollte. **Antwort: ja.** spaCy liefert `py.typed` mit; `mypy`
-löst `token.pos_`, `token.lemma_` und `sent.text` zu `str` und `token.is_alpha` zu `bool`
-auf (mit `reveal_type` geprüft). `extraction.py` ist typrein.
-
-**Folge:** Die Ausnahme `ignore_missing_imports` für `spacy.*` in `pyproject.toml` ist
-gegenstandslos und kann entfernt werden — vor dem Entfernen einmal `mypy` laufen lassen.
-
 ## B3 — mittel · technik.md §3: spaCys Wortarten und WikDicts sind nicht deckungsgleich
 
 **Gemessen:** **29 von 1.592 Grundformen (1,8 %)** stehen im Wörterbuch, bekommen aber eine

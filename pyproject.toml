@@ -67,10 +67,6 @@ python_version = "3.12"
 strict = true
 files = ["libreverbum", "tests"]
 
-[[tool.mypy.overrides]]
-module = ["spacy.*", "en_core_web_md.*"]
-ignore_missing_imports = true
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # `package = false` oben heißt: libreverbum wird nicht in die Umgebung installiert. Ohne
