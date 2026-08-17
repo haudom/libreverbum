@@ -100,28 +100,36 @@ class Sense:
 
     `wikdict_sense` ist `None`, wo das Wörterbuch keinen Bedeutungstext führt. Das ist der
     Regelfall und nicht der Ausnahmefall: 36 % der Zeilen, systematisch die Hauptbedeutungen
-    (Regel 1). Bei einer Wendung ohne Wörterbucheintrag fehlen alle `wikdict_`-Werte, und
-    `uncertain` ist gesetzt.
+    (Regel 1). `wikdict_trans_list` ist der Inhalt der Auswahlliste aus T5 — WikDicts deutsche
+    Entsprechungen dieser einen Wörterbuchzeile (Spalte `trans_list`, mit „|" getrennt), aus der
+    `translation` (T11) später wählt. Ohne dieses Feld trüge eine Zeile ohne `sense`-Text
+    überhaupt keinen Inhalt. Bei einer Wendung ohne Wörterbucheintrag fehlen alle
+    `wikdict_`-Werte, und `uncertain` ist gesetzt.
 
-    Identität (Gleichheit und Hash) bilden allein `lemma` und `wikdict_lexentry` — die
-    Kennung der Wörterbuchzeile, nicht ihr Text. `translation` und `uncertain` sind
-    Ergebnisfelder, die T11 erst während des Durchlaufs füllt, und `wikdict_sense` ist die
-    Momentaufnahme des Bedeutungstexts; alle drei bleiben deshalb außerhalb von Gleichheit
-    und Hash (`compare=False`), sonst wäre dieselbe Bedeutung vor und nach der Übersetzung
-    oder nach einem Wörterbuch-Update ein anderes Objekt."""
+    Identität (Gleichheit und Hash) bilden `lemma`, `wikdict_lexentry`, `wikdict_sense` und
+    `wikdict_trans_list` gemeinsam — der Inhalt der Wörterbuchzeile, nicht ein Verweis darauf.
+    `wikdict_lexentry` allein genügt nicht: Gemessen an `tools/en-de.sqlite3` fielen unter
+    dieser Identität 22,7 % der Zeilen mit `lexentry` weg — `watch` als Substantiv etwa
+    dreimal „Wache" mit verschiedenem `wikdict_sense` (Wächter, Wachdienst-Zeitraum,
+    Mannschaft der Wache). `wikdict_trans_list` unterscheidet im heutigen Bestand nichts,
+    was `wikdict_sense` nicht schon unterscheidet (gemessen über alle 157.801 Zeilen); es
+    steht mit in der Identität, damit ein neu bezogenes Wörterbuch das Zusammenfallen nicht
+    unbemerkt wieder einführen kann. `translation` und `uncertain` sind Ergebnisfelder, die T11 erst
+    während des Durchlaufs füllt, und bleiben deshalb außerhalb von Gleichheit und Hash
+    (`compare=False`)."""
 
     lemma: Lemma
     translation: str | None = field(default=None, compare=False)
 
-    # REGEL (technik.md §4, „Getrennte Datei — nicht mit dem Wörterbuch mischen"):
-    # wikdict_sense ist eine Momentaufnahme, nie Schlüssel. WikDict wird aus Wiktionary
-    # erzeugt und formuliert Bedeutungen um; ein Fremdschlüssel dorthin zerbräche das Profil
-    # beim nächsten Wörterbuch-Update, ohne dass es beim Schreiben auffiele. Aus demselben
-    # Grund bleibt es außerhalb von Gleichheit und Hash: Sonst wäre nach einem
-    # Wörterbuch-Update dieselbe Bedeutung ein anderes Objekt. wikdict_lexentry bleibt dabei
-    # in Gleichheit und Hash — es ist die Kennung der Zeile und das einzige Feld, das zwei
-    # Bedeutungen desselben Lemmas ohne Bedeutungstext unterscheidet (Regel 1).
-    wikdict_sense: str | None = field(default=None, compare=False)
+    # REGEL (technik.md §4, „Getrennte Datei — nicht mit dem Wörterbuch mischen"): Alle drei
+    # wikdict_-Felder bleiben Momentaufnahmen, nie Schlüssel in die Datei — kein rowid, kein
+    # anderer Verweis, nur der Zeileninhalt zum Zeitpunkt der Abfrage. Dass wikdict_sense und
+    # wikdict_trans_list jetzt an der Identität mitwirken, ändert daran nichts: Verglichen wird
+    # weiterhin nur Text gegen Text, nicht gegen die Wörterbuchdatei. wikdict_lexentry allein
+    # unterscheidet zwei Zeilen desselben Lemmas nicht (siehe Klassen-Docstring) — erst der
+    # volle Zeileninhalt tut das.
+    wikdict_sense: str | None = None
+    wikdict_trans_list: str | None = None
     wikdict_lexentry: str | None = None
 
     # REGEL (dokumentation.md §4 Regel 13 und 14, technik.md §3 „Die Falle: es scheitert
