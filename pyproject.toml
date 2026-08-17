@@ -73,6 +73,11 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# `package = false` oben heißt: libreverbum wird nicht in die Umgebung installiert. Ohne
+# diese Zeile findet blank aufgerufenes `pytest` das Paket deshalb nicht — nur
+# `python -m pytest` täte es, weil das Verzeichnis dann ohnehin im Suchpfad steht. Das Tor
+# in technik.md §6 nennt die Kurzform; sie soll auch die Form sein, die läuft.
+pythonpath = ["."]
 # Bauplan.md T2: Tests ohne die jeweilige Voraussetzung werden in tests/conftest.py
 # übersprungen statt scheitern zu lassen; die Registrierung hier hält --strict-markers
 # ruhig.

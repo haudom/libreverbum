@@ -9,11 +9,9 @@ einlesen → Kapitel wählen → Wortschatz extrahieren → gegen das Nutzerprof
 Triage durch den Nutzer → Hybrid-Übersetzung (Wörterbuch + LLM) → Export nach Anki und
 Druck. Einzelheiten in [konzept.md](konzept.md).
 
-**Stand:** Es gibt noch **keinen Anwendungscode**. Im Repository liegen drei
-Entscheidungsdokumente, der Bauplan für Phase 1, fünf Messskripte unter `tools/` und seit
-dem 12.08.2026 das Projektgerüst: `pyproject.toml`, das leere Kernpaket `libreverbum/`
-und `tests/`. Phase 1 (ein vollständiger Durchlauf für ein Kapitel) ist noch nicht
-begonnen.
+**Stand:** steht nicht hier, sondern in [bauplan.md](bauplan.md) und in `git log`. Eine
+Momentaufnahme in Prosa veraltet mit jeder Teilaufgabe, und diese Datei liest jeder
+Bearbeiter zuerst — sie darf ihn nicht in die Irre führen.
 
 ## Die Dokumente und ihre Zuständigkeit
 
@@ -150,56 +148,24 @@ Adressen ab (llama-server, LM Studio, Ollama, …) oder nehmen `--url`. Testtext
 
 ## Aktueller Stand
 
-**Entscheidungen 8 und 9 sind am 12.08.2026 gefallen** (technik.md §8 und §9):
+Er steht in drei Quellen, die sich selbst nachführen — nicht hier:
 
-- **EPUB ohne Bibliothek** — `zipfile`, `xml.etree`, `html.parser`. EbookLib steht unter
-  AGPL-3.0 und scheidet nach Regel 15 aus; gemessen an zwölf Dateien liest die
-  Standardbibliothek **570 von 570** Inhaltsdokumenten, und der gewonnene Wortschatz weicht
-  um 0,08 % von der Textfassung ab, auf der die Entscheidungen 2 und 5 beruhen
-- **Kapitel kommen aus der Navigation**, gezählt nach eindeutigen Zielen. Fehlt sie, gilt
-  jedes Dokument der Lesereihenfolge als Kapitel — **mit sichtbarem Hinweis**. Ein Rückfall
-  auf Überschriften wurde gemessen und verworfen: Jede Datei mit Überschriften hat auch ein
-  Inhaltsverzeichnis. `epub:type` kommt in der Praxis nicht vor, die Trennung von Vorspann
-  und Impressum bleibt Heuristik
-- **Ablage und Konfiguration** stehen unter „Daten" oben
+- **Was als Nächstes gebaut wird:** [bauplan.md](bauplan.md). **Vor der ersten Zeile
+  Anwendungscode dort nachsehen**, welche Teilaufgabe an der Reihe ist und welche
+  Vorentscheidung sie blockiert
+- **Was fertig ist:** `git log --oneline`. Jede Teilaufgabe ist ein Commit, der das Tor
+  oben bestanden hat
+- **Was gerade jemand anderes bearbeitet:** `git status`. Es laufen regelmäßig zwei
+  Bearbeiter gleichzeitig — fremde Änderungen im Arbeitsbaum sind kein Fehler und werden
+  weder repariert noch mitcommittet
 
-**Der Bauplan für Phase 1 steht seit dem 12.08.2026 in [bauplan.md](bauplan.md).** Er
-teilt Phase 1 in achtzehn Teilaufgaben, hält fest, welche davon gleichzeitig gebaut werden
-dürfen, und nennt die vier Vorentscheidungen, die noch Code blockieren — die drei
-Bibliotheken aus technik.md §1 samt Lizenzprüfung und die Ablage zur Laufzeit. **Vor der
-ersten Zeile Anwendungscode dort nachsehen**, welche Teilaufgabe an der Reihe ist. Die
-Triage läuft in Phase 1 über die Kommandozeile; die Qt-Oberfläche kommt nach der Abnahme.
+Die technischen Entscheidungen 1 bis 9 sind gefallen und stehen in technik.md; offen sind
+nur E8b (Anki-Bibliothek) und E8c (Druckausgabe), beide in bauplan.md unter Tor 0.
 
-**Entscheidung 7 ist am 12.08.2026 gefallen: die Modulaufteilung des Kerns samt
-Importregel** (technik.md §7), zusammen mit den Regeln 13 bis 15 in dokumentation.md §4.
-Damit sind die Vorarbeiten abgeschlossen und **die nächste Aufgabe ist Phase 1 selbst** —
-der erste Anwendungscode. Die Importregel ist keine Absichtserklärung mehr:
-`tests/test_architecture.py` prüft sie.
-
-**Entscheidung 6 ist am 12.08.2026 gefallen: Python 3.12 mit uv, ruff, pytest und mypy**
-(technik.md §6). Das Gerüst steht, das Tor oben gilt ab sofort, und **das ganze
-Repository besteht es** — `tools/` ist am selben Tag nachgezogen worden. Dass die
-Messwerte davon unberührt sind, ist durch einen Vorher-Nachher-Lauf belegt, nicht
-angenommen (technik.md §6, „Der Bestand ist nachgezogen"). Die verbliebenen offenen
-Punkte stehen dort.
-
-**Entscheidung 5 ist am 12.08.2026 gefallen: spaCy mit `en_core_web_md`** (technik.md
-§5). Damit sind alle technischen Vorfragen beantwortet und **Phase 1 kann beginnen**.
-Zwei Ergebnisse der Messung wirken sich unmittelbar aufs Bauen aus:
-
-- Der **Eigennamenfilter wirkt auf das Vorkommen, nie auf die Grundform**. Sonst
-  verschwinden `red`, `orange`, `street` ganz aus der Triage (technik.md §5)
-- Die getrennten Phrasal Verbs sind **gelöst und betrafen 21 %, nicht ~51 %** — die alte
-  Zahl steht mit Nachtrag in technik.md, „Messung: Mehrwortausdrücke"
-
-Die Messumgebung liegt in `.venv/` (spaCy + `en_core_web_sm`/`md`), die Testtexte in
-`tools/*.txt`. Beides ungetrackt.
-
-Die Sprachregel aus dokumentation.md §1 ist am 12.08.2026 auf den Bestand angewandt
-worden: `werkzeuge/` → `tools/`, die drei Skripte englisch benannt, Bezeichner und
-Argumente übersetzt, Verweise in technik.md und `.gitignore` nachgezogen. Der Bestand
-widerspricht der Regel damit nicht mehr — das war der Zweck, denn wer nach vorhandenem
-Code arbeitet, folgt dem Bestand, nicht der Regel.
+Nicht im Repository, aber zur Arbeit vorhanden: die Umgebung `.venv/` (spaCy mit
+`en_core_web_md` und `en_core_web_sm`), das Wörterbuch `tools/en-de.sqlite3`, die
+Testtexte `tools/*.txt` und die EPUBs `tools/*.epub`. Tests, die davon abhängen, tragen
+`needs_dictionary` oder `needs_model` und werden ohne sie übersprungen.
 
 ## Arbeitsweise
 

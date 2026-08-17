@@ -116,31 +116,6 @@ Bauenden wenige Minuten. Die vier Reviews dieser Sitzung haben in **vier von vie
 echte Defekte gefunden, keine Kosmetik — je mehr davon der Bauende selbst abfängt, desto
 billiger wird die Kette.
 
-## A3 — mittel · schnell · CLAUDE.md wird von jedem Agenten zuerst gelesen und ist falsch
-
-**Beobachtet, zwei Stellen.**
-
-1. Unter „Stand" steht: *„Es gibt noch **keinen Anwendungscode**."* Das stimmt seit dem
-   17.08.2026 nicht mehr — `entities`, `extraction`, `dictionary` und `profile` stehen.
-   `bauplan.md` verschiebt die Pflege auf T18.
-2. Das Tor nennt `pytest`. Blank aufgerufen scheitert das mit
-   `ModuleNotFoundError: No module named 'libreverbum'`; es läuft nur als
-   `.venv/Scripts/python.exe -m pytest` oder bei aktivierter Umgebung.
-
-**Warum das in diesem Ablauf schwerer wiegt als sonst.** Bei einem menschlichen Bearbeiter
-ist eine veraltete Standzeile harmlos — er weiß es besser. Hier startet **jeder Subagent
-kalt aus dieser Datei**. Die Aussage desorientiert also aktiv, und der Torbefehl kostet
-jeden Agenten einmal Kontext beim Herausfinden.
-
-**Vorschlag.**
-
-- „Stand" auf einen Verweis eindampfen statt als Prosa-Momentaufnahme führen — der gültige
-  Stand steht in `bauplan.md` und in der Commit-Historie
-- die vier Torbefehle in exakt der Form hinschreiben, die tatsächlich läuft — **oder**
-  `pythonpath = ["."]` in `pyproject.toml` ergänzen, dann stimmt die dokumentierte
-  Kurzform wieder. Die zweite Variante ist die bessere, weil sie die Dokumentation heilt
-  statt sie zu verlängern
-
 ## A4 — mittel · Regel 14 trennt Struktur nicht von Funktion
 
 **Beobachtet an T8.** „Gebaut wird, was die aktuelle Phase verlangt" ist für Funktionen
