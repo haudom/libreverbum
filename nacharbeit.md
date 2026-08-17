@@ -13,16 +13,12 @@
 
 ## Gewichtung
 
-Die Stufe beantwortet **eine** Frage: *Was wäre passiert, wenn es niemand bemerkt hätte?*
+Die Stufen und was beim Einfalten drankommt, stehen in dokumentation.md §9, „Die beiden
+Arten werden verschieden behandelt". Kurz:
 
-| Stufe | Folge, wenn unbemerkt |
-|---|---|
-| **schwer** | Ein falsches Ergebnis geht durch, ohne aufzufallen — der leise Fehlschlag. Oder es geht etwas verloren, das nicht wiederherstellbar ist |
-| **mittel** | Das Ergebnis stimmt, kostet aber spürbar: verdoppelte Arbeit, zwei Bearbeiter lösen dasselbe verschieden, oder es dauert unzumutbar lange |
-| **leicht** | Reibung ohne Folge |
-
-Dahinter steht `· schnell`, wo ein Punkt in einer Viertelstunde erledigt ist. Innerhalb
-einer Stufe wird das Schnelle zuerst gemacht — A3 ist der Fall, der das lohnt.
+- **Teil A** trägt eine Stufe. Abgearbeitet werden `schwer` und `mittel`; `leicht` bleibt
+  liegen und wird spätestens bei T18 eingefaltet oder gestrichen
+- **Teil B** trägt keine, weil dort nichts zurückgestellt wird
 
 **Die Stufe vergibt die kuratierende Stelle, nicht der Melder.** Wer eine Beobachtung
 meldet, nennt zwei Tatsachen, die er wirklich kennt: was es ihn gekostet hat, und ob dabei
@@ -48,9 +44,10 @@ nur zur Kenntnis.
 
 # Teil B — Nachträge an den Dokumenten
 
-Unstrittig, nur noch nicht getan. Jeweils mit der Messung, auf die sie sich stützen.
+Unstrittig, nur noch nicht getan. Jeweils mit der Messung, auf die sie sich stützen. Ohne
+Stufe: Diese Liste wird bei jedem Einfalten auf null gebracht.
 
-## B4 — leicht · technik.md §3: Zeilen ohne `lexentry`
+## B4 — technik.md §3: Zeilen ohne `lexentry`
 
 **Gemessen:** **46.933 von 157.801 Zeilen (29,7 %)** haben `lexentry = NULL`. Sie können die
 Wortart-Zuordnung nicht passieren — über alle betroffenen Zeilen geprüft: **0** hätten es
@@ -61,7 +58,7 @@ Zum Umfang, nicht als Fehler: **45.260 von 124.751 Stichwörtern (36,3 %)** habe
 keine `lexentry`-Zeile und liefern eine leere Liste. Ob eine leere Liste `uncertain` werden
 muss, entscheidet **T11**.
 
-## B5 — leicht · technik.md §5: der Inhaltswortfilter ist neu
+## B5 — technik.md §5: der Inhaltswortfilter ist neu
 
 Seit dem 17.08.2026 kommen nur noch `NOUN`, `VERB`, `ADJ`, `ADV`, `INTJ` in die Wortliste;
 `PROPN` wird weiterhin gesondert **je Vorkommen** behandelt (Regel 12). Vorher wurde nur

@@ -353,3 +353,28 @@ durchgegangen, was ein Dokument berichtigt, wandert hinein, was die Hausordnung 
 wird entschieden. Der Punkt, an dem ein solcher Rückweg gewöhnlich stirbt, ist nicht das
 Sammeln, sondern das Einfalten — dieselbe Vorsichtsmaßnahme wie „Am Phasenende einfalten"
 in §7.
+
+### Die beiden Arten werden verschieden behandelt
+
+**Was ein Dokument berichtigt, wird bei jedem Einfalten vollständig abgearbeitet.** Es ist
+unstrittig, kostet Minuten und entscheidet, ob der nächste Kaltstart einen richtigen Stand
+liest — ein solcher Punkt wird deshalb weder gewichtet noch zurückgestellt. Ein Nachtrag,
+der liegen bleibt, macht aus einem behobenen Fehler eine falsche Anleitung.
+
+**Was die Hausordnung ändert, braucht eine Entscheidung** und wird dafür gewichtet. Die
+Stufe beantwortet **eine** Frage: *Was wäre passiert, wenn es niemand bemerkt hätte?*
+
+| Stufe | Folge, wenn unbemerkt |
+|---|---|
+| **schwer** | Ein falsches Ergebnis geht durch, ohne aufzufallen — der leise Fehlschlag. Oder es geht etwas verloren, das nicht wiederherstellbar ist |
+| **mittel** | Das Ergebnis stimmt, kostet aber spürbar: verdoppelte Arbeit, zwei Bearbeiter lösen dasselbe verschieden, oder es dauert unzumutbar lange |
+| **leicht** | Reibung ohne Folge |
+
+Dahinter steht `· schnell`, wo ein Punkt in einer Viertelstunde erledigt ist; innerhalb
+einer Stufe wird das Schnelle zuerst gemacht.
+
+**Abgearbeitet werden `schwer` und `mittel`.** `leicht` bleibt liegen und wird von Hand
+angestoßen, wo es sich lohnt — **spätestens am Phasenende** wird jeder verbliebene Punkt
+eingefaltet oder ersatzlos gestrichen. Streichen ist dort oft die richtige Antwort, weil
+die Reibung inzwischen weg ist. Ohne diesen Termin zeigt die Verfallsklausel der
+Sammelliste ins Leere, und aus dem Rest wird die Sedimentschicht aus §7.

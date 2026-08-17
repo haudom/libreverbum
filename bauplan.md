@@ -26,9 +26,10 @@ Drei bereits gefallene Festlegungen geben die Struktur vollständig vor:
 **Jede Teilaufgabe unten ist ein Commit**, der die vier Befehle aus technik.md §6 besteht.
 
 **Jedes Tor endet mit dem Einfalten** (dokumentation.md §9): Die Beobachtungen aus den
-Berichten der abgeschlossenen Teilaufgaben werden durchgegangen — Nachträge wandern in die
-Dokumente, Vorschläge zur Hausordnung werden entschieden. Solange die Liste nicht leer ist,
-steht sie in `nacharbeit.md`.
+Berichten der abgeschlossenen Teilaufgaben werden durchgegangen — Nachträge wandern
+vollständig in die Dokumente, Vorschläge zur Hausordnung nach Stufe: `schwer` und `mittel`
+werden entschieden, `leicht` bleibt liegen. **Bei T18** wird jeder verbliebene Punkt
+eingefaltet oder gestrichen. Solange die Liste nicht leer ist, steht sie in `nacharbeit.md`.
 
 ## Festlegung dieses Plans: die Triage läuft zuerst über die Kommandozeile
 
@@ -143,7 +144,7 @@ Brauchen E8b und E8c. Bei T14 fällt der offene Punkt aus technik.md §7 an, woh
 | # | Teilaufgabe |
 |---|---|
 | **T17** | Durchlauf an einem echten, DRM-freien EPUB. Kriterien 1 bis 6, davon 3 als Handstichprobe über zwanzig Wörter mit mindestens drei mehrdeutigen und zwei Redewendungen, 4 als echter Import in Anki |
-| **T18** | Dokumente nachziehen: Schemaspalten festhalten, „Figuren & Orte" verorten, Wirkung der Wortart als Vorfilter auf lange Auswahllisten **messen** statt vermuten (technik.md §3, `run` mit 48 Bedeutungen), Stand in CLAUDE.md |
+| **T18** | Dokumente nachziehen: Schemaspalten festhalten, „Figuren & Orte" verorten, Wirkung der Wortart als Vorfilter auf lange Auswahllisten **messen** statt vermuten (technik.md §3, `run` mit 48 Bedeutungen), Stand in CLAUDE.md. Dazu die letzte Auflösung von `nacharbeit.md`: jeder verbliebene `leicht`-Punkt wird eingefaltet oder gestrichen, dann fällt die Datei weg |
 
 ## Tor 5 — Oberfläche, nach der Abnahme
 
