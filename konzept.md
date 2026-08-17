@@ -39,9 +39,26 @@ die Vorbereitung dadurch immer kürzer, obwohl die Bücher schwerer werden dürf
 
 ```
 EPUB einlesen  →  Kapitel wählen  →  Wortschatz extrahieren
-      →  gegen Profil filtern  →  Triage durch Nutzer
-      →  Übersetzen (Wörterbuch + LLM)  →  Export (Anki / Druck)
+      →  gegen Profil filtern  →  Bedeutungen beschaffen (Wörterbuch + LLM)
+      →  Triage durch Nutzer  →  Export (Anki / Druck)
 ```
+
+> **Nachtrag 17.08.2026 — die Triage kommt nach dem Beschaffen der Bedeutungen.** Bis heute
+> stand hier `Triage → Übersetzen`. Das widersprach dem eigenen Abschnitt 5,
+> „Mehrdeutigkeit": Dort wird der zweite Eintrag eines mehrdeutigen Wortes **in der Triage**
+> als „neue Bedeutung eines bekannten Wortes" gekennzeichnet — was voraussetzt, dass die
+> Bedeutung dort bereits feststeht. Der Widerspruch fiel beim Bau von T10 auf, wo eine
+> Triage-Entscheidung mangels Bedeutung keinen Gegenstand hatte, an dem das Profil sie
+> festmachen konnte (technik.md §4, „Kenntnis pro Bedeutung, nicht pro Wort").
+>
+> Ausschlaggebend ist aber nicht die Datenhaltung, sondern der Nutzerfall: Wer `watch` ohne
+> Bedeutungsangabe sieht, drückt „kenne ich" für die Uhr, während der Text die Wache meint —
+> und lernt das Wort nie. Der Belegsatz allein trägt das nicht; in einer zügigen Triage wird
+> er überflogen.
+>
+> **Die Abschnittsnummern bleiben**, damit die Verweise aus technik.md gültig bleiben.
+> Geändert hat sich die Reihenfolge, nicht die Sache: Abschnitt 5 beschreibt weiterhin
+> denselben Hybrid, er läuft nur früher.
 
 ### 1. Buch einlesen
 EPUB öffnen, Metadaten (Titel, Autor) und die Kapitelstruktur auslesen. Fließtext von
@@ -77,8 +94,8 @@ Alles, was im Profil als *bekannt* markiert ist, fällt raus. Beim ersten Buch i
 leer — deshalb muss Schritt 4 auch bei großen Listen erträglich bleiben.
 
 ### 4. Triage durch den Nutzer
-Die verbleibenden Wörter werden durchgegangen, jeweils mit Belegsatz als Kontexthilfe.
-Drei Antworten:
+Die verbleibenden Wörter werden durchgegangen, jeweils mit Belegsatz **und Bedeutung** als
+Kontexthilfe. Drei Antworten:
 
 - **Kenne ich** → wandert dauerhaft ins Profil, wird nie wieder gefragt
 - **Will ich lernen** → wird übersetzt und zur Karte
@@ -92,11 +109,33 @@ zu verpassen.
 - **Sammelaktion „ab hier kenne ich alles"** — markiert alle häufigeren Wörter auf einen Schlag
 - **Obergrenze pro Kapitel** — „maximal 25 neue Wörter", der Rest wird zurückgestellt
 
+**Wie tief vorher angereichert wird, ist eine Einstellung** (17.08.2026), weil die zwei Stufen
+aus Abschnitt 5 sehr verschieden viel kosten:
+
+| Stellung | was in der Triage steht | Kosten je Kapitel |
+|---|---|---|
+| **Wörterbuch** | die Liste der möglichen Bedeutungen — „watch — Uhr / Wache / beobachten" | rund **1,1 s**, kein Modellaufruf |
+| **Wörterbuch + Modell** | zusätzlich ist die im Kontext gemeinte Bedeutung markiert | rund **1 s je Wort** bei 1.592 Grundformen |
+
+Standard ist die erste Stellung, aus demselben Grund, aus dem Abschnitt 5 die Cloud-Gegenstelle
+zuschaltbar statt vorgegeben macht: Der Regelfall läuft schnell und offline, die teurere
+Genauigkeit wird bewusst gewählt. Ein Schalter ist das trotz Regel 14 (dokumentation.md §4)
+zulässig, weil er zwei echte Anwendungsfälle trennt und nicht einen vermuteten zweiten vorbaut.
+
+*Offen:* Was „kenne ich" in der ersten Stellung bei einem **mehrdeutigen** Wort bucht — dort
+steht eine Liste, keine einzelne Bedeutung. Ob das ein Randfall oder der Normalfall ist,
+entscheidet die Messung, wie viele Grundformen eines Kapitels überhaupt mehr als eine
+Bedeutung haben; ebenso offen ist, wie stark **Bündeln** die zweite Stellung verbilligt.
+
 *Später erweiterbar durch:* adaptiven Vokabeltest zur Erstschätzung, Import bestehender
 Anki-Decks, Angabe des Sprachniveaus (A1–C2). Die Datenstruktur muss diese Quellen aufnehmen
 können, ohne umgebaut zu werden.
 
 ### 5. Übersetzen — der Hybrid-Ansatz
+
+> Seit 17.08.2026 läuft dieser Schritt **vor** Abschnitt 4, damit die Triage die Bedeutung
+> anzeigen kann; siehe den Nachtrag beim Kernablauf. Die Nummer bleibt, die Sache auch.
+
 Ein rein generatives Modell erfindet gelegentlich Übersetzungen, und der Nutzer bemerkt es
 nicht — er kennt das Wort ja gerade nicht. Falsch gelernte Vokabeln sind schlimmer als gar
 keine. Deshalb zweistufig:

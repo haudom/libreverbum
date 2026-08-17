@@ -53,9 +53,24 @@ Kein Code. Regel 15 verlangt die Lizenzprüfung **vor** der Aufnahme.
 | **E9** | Ablage und Konfiguration | T5, T8, T11 | **entschieden am 12.08.2026** (technik.md §9): plattformübliches Verzeichnis, Pfade als Argument, `config.toml` |
 | **E8b** | Anki-Erzeugung | T13 | offen. Ausschlusskriterium: Die Bibliothek muss die **GUID zugänglich** machen, sonst ist Regel 6 nicht erfüllbar |
 | **E8c** | Druckausgabe | T14 | offen. Erzeugtes HTML im Browser drucken wäre die abhängigkeitsfreie Möglichkeit |
+| **E10** | Reihenfolge und Anreicherungstiefe | T11, T15, T16 | **entschieden am 17.08.2026** (konzept.md, Nachtrag beim Kernablauf): Bedeutungen **vor** der Triage, die Tiefe als Einstellung. Zwei Messungen stehen noch aus, siehe unten |
 
 **Damit ist Tor 0 für Tor 1 und Tor 2 offen.** E8b und E8c bleiben liegen bis kurz vor T13
 und T14 — dann ist bekannt, welche Felder eine Karte wirklich trägt.
+
+**E10 ist entschieden, aber zwei Zahlen fehlen**, und beide ändern, *was* gebaut wird — nicht
+nur wie:
+
+- **Wie viele Grundformen eines Kapitels sind überhaupt mehrdeutig?** Davon hängt ab, ob eine
+  Triage-Entscheidung je Wort genügt oder bei manchen Wörtern je Bedeutung getroffen werden
+  muss. Deckt sich mit dem Messauftrag, der ohnehin in T18 steht (Wirkung der Wortart als
+  Vorfilter auf lange Auswahllisten)
+- **Skaliert das Bündeln beim Modell?** technik.md §3 hat „12 Sekunden für alle 16 in einer
+  einzigen Anfrage" gemessen. Gilt das auch für 64, ist die teure Stellung der Einstellung
+  bezahlbar; wächst die Zeit überproportional oder bricht die Antwortform, ist sie es nicht
+
+Solange die zwei Zahlen fehlen, sind **T11 und T15 nicht anzufangen** — T11 müsste sonst raten,
+ob es einzeln oder gebündelt fragt, und T15 müsste die Reihenfolge raten.
 
 ---
 
