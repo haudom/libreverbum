@@ -87,7 +87,7 @@ weil dieselbe Datei betroffen ist.
 | # | Teilaufgabe | Prüfung |
 |---|---|---|
 | **T5** | Auswahlliste je Grundform und Wortart. Regel 1: Zeilen ohne `sense`-Text bleiben drin, nach `score` absteigend, beschriftet als „Hauptbedeutung, ohne nähere Angabe". Die Abfrage steht in `tools/sense_check.py` bereits richtig | `watch` und `draw` liefern ihre Hauptbedeutung |
-| **T6** | Erstbezug: Herunterladen, Prüfsumme, von Hand hinterlegte Datei, Hinweis auf Herkunft und Lizenz beim ersten Start (technik.md §2, „Warum nicht mitgeliefert") | fehlende Datei ergibt einen sichtbaren Fehlschlag, kein leeres Ergebnis |
+| **T6** | Erstbezug: Herunterladen, Prüfsumme, von Hand hinterlegte Datei, Hinweis auf Herkunft und Lizenz beim ersten Start (technik.md §2, „Warum nicht mitgeliefert"). Dabei den **Index auf `translation(written_rep)`** anlegen — die Datei bringt keinen mit, und ohne ihn kostet ein Kapitel 32 bis 44 s statt 1,1 s (technik.md §3, „Nachtrag 17.08.2026") | fehlende Datei ergibt einen sichtbaren Fehlschlag, kein leeres Ergebnis |
 | **T7** | Abgleich der Kandidaten aus T4 gegen die Wendungen, Filter `score ≥ 50` und Wortart nicht `Proper_noun`. Ohne Eintrag: `uncertain` statt verwerfen | Regeln 10 und 11 |
 
 ### Strang C — `profile`

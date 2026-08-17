@@ -50,18 +50,6 @@ nur zur Kenntnis.
 
 Unstrittig, nur noch nicht getan. Jeweils mit der Messung, auf die sie sich stützen.
 
-## B1 — mittel · technik.md §3: das Nachschlagen ist der Engpass
-
-**Gemessen an `tools/en-de.sqlite3`:** **27,7 ms je Aufruf** von `candidates()`, davon 26 ms
-Abfrage und 0,3 ms Verbindungsaufbau. Die Datei hat **keinen einzigen Index**
-(`sqlite_master` liefert leer), der Abfrageplan ist `SCAN translation` +
-`USE TEMP B-TREE FOR ORDER BY`. Ein Kapitel mit 1.592 Grundformen kostet damit rund
-**44 Sekunden reine Wörterbuchzeit**.
-
-Das ist der von Regel 14 verlangte **gemessene Anlass**. Die Abhilfe ist ein Index oder eine
-Abfrage je Kapitel — **kein Zwischenspeicher**. Sie gehört zu **T6** (Erstbezug), weil dort
-die Datei ohnehin einmalig angefasst wird, und nicht zu T5.
-
 ## B2 — mittel · technik.md §6: mypy geht streng mit den spaCy-Typen durch
 
 Das war laut technik.md §6 ungeprüft und der ausdrückliche Grund, warum `bauplan.md` mit den

@@ -320,8 +320,32 @@ Geprüft wurden bewusst schwierige Paare, jeweils in beiden Richtungen:
 `light` (Licht/leicht), `watch` (Uhr), `draw` (zeichnen).
 
 Bei rund einer Sekunde je Wort und höchstens 25 neuen Wörtern pro Kapitel liegt die
-Übersetzungsdauer eines Kapitels im Bereich **einer halben Minute**. Geschwindigkeit
-ist damit kein Entscheidungskriterium mehr.
+Übersetzungsdauer eines Kapitels im Bereich **einer halben Minute**. Geschwindigkeit ist
+damit kein Kriterium mehr für die **Wahl des Modells** — wohl aber im Schritt davor, siehe
+den Nachtrag unten.
+
+### Nachtrag 17.08.2026: der Engpass ist das Nachschlagen, nicht das Modell
+
+Gemessen an `tools/en-de.sqlite3` mit `dictionary.candidates()`:
+
+| | |
+|---|---|
+| je Aufruf | **20 bis 28 ms**, je nach Zustand des Dateisystem-Zwischenspeichers |
+| davon Verbindungsaufbau | 0,3 ms — vernachlässigbar |
+| Abfrageplan | `SCAN translation` über 157.801 Zeilen, dazu `USE TEMP B-TREE FOR ORDER BY` |
+| Indizes in der Datei | **keiner** — `sqlite_master` liefert keine einzige Zeile |
+| ein Kapitel mit 1.592 Grundformen | **32 bis 44 Sekunden** reine Wörterbuchzeit |
+
+Das Nachschlagen kostet damit mehr als sämtliche Modellaufrufe zusammen, obwohl es nur eine
+Abfrage je Grundform ist. Die Abhilfe ist gemessen und schmal: Ein Index auf
+`translation(written_rep)` macht aus dem `SCAN` ein `SEARCH … USING INDEX` und senkt den
+Aufruf auf **0,71 ms**, das Kapitel auf **1,1 Sekunden**. Er entsteht in 0,1 s und
+vergrößert die Datei von 20,9 auf 23,9 MB.
+
+Angelegt wird er bei **T6** (Erstbezug), wo die Datei ohnehin einmalig angefasst wird —
+nicht bei T5. Und **kein Zwischenspeicher**: Regel 14 verlangt für einen solchen einen
+gemessenen Anlass, und die Messung zeigt auf den fehlenden Index, nicht auf einen zweiten
+Datenbestand.
 
 ### Zwingende Einstellung: Denkschritt abschalten
 
