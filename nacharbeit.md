@@ -49,15 +49,47 @@ und die Marke `needs_dictionary` **genau für diesen Fall gebaut**. T5 hat beide
 benutzt — und nichts in der Hausordnung verlangte es. dokumentation.md §5 sagt „wo eine
 Regel prüfbar ist, ist sie zu prüfen", aber nirgends steht, *woran* geprüft wird.
 
+**Der Mechanismus ist nicht „echte Daten sind besser".** Er ist: Eine Vorrichtung, die
+derselbe Prozess baut wie den Code, trägt dieselben blinden Flecken. Das Mini-Wörterbuch
+war sauber, weil sein Erbauer sich eine Wörterbuchzeile als „ein `lexentry`, eine
+Bedeutung" vorstellte — und der Code, der darauf zugriff, stellte es sich genauso vor. Die
+Vorrichtung hat die Annahme nicht geprüft, sondern bestätigt.
+
+**Das gilt für alle drei Fremdquellen, nicht nur für das Wörterbuch** — belegt, nicht
+vermutet: Beim EPUB ist es **schon passiert**. Das T2-Review fand eine Testnavigation, die
+von der Lesereihenfolge nicht unterscheidbar war. Damit wäre die Kernregel aus technik.md
+§8 — Kapitel kommen aus der Navigation, fehlt sie, gilt jedes Dokument der Lesereihenfolge
+als Kapitel, mit Hinweis — an dieser Vorrichtung **nicht prüfbar** gewesen: Eine Umsetzung,
+die die Navigation schlicht ignoriert, wäre grün durchgekommen. Dazu kommt, dass die
+Entscheidungen 8 und 9 an zwölf echten Dateien gemessen wurden (570 von 570
+Inhaltsdokumenten); wer T12 nur gegen die selbstgebaute Datei prüft, prüft nicht die
+Entscheidung, auf der T12 beruht.
+
 **Vorschlag.** Zusatz zu dokumentation.md §5, sinngemäß:
 
-> Wer eine Aussage über Wörterbuchinhalte prüft, prüft sie zusätzlich gegen die echte Datei
-> (`needs_dictionary`). Die Vorrichtung zeigt, dass der Code läuft; die echte Datei zeigt,
-> ob er stimmt.
+> Die Vorrichtung zeigt, dass der Code läuft; die Fremdquelle zeigt, ob er stimmt. Wer eine
+> Aussage über den Inhalt einer Fremdquelle prüft, prüft sie zusätzlich gegen das echte
+> Gegenüber.
+>
+> - **Wörterbuch** (`needs_dictionary`) und **EPUB**: feste Gegenstände. Gegen sie lässt
+>   sich behaupten — „`watch` als Substantiv liefert vier unterscheidbare Bedeutungen",
+>   „diese Datei hat so viele Kapitel". Die zwölf Dateien liegen in `tools/`
+> - **Modellserver** (`needs_model`): kein fester Gegenstand. Gegen ein Sprachmodell lässt
+>   sich keine Gleichheit behaupten, nur eine Trefferquote messen — und Messungen gehören
+>   nach `tools/`, nicht in die Testsuite (`sense_check.py` lebt diese Rollenteilung
+>   bereits). Gegen den echten Server gehört stattdessen der **Abgleich der Attrappe**:
+>   dass sie in Antwortform, angenommenen Feldern und Fehlerverhalten noch dem echten
+>   Server entspricht
+
+**Warum der Modellserver gesondert steht.** Eine Attrappe, die `reasoning_effort: "none"`
+klaglos annimmt, während der echte Server das Feld zurückweist, macht Regel 7 unprüfbar —
+lautlos, weil alle Tests grün bleiben. Ohne diese Unterscheidung wird die Regel bei T11
+falsch angewandt.
 
 **Umfang.** Ein Absatz in dokumentation.md §5. Die betroffenen Tests in `test_dictionary.py`
-haben inzwischen `needs_dictionary`-Gegenstücke; nachzuziehen ist nur die Regel selbst,
-damit es beim nächsten Modul nicht wieder vergessen wird.
+haben inzwischen `needs_dictionary`-Gegenstücke; die EPUB-Seite ist bei **T12** fällig, der
+Attrappenabgleich bei **T11**. Nachzuziehen ist die Regel selbst, damit die Übertragung
+nicht jedes Modul neu erfunden wird — das wäre genau der Mechanismus, den A4 beklagt.
 
 ## A2 — schwer · „Ein Test gilt erst als Test, wenn er einmal rot war"
 
