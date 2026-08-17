@@ -16,6 +16,9 @@ __pycache__/
 .venv/
 venv/
 
+# Eigenes Werkzeug des Bearbeiters, kein Projektbestandteil.
+autoresume/
+
 # Zwischenstände der Prüfwerkzeuge — siehe technik.md, Abschnitt 6.
 # uv.lock gehört ausdrücklich **nicht** hierher: Sie hält die Messgrundlage fest.
 .ruff_cache/
