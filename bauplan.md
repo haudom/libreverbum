@@ -102,7 +102,7 @@ weil dieselbe Datei betroffen ist.
 | # | Teilaufgabe | Prüfung |
 |---|---|---|
 | **T10** | `triage`: Häufigkeitssortierung, Wortobergrenze, Sammelaktion. Reine Rechnung ohne I/O — der leichteste Einstieg und vollständig prüfbar | Sammelaktion markiert alle häufigeren Wörter, Obergrenze stellt den Rest zurück |
-| **T11** | `translation`: Aufruf über die OpenAI-kompatible Schnittstelle, `reasoning_effort: "none"` (Regel 7), Antwortform per JSON-Schema, Auswahl aus der Liste (Regel 11), Ausweichantwort „keine passt" (technik.md §3, offener Punkt), Fehlschlag sichtbar (Regel 13) | Regel 7, Regel 13 gegen die Attrappe aus T2 |
+| **T11** | `translation`: Aufruf über die OpenAI-kompatible Schnittstelle, `reasoning_effort: "none"` (Regel 7), Antwortform per JSON-Schema, Auswahl aus der Liste (Regel 11), Ausweichantwort „keine passt" (technik.md §3, offener Punkt), Fehlschlag sichtbar (Regel 13). Dabei entscheiden, was eine **leere Auswahlliste** wird: 3,3 % davon sind kein fehlender Eintrag, sondern ein Wortartunterschied (technik.md §3, offener Punkt „Die Wortart als Filter") | Regel 7, Regel 13 gegen die Attrappe aus T2 |
 
 Die Ausweichantwort ist kein Beiwerk: Ohne sie hat das Modell kein Mittel, einen Fehler der
 Vorstufe zu melden — der `saw`-Fall aus technik.md §3.

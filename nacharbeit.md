@@ -50,16 +50,6 @@ nur zur Kenntnis.
 
 Unstrittig, nur noch nicht getan. Jeweils mit der Messung, auf die sie sich stützen.
 
-## B3 — mittel · technik.md §3: spaCys Wortarten und WikDicts sind nicht deckungsgleich
-
-**Gemessen:** **29 von 1.592 Grundformen (1,8 %)** stehen im Wörterbuch, bekommen aber eine
-leere Auswahlliste, weil die Taxonomien auseinanderlaufen — WikDict führt `such`, `many`,
-`few`, `least`, `less` als `Determiner`, spaCy als `ADJ`.
-
-Der Nutzer sieht dann „kein Wörterbucheintrag" bei einem Wort, das drinsteht; T11 markiert
-es `uncertain` und **verdeckt damit einen Zuordnungsfehler als Modellunsicherheit**. Als
-offener Punkt festhalten, mit der Zahl.
-
 ## B4 — leicht · technik.md §3: Zeilen ohne `lexentry`
 
 **Gemessen:** **46.933 von 157.801 Zeilen (29,7 %)** haben `lexentry = NULL`. Sie können die

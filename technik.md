@@ -414,6 +414,18 @@ Siehe Abschnitt „Warum die Reihenfolge zwingend ist".
 - **Sehr lange Auswahllisten**: `run` hat 48 Bedeutungen, `draw` 16, `light` 14. Ob das
   die Trefferquote drückt, ist noch nicht gemessen. Naheliegende Abhilfe: nach der von
   spaCy bestimmten Wortart vorfiltern, das halbiert die Liste oft
+- **Die Wortart als Filter schließt mehr aus als gedacht.** Gemessen am 17.08.2026 über
+  ganz `tools/sherlock.txt` (5.544 Grundformen): **181 (3,3 %)** bekommen eine leere
+  Auswahlliste, obwohl ihr Stichwort im Wörterbuch steht — gegenüber 480 Grundformen, die
+  dort tatsächlich fehlen. Zwei Ursachen mit gleicher Wirkung: **24** sind echte
+  Taxonomieunterschiede (WikDict führt `such`, `few`, `many`, `least` als `Determiner`,
+  `ago` als `Postposition`, `thousand` als `Numeral`), **157** sind Wörter, die WikDict nur
+  unter einer anderen der fünf abgebildeten Wortarten führt (`lead`, `spring`, `brim` haben
+  dort keine Verbzeile) oder die spaCy anders bestimmt hat als das Wörterbuch (`summon`,
+  `clothe` als `NOUN`). Der Nutzer sieht in allen Fällen „kein Wörterbucheintrag" bei einem
+  Wort, das drinsteht, und T11 markiert es `uncertain` — **eine Modellunsicherheit verdeckt
+  dann einen Zuordnungsfehler**. Bei T11 zu entscheiden: ob vor dem Markieren einmal ohne
+  Wortartfilter nachgeschlagen und das Ergebnis als solches gekennzeichnet wird
 - **Redewendungserkennung** über Textfenster ist noch nicht geprüft. Der bisherige Test
   betrifft nur die Bedeutungsauswahl bei Einzelwörtern
 - Ob **Ollama** dauerhaft die richtige Wahl ist oder `llama-server` mit Vulkan direkt.
