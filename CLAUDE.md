@@ -183,6 +183,9 @@ Testtexte `tools/*.txt` und die EPUBs `tools/*.epub`. Tests, die davon abhängen
     dauerhafte *warum* gehört in die Dokumente, nicht in die Nachricht
   - **Halbfertiges wird nicht committet**, um einen Stand zu haben. Läuft es nicht, ist
     das zu melden und nicht zu verbuchen
+- **Jeder Auftrag endet mit „Beobachtungen zum Ablauf"** (dokumentation.md §9), jeder
+  Bericht beantwortet ihn. Das ist der einzige Rückweg für das, was einen Bearbeiter
+  aufgehalten hat; eingefaltet wird an den Toren aus bauplan.md, nicht nebenbei
 - **Korrigieren: Nachtrag oder überschreiben** (dokumentation.md §7). Eine widerlegte,
   aber plausible Annahme bekommt einen datierten Nachtrag — so wie in konzept.md §5,
   wo die Wendungsmessung eine Konzeptaussage gekippt hat. Ersetzte Festlegungen werden

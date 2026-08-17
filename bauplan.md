@@ -25,6 +25,11 @@ Drei bereits gefallene Festlegungen geben die Struktur vollständig vor:
 
 **Jede Teilaufgabe unten ist ein Commit**, der die vier Befehle aus technik.md §6 besteht.
 
+**Jedes Tor endet mit dem Einfalten** (dokumentation.md §9): Die Beobachtungen aus den
+Berichten der abgeschlossenen Teilaufgaben werden durchgegangen — Nachträge wandern in die
+Dokumente, Vorschläge zur Hausordnung werden entschieden. Solange die Liste nicht leer ist,
+steht sie in `nacharbeit.md`.
+
 ## Festlegung dieses Plans: die Triage läuft zuerst über die Kommandozeile
 
 Phase 1 wird über den Kommandozeilenzugang abgenommen, die Qt-Oberfläche kommt danach

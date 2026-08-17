@@ -256,3 +256,37 @@ zwanzig Entscheidungen hinweg eine Sedimentschicht.
   Kodierung der Systemumgebung und zerstört still typografische Anführungszeichen und
   Gedankenstriche im Buchtext
 - Verweisform: `technik.md §3, „Datenfalle"` — Nummer und Überschrift, nie eine Zeilennummer
+
+---
+
+## 9. Aufträge und Berichte
+
+Wer eine Teilaufgabe baut, startet kalt aus den Dokumenten und gibt am Ende einen Bericht
+zurück. Was er dabei über den **Ablauf** gelernt hat, ist danach weg, wenn er es nicht
+erwähnt — der Bericht ist der einzige Rückweg. Deshalb steht am Ende **jedes** Auftrags
+dieser Abschnitt, wörtlich:
+
+> ## Beobachtungen zum Ablauf
+> Was hat dich aufgehalten, in die Irre geführt oder zu einer Entscheidung gezwungen, die
+> eigentlich woanders hingehört? Je Punkt eine Zeile, dazu: was es dich gekostet hat, und
+> ob dabei ein falsches Ergebnis hätte durchgehen können. Sonst „nichts".
+
+Die Frage ist absichtlich eng gestellt. Offen gefragt — „hast du Verbesserungsvorschläge?"
+— kommen allgemeine Ratschläge zurück, die niemand braucht. Gefragt sind die zwei
+Tatsachen, die der Bauende wirklich kennt: seine eigenen Kosten und ob etwas hätte
+durchgehen können. **Wie schwer eine Beobachtung wiegt, entscheidet er nicht** — das zeigt
+sich erst, wenn mehrere Berichte nebeneinander liegen. Zum Bericht gehört außerdem der
+rote Lauf aus §5: welcher Test bei welcher Verfälschung gefallen ist.
+
+**Keine gemeinsame Datei, in die alle schreiben.** Es laufen regelmäßig zwei Bearbeiter
+gleichzeitig; beim Anhängen an dieselbe Datei gehen Einträge verloren, ohne dass es jemand
+merkt. Der Bericht ist der Kanal; das Sammeln und Einfalten macht die kuratierende Stelle.
+Reicht das nicht mehr, ist die nächste Stufe ein **Verzeichnis mit einer Datei je
+Beobachtung** — konfliktfrei, weil jeder in seine eigene schreibt — und kein zweiter
+Sammeltext.
+
+**Eingefaltet wird an den Toren** aus bauplan.md: Dort wird die gesammelte Liste
+durchgegangen, was ein Dokument berichtigt, wandert hinein, was die Hausordnung ändert,
+wird entschieden. Der Punkt, an dem ein solcher Rückweg gewöhnlich stirbt, ist nicht das
+Sammeln, sondern das Einfalten — dieselbe Vorsichtsmaßnahme wie „Am Phasenende einfalten"
+in §7.
