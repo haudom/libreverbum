@@ -1,13 +1,20 @@
-"""Prüft `libreverbum/extraction.py` (bauplan.md T3)."""
+"""Prüft `libreverbum/extraction.py` (bauplan.md T3, T4)."""
 
 from __future__ import annotations
 
+import sqlite3
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
 from libreverbum.entities import Book, Chapter, Occurrence
-from libreverbum.extraction import extract_vocabulary, load_nlp
+from libreverbum.extraction import (
+    extract_contiguous_candidates,
+    extract_particle_verb_candidates,
+    extract_vocabulary,
+    load_nlp,
+)
 
 if TYPE_CHECKING:
     from spacy.language import Language
@@ -23,8 +30,9 @@ def nlp() -> Language:
 @pytest.fixture(scope="module")
 def nlp_without_lemmatizer() -> Language:
     """spaCy-Pipeline ohne Lemmatisierer — Testvorrichtung für Regel 2 und Regel 13
-    (Befund 2, Review Runde 1): Eine kaputte Pipeline darf nicht still zu
-    Oberflächenformen als Grundform führen."""
+    (Befund 2, Review Runde 1; Befund 1, Review T4): Eine kaputte Pipeline darf nicht
+    still zu Oberflächenformen als Grundform führen, in keiner der drei Funktionen
+    dieses Moduls."""
     import spacy
 
     return spacy.load("en_core_web_md", exclude=["lemmatizer"])
@@ -275,3 +283,264 @@ def test_acceptance_2_inflections_merged_and_no_proper_names_as_learning_words(
     assert not has_lemma(occurrences, "london")
     assert not has_word_form(occurrences, "Sherlock")
     assert not has_word_form(occurrences, "London")
+
+
+# ---------------------------------------------------------------------- bauplan.md T4
+
+
+def find_mwe(occurrences: list[Occurrence], lemma_text: str) -> Occurrence:
+    """Wie `find`, aber ohne Wortart — Mehrwortkandidaten tragen hier keine einzelne
+    Wortart (particle-verb-Weg: immer VERB; n-Gramm-Weg: leer, siehe `_NO_SINGLE_POS`)."""
+    matches = [o for o in occurrences if o.lemma.text == lemma_text]
+    assert len(matches) == 1, f"{lemma_text!r} genau einmal erwartet, {len(matches)}-mal gefunden"
+    return matches[0]
+
+
+def has_mwe(occurrences: list[Occurrence], lemma_text: str) -> bool:
+    return any(o.lemma.text == lemma_text for o in occurrences)
+
+
+# ------------------------------------------------- extract_particle_verb_candidates
+
+
+def test_acceptance_t4_separated_phrasal_verb_gave_the_idea_up_is_found(nlp: Language) -> None:
+    """Prüfung aus bauplan.md T4: der getrennte Fall (`gave the idea up`) wird gefunden."""
+    chapter = make_chapter("He gave the idea up.")
+    expressions = extract_particle_verb_candidates(chapter, nlp)
+
+    give_up = find_mwe(expressions, "give up")
+    assert give_up.frequency == 1
+    assert give_up.lemma.pos == "VERB"
+    assert give_up.word_form == "gave the idea up"
+
+
+def test_particle_verb_extraction_finds_the_separated_case_that_the_filtered_word_list_cannot(
+    nlp: Language,
+) -> None:
+    """Die Falle aus dem Auftrag: `up` trägt die Wortart ADP und fällt darum durch den
+    Inhaltswortfilter aus `extract_vocabulary` (`_CONTENT_POS`). Wer T4 auf dessen
+    Ergebnis statt auf der Abhängigkeitsanalyse des geparsten Dokuments aufbaut, kann
+    den getrennten Fall nie finden — die Partikel kommt in der gefilterten Liste gar
+    nicht mehr vor. Ein Test, der nur die Wortliste läse, würde diese Umstellung nicht
+    bemerken; deshalb prüft dieser Test beides gemeinsam."""
+    chapter = make_chapter("He gave the idea up.")
+
+    vocabulary = extract_vocabulary(chapter, nlp)
+    assert not has_word_form(vocabulary, "up"), (
+        "Testvoraussetzung verletzt: „up“ dürfte nicht in der gefilterten Wortliste stehen"
+    )
+
+    expressions = extract_particle_verb_candidates(chapter, nlp)
+    assert find_mwe(expressions, "give up").word_form == "gave the idea up"
+
+
+def test_contiguous_phrasal_verb_gave_up_the_idea_is_also_found(nlp: Language) -> None:
+    """Gegenprobe zum getrennten Fall: Steht die Partikel unmittelbar hinter dem Verb,
+    wird sie ebenfalls gefunden — beide Fälle kommen aus derselben Abhängigkeitsanalyse
+    (bauplan.md T4, „zusammenhängende Kandidatenfolgen und getrennte
+    Verb-Partikel-Paare")."""
+    chapter = make_chapter("He gave up the idea.")
+    expressions = extract_particle_verb_candidates(chapter, nlp)
+
+    give_up = find_mwe(expressions, "give up")
+    assert give_up.frequency == 1
+    assert give_up.word_form == "gave up"
+
+
+def test_contiguous_and_separated_occurrences_of_the_same_expression_are_merged(
+    nlp: Language,
+) -> None:
+    """Wie bei Beugungsformen in `extract_vocabulary` (Abnahmekriterium 2) werden mehrere
+    Vorkommen derselben Grundform zusammengefasst — hier eines zusammenhängend, eines
+    getrennt, macht zusammen Häufigkeit 2."""
+    chapter = make_chapter("He gave up the idea. Later she gave the plan up too.")
+    expressions = extract_particle_verb_candidates(chapter, nlp)
+
+    give_up = find_mwe(expressions, "give up")
+    assert give_up.frequency == 2
+
+
+def test_ordinary_preposition_after_a_verb_is_not_mistaken_for_a_particle(nlp: Language) -> None:
+    """Gegenprobe: `to` in „walked to the store“ und `into` in „ran into a friend“ tragen
+    bei spaCy die Abhängigkeit `prep`, nicht `prt` — echte Präpositionalobjekte sind
+    keine Phrasal-Verb-Partikel und dürfen keinen Kandidaten erzeugen (siehe
+    Begründung bei `_PARTICLE_DEP`)."""
+    chapter = make_chapter("He walked to the store. They ran into an old friend.")
+    expressions = extract_particle_verb_candidates(chapter, nlp)
+
+    assert expressions == []
+
+
+def test_multiword_expression_frequency_and_scope_match_the_given_chapter(nlp: Language) -> None:
+    """Wie bei `extract_vocabulary`: `book` und `chapter_number` gehören zum übergebenen
+    `Chapter`, und Wortform und Belegsatz stammen vom **ersten** Vorkommen (Befund 4,
+    Review T4) — ein Kapitel mit zwei Sätzen, damit ein Test, der stattdessen das
+    letzte Vorkommen nähme, tatsächlich fehlschlüge."""
+    chapter = make_chapter(
+        "They shut the business up before noon. Later she shut the shop up as well.", number=4
+    )
+    expressions = extract_particle_verb_candidates(chapter, nlp)
+
+    shut_up = find_mwe(expressions, "shut up")
+    assert shut_up.frequency == 2
+    assert shut_up.book == chapter.book
+    assert shut_up.chapter_number == 4
+    assert shut_up.word_form == "shut the business up"
+    assert shut_up.example_sentence == "They shut the business up before noon."
+
+
+def test_broken_pipeline_without_lemmatizer_aborts_the_particle_verb_extraction(
+    nlp_without_lemmatizer: Language,
+) -> None:
+    """Befund 1, Review T4: Wie `extract_vocabulary` bricht auch
+    `extract_particle_verb_candidates` ohne Lemmatisierer sichtbar ab, statt eine
+    Grundform aus lauter Leerzeichen zu erzeugen (nachgemessen mit
+    `en_core_web_md, exclude=["lemmatizer"]` an „He gave the idea up.“, siehe Bericht)."""
+    chapter = make_chapter("He gave the idea up.")
+
+    with pytest.raises(ValueError):
+        extract_particle_verb_candidates(chapter, nlp_without_lemmatizer)
+
+
+def test_word_form_has_no_raw_newline_when_the_source_text_breaks_the_line(nlp: Language) -> None:
+    """Befund 3, Review T4: `Span.text` gibt den Quelltext zwischen Verb und Partikel
+    unverändert wieder — bei einem Zeilenumbruch im Buchtext stünde sonst ein rohes
+    `\\n` in `word_form`, das laut `entities.Occurrence` „später auf der Karte steht“
+    (T13)."""
+    chapter = make_chapter("He threw himself\ndown on the bed.")
+    expressions = extract_particle_verb_candidates(chapter, nlp)
+
+    throw_down = find_mwe(expressions, "throw down")
+    assert "\n" not in throw_down.word_form
+    assert throw_down.word_form == "threw himself down"
+
+
+def test_particle_dependent_on_a_non_verb_head_is_not_a_phrasal_verb_candidate(
+    nlp: Language,
+) -> None:
+    """Befund 4, Review T4: spaCy zeichnet `prt` auch an substantivierten Fällen aus —
+    „the washing up“ ist eine Nominalphrase, `washing` trägt hier NOUN, kein VERB. Ohne
+    die Wortartprüfung am Kopf entstünde hier ein Scheinkandidat `washing up` (spaCy
+    lemmatisiert das Gerundium als NOUN nicht auf `wash` zurück, nur als VERB)."""
+    chapter = make_chapter("The washing up took forever after dinner.")
+    expressions = extract_particle_verb_candidates(chapter, nlp)
+
+    assert not has_mwe(expressions, "washing up")
+    assert not has_mwe(expressions, "wash up")
+
+
+# ------------------------------------------------------ extract_contiguous_candidates
+
+
+def test_contiguous_candidates_finds_a_fixed_multiword_phrase(nlp: Language) -> None:
+    """bauplan.md T4, n-Gramm-Weg: eine feste Wendung aus Funktionswörtern und einem
+    Nomen (`out of the way`) wird als zusammenhängender Kandidat gefunden — genau die
+    Wortarten, die `_CONTENT_POS` in `extract_vocabulary` ausschließt."""
+    chapter = make_chapter("She quickly stepped out of the way of the carriage.")
+    candidates = extract_contiguous_candidates(chapter, nlp)
+
+    assert has_mwe(candidates, "out of the way")
+
+
+def test_contiguous_candidates_normalize_to_the_lemma_not_the_surface_form(nlp: Language) -> None:
+    """Befund 2, Review T4: Kandidaten werden auf die Grundform je Wort normalisiert
+    (`token.lemma_.lower()`), weil WikDicts `written_rep` Wendungen selbst in der
+    Grundform führt (`give up`, nicht `gave up`) — die Oberflächenform träfe nie."""
+    chapter = make_chapter("He finally gave up his old plan.")
+    candidates = extract_contiguous_candidates(chapter, nlp)
+
+    give_up = find_mwe(candidates, "give up")
+    assert give_up.word_form == "gave up"
+    assert not has_mwe(candidates, "gave up")
+
+
+def test_contiguous_candidates_do_not_cross_a_comma(nlp: Language) -> None:
+    """Befund 2, Review T4: Kandidaten laufen nicht über Interpunktionsgrenzen — das
+    Komma trennt „friend“ und „hoping“, ein Kandidat, der beide verbindet, darf nicht
+    entstehen, während beide Seiten für sich weiter Kandidaten liefern."""
+    chapter = make_chapter("He greeted his old friend, hoping for a quiet moment together.")
+    candidates = extract_contiguous_candidates(chapter, nlp)
+
+    assert not has_mwe(candidates, "friend hop")
+    assert has_mwe(candidates, "old friend")
+    assert has_mwe(candidates, "hop for")
+
+
+def test_contiguous_candidates_do_not_cross_a_sentence_boundary(nlp: Language) -> None:
+    """Befund 2, Review T4: Kandidaten laufen nicht über Satzgrenzen — der Punkt trennt
+    „show“ vom folgenden Satz, ein Kandidat „show very“ darf nicht entstehen."""
+    chapter = make_chapter("He saw the old show. Very quiet indeed today.")
+    candidates = extract_contiguous_candidates(chapter, nlp)
+
+    assert not has_mwe(candidates, "show very")
+    assert has_mwe(candidates, "old show")
+    assert has_mwe(candidates, "very quiet")
+
+
+def test_contiguous_candidates_are_capped_at_the_measured_upper_bound(nlp: Language) -> None:
+    """Befund 2, Review T4: Die Obergrenze ist gegen `tools/en-de.sqlite3` gemessen
+    (99,12 % aller mehrwortigen `written_rep` mit `score ≥ 50` sind höchstens sechs
+    Wörter lang, siehe `_MAX_EXPRESSION_LENGTH`) — ein zehn Wörter langer, durchgehend
+    alphabetischer Lauf darf trotzdem keinen Kandidaten über sechs Wörtern erzeugen."""
+    chapter = make_chapter("The old wooden ship sailed slowly across the calm harbor.")
+    candidates = extract_contiguous_candidates(chapter, nlp)
+
+    lengths = [len(c.lemma.text.split()) for c in candidates]
+    assert lengths, "Testvoraussetzung verletzt: keine Kandidaten entstanden"
+    assert max(lengths) == 6
+    assert has_mwe(candidates, "the old wooden ship sail slowly")
+    assert not has_mwe(candidates, "the old wooden ship sail slowly across")
+
+
+def test_broken_pipeline_without_lemmatizer_aborts_the_contiguous_extraction(
+    nlp_without_lemmatizer: Language,
+) -> None:
+    """Befund 1, Review T4: Wie die beiden anderen Funktionen dieses Moduls bricht auch
+    `extract_contiguous_candidates` ohne Lemmatisierer sichtbar ab."""
+    chapter = make_chapter("He finally gave up his old plan.")
+
+    with pytest.raises(ValueError):
+        extract_contiguous_candidates(chapter, nlp_without_lemmatizer)
+
+
+def test_contiguous_candidates_scope_to_the_given_chapter(nlp: Language) -> None:
+    """Wie bei den beiden anderen Extraktionsfunktionen: `book` und `chapter_number`
+    gehören zum übergebenen `Chapter`, Häufigkeit zählt alle Vorkommen im Kapitel."""
+    chapter = make_chapter("She stayed out of the way. He also stayed out of the way.", number=2)
+    candidates = extract_contiguous_candidates(chapter, nlp)
+
+    out_of_the_way = find_mwe(candidates, "out of the way")
+    assert out_of_the_way.frequency == 2
+    assert out_of_the_way.book == chapter.book
+    assert out_of_the_way.chapter_number == 2
+
+
+@pytest.mark.needs_dictionary
+def test_contiguous_candidate_form_matches_written_rep_in_the_real_dictionary(
+    nlp: Language, real_dictionary_path: Path
+) -> None:
+    """Hausordnungsregel (dokumentation.md §5, „Woran geprüft wird"): Die Behauptung,
+    dass die lemmatisierte Kandidatenform auf WikDicts `written_rep` trifft, wird gegen
+    die echte Datei geprüft, nicht nur gegen erfundene Beispiele im Docstring."""
+    chapter = make_chapter("He decided to give up. She stayed out of the way after all, as a rule.")
+    candidates = extract_contiguous_candidates(chapter, nlp)
+    candidate_texts = {c.lemma.text for c in candidates}
+
+    phrases = ("give up", "out of the way", "after all", "as a rule")
+    con = sqlite3.connect(real_dictionary_path)
+    try:
+        written_reps = {
+            phrase
+            for phrase in phrases
+            if con.execute(
+                "SELECT 1 FROM translation WHERE lower(written_rep) = ? LIMIT 1", (phrase,)
+            ).fetchone()
+            is not None
+        }
+    finally:
+        con.close()
+
+    assert written_reps == set(phrases), (
+        "Testvoraussetzung verletzt: nicht alle Vergleichsphrasen stehen in der echten Datei"
+    )
+    assert written_reps <= candidate_texts
