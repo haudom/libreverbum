@@ -124,6 +124,37 @@ Das ist die Zahl, die die Arbeitsteilung aus §3 belegt: Ohne den n-Gramm-Weg fe
 Randfälle, sondern der Bestand. Gegengemessen mit dem neuen Code hält der getrennte Anteil
 dagegen: Sherlock 24 %, Dorian Gray 22 % — gegen die dokumentierten 21 % und 19 %.
 
+## B9 — `entities.Sense`: was eine Bedeutung ohne `wikdict_`-Felder bedeutet
+
+**Beobachtet (Review T10, 17.08.2026).** Der Docstring sagt, bei einer Wendung ohne
+Wörterbucheintrag fehlten alle `wikdict_`-Werte und `uncertain` sei gesetzt. Nirgends steht,
+dass das die **einzige** erlaubte Form einer Bedeutung ohne `wikdict_`-Werte ist — und genau
+diese Lücke hat der T10-Bau gefüllt, mit einem Platzhalter, der von einer echten
+Regel-10-Wendung nicht zu unterscheiden war (`uncertain` ist `compare=False` und hat keine
+Schemaspalte, beide bekommen dieselbe `sense`-id).
+
+**Nachzutragen** in technik.md §4 oder im `Sense`-Docstring, ein Satz: Eine `Sense` ohne
+`wikdict_`-Felder bedeutet *kein Wörterbucheintrag*, nicht *noch nicht nachgeschlagen*.
+
+## B8 — technik.md §3: die Maße des n-Gramm-Wegs
+
+**Gemessen beim Bau von T4 (17.08.2026)** gegen `tools/en-de.sqlite3`: 22.840 mehrwortige
+`written_rep` mit `score ≥ 50`, davon **99,12 % höchstens sechs Wörter** lang — 2 Wörter
+18.196 · 3: 2.977 · 4: 1.011 · 5: 289 · 6: 167. Darüber fast nur noch vollständige
+`Proverb`-Zeilen bis 26 Wörter, die als Zitat im Fließtext praktisch nicht vorkommen. Daraus
+die Obergrenze sechs, die jetzt im Code steht.
+
+**Kandidatenzahl je Kapitel** (60.000 Zeichen aus `tools/sherlock.txt`, echter Lauf):
+zusammenhängend **23.437 verschiedene** Kandidaten (26.984 Vorkommen), getrennt 77
+verschiedene (93 Vorkommen). Die n-Gramm-Seite bringt also rund **300-mal so viele**
+Nachschlagevorgänge wie die `prt`-Seite.
+
+**Folge für T7, offen:** Mit dem Index aus T6 (0,71 ms je Aufruf, technik.md §3, „Nachtrag
+17.08.2026") wären 23.437 Einzelabfragen rund **17 s reine Wörterbuchzeit je Kapitel** — gegen
+die 1,1 s, mit denen §3 heute rechnet. Einzelabfragen sind für diese Menge die falsche Form;
+ob T7 stattdessen mengenweise abfragt, ist bei T7 zu entscheiden und **vorher zu messen**,
+nicht zu vermuten.
+
 Dazu ein Nebenbefund für **T7**: Sein Filter `score ≥ 50` löscht 86 der 232 Treffer in
 Sherlock, darunter `bring back` (10 Vorkommen), `take up`, `keep out`, `light up` — also genau
 die Einträge, die §3 („394 Vorkommen mit Partikel") als `uncertain` behalten will. Der Filter
