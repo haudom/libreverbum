@@ -65,7 +65,12 @@ nachzulesen; im Code werden sie als `# REGEL (quelle, „stichwort"): …` marki
   Zwischenspeicher ohne gemessenen Anlass
 
 **Wo eine Regel prüfbar ist, ist sie zu prüfen** (dokumentation.md §5). Testnamen
-englisch, Docstring im Wortlaut des Abnahmekriteriums oder der Regel.
+englisch, Docstring im Wortlaut des Abnahmekriteriums oder der Regel. Dazu zwei Regeln
+darüber, *woran* geprüft wird:
+
+- Was über den **Inhalt einer Fremdquelle** behauptet wird, wird zusätzlich gegen das echte
+  Gegenüber geprüft — `needs_dictionary` für `tools/en-de.sqlite3`, die echten `tools/*.epub`.
+  Beim Modellserver stattdessen die **Attrappe abgleichen**, nicht die Trefferquote messen
 
 **Dateien immer mit `encoding="utf-8"` öffnen.** Unter Windows zerstört die
 Systemkodierung sonst still typografische Zeichen im Buchtext.

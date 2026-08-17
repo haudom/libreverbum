@@ -208,6 +208,35 @@ und Modellaufrufe nicht im Oberflächen-Thread laufen, lässt sich nicht sinnvol
 dass der Kern die Oberfläche überhaupt nicht kennt, sehr wohl. Die strukturelle Hälfte
 steht deshalb in der Tabelle und ist damit keine Absichtserklärung mehr.
 
+### Woran geprüft wird: die Vorrichtung zeigt Laufen, die Fremdquelle Stimmen
+
+Eine selbstgebaute Testvorrichtung prüft die Annahmen ihres Erbauers nicht, sie bestätigt
+sie. Das Mini-Wörterbuch war sauber, weil sein Erbauer sich eine Wörterbuchzeile als „ein
+`lexentry`, eine Bedeutung" vorstellte — und der Code, der darauf zugriff, stellte es sich
+genauso vor. In der echten Datei fallen 22,7 % der Zeilen mit `lexentry` zusammen, und die
+Auswahlliste für `break` als Verb schrumpfte von 31 Einträgen auf 1.
+
+> **Regel:** Wer eine Aussage über den **Inhalt einer Fremdquelle** prüft, prüft sie
+> zusätzlich gegen das echte Gegenüber. Die Vorrichtung zeigt, dass der Code läuft; die
+> Fremdquelle zeigt, ob er stimmt.
+
+Die drei Fremdquellen verhalten sich dabei nicht gleich:
+
+- **Wörterbuch** (`needs_dictionary`, `tools/en-de.sqlite3`) und **EPUB** (`tools/*.epub`)
+  sind feste Gegenstände. Gegen sie lässt sich etwas behaupten — „`watch` als Substantiv
+  liefert diese Bedeutungen", „diese Datei hat so viele Kapitel"
+- **Modellserver** (`needs_model`) ist keiner. Gegen ein Sprachmodell lässt sich keine
+  Gleichheit behaupten, nur eine Trefferquote messen, und Messungen gehören nach `tools/`,
+  nicht in die Testsuite — `sense_check.py` lebt diese Rollenteilung bereits. Gegen den
+  echten Server gehört stattdessen der **Abgleich der Attrappe**: dass sie in Antwortform,
+  angenommenen Feldern und Fehlerverhalten noch dem echten Server entspricht. Eine
+  Attrappe, die `reasoning_effort: "none"` klaglos annimmt, während der echte Server das
+  Feld zurückwiese, macht Regel 7 lautlos unprüfbar
+
+Beim EPUB wäre es beinahe schon passiert: Die Testnavigation war von der Lesereihenfolge
+nicht unterscheidbar. Eine Umsetzung, die die Navigation ignoriert, wäre damit grün
+durchgekommen — und genau sie ist die Kernregel aus technik.md §8.
+
 ---
 
 ## 6. Nicht dokumentiert wird
