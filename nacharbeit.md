@@ -33,21 +33,6 @@ sich erst, wenn mehrere Berichte nebeneinander liegen — dokumentation.md §9.
 
 # Teil A — Regeln und Arbeitsweise
 
-## A4 — mittel · Regel 14 trennt Struktur nicht von Funktion
-
-**Beobachtet an T8.** „Gebaut wird, was die aktuelle Phase verlangt" ist für Funktionen
-eindeutig, für **Struktur** nicht. T8 hat alle sieben Tabellen angelegt, aber nur einen Teil
-mit Zugriffsfunktionen versehen, und das so begründet: *„Regel 14 begrenzt den Zugriff,
-nicht das Tabellenlayout."*
-
-Die Begründung trägt — ein Schema ist nur als Ganzes stimmig, und Nachrüsten heißt
-Migration. Aber sie steht nirgends, also musste der Bearbeiter sie sich selbst zurechtlegen.
-Der nächste legt sie sich anders zurecht.
-
-**Vorschlag.** Einen Satz in Regel 14 (dokumentation.md §4), der Struktur von Funktion
-trennt: Datenstrukturen dürfen vollständig entstehen, wo Teilstücke später eine Migration
-erzwingen würden; Verhalten entsteht erst, wenn es gebraucht wird.
-
 ## A5 — mittel · Die Marke `# REGEL` bekommt Konkurrenz
 
 **Beobachtet.** `grep -rn REGEL .` soll die fünfzehn Regeln aus dokumentation.md §4

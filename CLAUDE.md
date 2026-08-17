@@ -62,7 +62,8 @@ nachzulesen; im Code werden sie als `# REGEL (quelle, „stichwort"): …` marki
   im Ergebnis sichtbar — Abbruch mit Meldung oder markierter Eintrag (`uncertain`)
 - **Gebaut wird, was die aktuelle Phase verlangt.** Kein Konfigurationsschalter ohne
   zweiten Anwendungsfall, keine Abstraktion über einer einzigen Umsetzung, kein
-  Zwischenspeicher ohne gemessenen Anlass
+  Zwischenspeicher ohne gemessenen Anlass. Das begrenzt **Verhalten**, nicht Struktur:
+  Datenstrukturen entstehen vollständig, weil ein nachgereichtes Teilstück Migration heißt
 
 **Wo eine Regel prüfbar ist, ist sie zu prüfen** (dokumentation.md §5). Testnamen
 englisch, Docstring im Wortlaut des Abnahmekriteriums oder der Regel. Dazu zwei Regeln

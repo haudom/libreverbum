@@ -169,6 +169,12 @@ Quellenangaben ohne Dateinamen meinen technik.md.
 | 14 | Gebaut wird, was die Phase verlangt — kein Schalter, keine Abstraktion, kein Zwischenspeicher auf Vorrat | konzept.md, „Phasenplan" |
 | 15 | Keine neue Abhängigkeit ohne vorherige Lizenzprüfung | §1, „Bekannte Kosten" |
 
+**Zu Regel 14: Struktur ist nicht Funktion.** Die Regel begrenzt, was das Programm *tut* —
+nicht, wie vollständig eine Datenstruktur angelegt wird. Ein Schema ist nur als Ganzes
+stimmig, und ein nachgereichtes Teilstück heißt Migration; es entsteht deshalb vollständig,
+sobald es überhaupt entsteht. Verhalten dagegen entsteht erst, wenn es gebraucht wird: alle
+sieben Tabellen anlegen, aber nur die Zugriffsfunktionen schreiben, die die Phase verlangt.
+
 ---
 
 ## 5. Tests als ausführbare Dokumentation
