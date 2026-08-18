@@ -258,7 +258,33 @@ Sperre wird, ist vorzusehen:
   und Namensnennung
 - Möglichkeit, eine **von Hand hinterlegte** Datenbankdatei zu verwenden, damit der
   Betrieb auf Rechnern ohne Internetzugang möglich bleibt
-- Prüfsumme gegen beschädigte Downloads
+- Vollständigkeitsprüfung des Downloads statt einer Prüfsumme — siehe Nachtrag
+  18.08.2026
+
+### Nachtrag 18.08.2026: keine Prüfsumme, weil WikDict keine veröffentlicht
+
+Der Bauplan verlangt für T6 eine Prüfsumme gegen beschädigte Downloads — so auch die
+ursprüngliche Fassung der Liste oben. Geprüft am 17.08.2026: WikDict veröffentlicht zur
+Datei keine Prüfsumme, weder als `.sha256`- oder `.md5`-Datei neben ihr noch als Hash im
+HTTP-Header — nginx liefert nur eine `ETag`, die sich als Zeitstempel und Dateigröße
+entpuppt. Ohne veröffentlichten Referenzwert prüft eine selbst mitgeführte Konstante
+nichts; sie behauptete nur Sicherheit, ohne ein unabhängiges Gegenüber zu haben. Ein
+Aufrufparameter dafür hätte auch nie einen echten Aufrufer bekommen — ein Schalter ohne
+zweiten Anwendungsfall (Regel 14).
+
+Abgesichert wird der Bezug stattdessen über zwei Prüfungen in `dictionary.py`:
+
+- **Content-Length beim Download.** `_download` bricht sichtbar ab, wenn der Server keine
+  Content-Length nennt oder weniger Bytes ankommen, als er angekündigt hat
+- **Zeilenzahl nach dem Bezug.** `_validate_schema` verlangt mindestens 100.000 Zeilen in
+  `translation`, deutlich unter den 157.801 Zeilen der echten Datei (Abschnitt 3), aber
+  hoch genug, dass eine leere oder grob unvollständige, aber schemarichtige Tabelle nicht
+  als gültig durchgeht — `PRAGMA table_info` allein liest nur das Schema, keinen Inhalt
+
+Was das leistet: einen abgebrochenen, gekürzten oder leeren Download erkennen, bevor er
+als gültiges Wörterbuch liegen bleibt. Was es nicht leistet: Schutz gegen eine
+vollständige, aber absichtlich manipulierte Datei — dafür fehlt weiterhin ein
+unabhängiges Gegenüber.
 
 ### Häufigkeitsdaten — unkritisch
 
