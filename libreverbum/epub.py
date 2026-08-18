@@ -1,19 +1,21 @@
-"""EPUB — Struktur: Metadaten, Lesereihenfolge und Kapitelliste (bauplan.md T12).
+"""EPUB — Struktur und Fließtext: Metadaten, Lesereihenfolge, Kapitelliste, Kapiteltext
+(bauplan.md T12, T12b).
 
 Aufgabe
 -------
-Schritt 1 des Kernablaufs (konzept.md, „1. Buch einlesen"), erster Teil: `container.xml`
-→ OPF → Metadaten, `spine`, Navigation (technik.md §8). Liefert die Kapitelliste, mit der
-der Nutzer ein Kapitel auswählt (konzept.md, „Der Kernablauf") — noch ohne dessen
-Fließtext. Der zweite Teil, Fließtext mit `html.parser` samt Vorspann- und
-Impressum-Heuristik und den drei Ablehnfällen (kein ZIP-Archiv, Bildband ohne Text,
-verschlüsselt), ist eine eigene Teilaufgabe (bauplan.md T12b) und liegt außerhalb dieses
-Moduls.
+Schritt 1 des Kernablaufs (konzept.md, „1. Buch einlesen"): `container.xml` → OPF →
+Metadaten, `spine`, Navigation (technik.md §8, T12) liefern die Kapitelliste, mit der der
+Nutzer ein Kapitel auswählt (konzept.md, „Der Kernablauf"). `read_chapter` (T12b) liest
+danach den Fließtext genau dieses einen Kapitels mit `html.parser`, von Vorspann und
+Impressum ausgesteuert, und meldet die drei Ablehnfälle (kein ZIP-Archiv, Bildband ohne
+Text, verschlüsselt) statt leer zurückzugeben.
 
 Voraussetzungen
 ---------------
 Erwartet eine lesbare EPUB-Datei. Kein Kopierschutz wird umgangen (konzept.md, Schritt
-1); ob eine Datei verschlüsselt ist, prüft T12b, nicht dieses Modul.
+1). `read_structure` öffnet die Datei ungeprüft — ob sie überhaupt ein ZIP-Archiv,
+verschlüsselt oder ohne Text ist, prüft erst `read_chapter` beim Lesen des gewählten
+Kapitels (Regel 13); die Kapitelliste allein muss dafür nicht reichen.
 
 Liefert
 -------
@@ -26,24 +28,37 @@ dem Buch stammen — ein Feld im Ergebnis, kein Protokolleintrag, den ein Aufruf
 übersehen könnte. `ChapterReference.number` zählt dabei stets in der Reihenfolge der
 `spine`, auch wenn die Beschriftung aus der Navigation stammt (`entities.Chapter`,
 Docstring zu `number`) — die Navigation legt nur Beschriftung und eindeutige Ziele fest,
-nicht die Zählrichtung. `ChapterReference.document` trägt das Inhaltsdokument im Archiv;
-`entities.Chapter` samt Fließtext entsteht daraus erst in T12b, wenn der Nutzer eines der
-Kapitel ausgewählt hat.
+nicht die Zählrichtung. `ChapterReference.document` trägt das Inhaltsdokument im Archiv.
+
+`read_chapter` liefert dazu `entities.Chapter` mit dem Fließtext genau dieses Dokuments:
+Skripte, Stilangaben und Kopfzeilen bleiben draußen, Blockelemente behalten ihre
+Absatzgrenze — `extraction` (T3) braucht sie für Belegsätze (tools/epub_check.py,
+`TextCollector`, dieselbe Auswahl an Tags). Vorspann und Impressum werden ausgesteuert,
+soweit Project-Gutenberg-Dateien sie zwischen den Textmarken „*** START OF THE PROJECT
+GUTENBERG …" und „*** END OF THE PROJECT GUTENBERG …" kapseln — denselben Marken, mit
+denen `tools/coverage_check.py` den Lizenz-Vorspann der Textfassungen abschneidet. Ein
+`epub:type`, das die Norm dafür vorsähe, kommt in der Praxis nicht vor (technik.md §8,
+„Neuer Befund: epub:type gibt es in der Praxis nicht"); außerhalb von Project Gutenberg
+bleibt die Trennung deshalb unversucht und der Text unverändert — eine allgemeine
+Schwelle ist durch keine Messung belegt (Regel 14).
 """
 
 from __future__ import annotations
 
 import posixpath
+import re
 import xml.etree.ElementTree as ElementTree
 import zipfile
 from dataclasses import dataclass
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import NamedTuple
 from urllib.parse import unquote
 
-from libreverbum.entities import Book
+from libreverbum.entities import Book, Chapter
 
 _CONTAINER_PATH = "META-INF/container.xml"
+_ENCRYPTION_PATH = "META-INF/encryption.xml"
 
 _NS = {
     "container": "urn:oasis:names:tc:opendocument:xmlns:container",
@@ -51,6 +66,7 @@ _NS = {
     "dc": "http://purl.org/dc/elements/1.1/",
     "ncx": "http://www.daisy.org/z3986/2005/ncx/",
     "xhtml": "http://www.w3.org/1999/xhtml",
+    "enc": "http://www.w3.org/2001/04/xmlenc#",
 }
 
 _EPUB_TYPE_ATTRIBUTE = "{http://www.idpf.org/2007/ops}type"
@@ -322,3 +338,185 @@ def read_structure(path: Path) -> BookStructure:
     return BookStructure(
         book=Book(title=package.title, author=package.author), chapters=chapters, notice=notice
     )
+
+
+# ------------------------------------------------------------------- Fließtext (bauplan.md T12b)
+
+# Inhalt dieser Elemente ist kein Fließtext (tools/epub_check.py, TextCollector).
+_SKIPPED_TAGS = frozenset({"script", "style", "head", "title"})
+
+# Elemente, nach denen ein Zeilenumbruch steht — sonst klebt „…Ende.Anfang…" zusammen und
+# extraction (T3) kann keine Absatzgrenze mehr für den Belegsatz ziehen (tools/epub_check.py).
+_BLOCK_TAGS = frozenset(
+    {
+        "p",
+        "div",
+        "br",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "li",
+        "tr",
+        "blockquote",
+        "section",
+        "aside",
+        "figcaption",
+    }
+)
+
+# Buchstaben statt [A-Za-z], sonst zerfallen Ligaturen (tools/epub_check.py, WORD) — hier
+# nur benutzt, um „kein einziges Wort" (Bildband ohne Text) von echtem Fließtext zu
+# unterscheiden, nicht zum Zählen.
+_WORD = re.compile(r"[^\W\d_](?:[^\W\d_]|['-])*")
+
+# Project-Gutenberg-Textmarken, dieselben wie in tools/coverage_check.py (GUTENBERG_START,
+# GUTENBERG_END) — dort schneiden sie den Lizenz-Vorspann der .txt-Fassungen ab, hier den
+# der EPUB-Fassungen. Kein zweites Verfahren, nur dieselben Marken auf einer anderen Quelle.
+_GUTENBERG_START = re.compile(r"\*\*\*\s*START OF (?:THE|THIS) PROJECT GUTENBERG.*?\*\*\*", re.I)
+_GUTENBERG_END = re.compile(r"\*\*\*\s*END OF (?:THE|THIS) PROJECT GUTENBERG.*?\*\*\*", re.I)
+
+
+class _FlowingTextParser(HTMLParser):
+    """Sammelt den Fließtext eines Inhaltsdokuments (tools/epub_check.py, `TextCollector`):
+    `_SKIPPED_TAGS` liefern keinen Text, `_BLOCK_TAGS` erzwingen einen Zeilenumbruch."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._parts: list[str] = []
+        self._skipped_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in _SKIPPED_TAGS:
+            self._skipped_depth += 1
+        if tag in _BLOCK_TAGS:
+            self._parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in _SKIPPED_TAGS and self._skipped_depth:
+            self._skipped_depth -= 1
+        if tag in _BLOCK_TAGS:
+            self._parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if not self._skipped_depth:
+            self._parts.append(data)
+
+    @property
+    def text(self) -> str:
+        return re.sub(r"\n{2,}", "\n", "".join(self._parts)).strip()
+
+
+def _extract_flowing_text(source: str) -> str:
+    """Fließtext eines Inhaltsdokuments mit `html.parser` (E8a, technik.md §8)."""
+    parser = _FlowingTextParser()
+    parser.feed(source)
+    return parser.text
+
+
+def _remove_boilerplate(text: str) -> str:
+    """Vorspann und Impressum aussteuern (bauplan.md T12b) — siehe Moduldocstring,
+    Abschnitt „Liefert": Text vor der Start- und nach der Endmarke fällt weg. Trägt eine
+    Datei keine der beiden Marken, bleibt der Text unverändert."""
+    if start_match := _GUTENBERG_START.search(text):
+        text = text[start_match.end() :]
+    if end_match := _GUTENBERG_END.search(text):
+        text = text[: end_match.start()]
+    return text.strip()
+
+
+def _encrypts_document(archive: zipfile.ZipFile, names: set[str], document: str) -> bool:
+    """Prüft `META-INF/encryption.xml` gegen `document`, statt allein ihre Anwesenheit zu
+    werten (Befund 6, Review Runde 2): Die Datei kennzeichnet laut OCF-Norm auch bloße
+    Schriftverschleierung (`Algorithm=".../2008/embedding"`), die Calibre, InDesign und
+    Sigil routinemäßig erzeugen — ein DRM-freies EPUB würde sonst fälschlich abgelehnt.
+    Verschlüsselt ist der Text erst, wenn eine `CipherReference` ausgerechnet auf das
+    gelesene Kapiteldokument zeigt."""
+    if _ENCRYPTION_PATH not in names:
+        return False
+    root = ElementTree.fromstring(archive.read(_ENCRYPTION_PATH))
+    return any(
+        unquote(reference.get("URI") or "") == document
+        for reference in root.iter(f"{{{_NS['enc']}}}CipherReference")
+    )
+
+
+def _encrypted_error(path: Path) -> ValueError:
+    """Meldung für beide Erscheinungsformen des dritten Ablehnfalls (Befund 6 und 7,
+    Review Runde 2): `encryption.xml` nennt das Kapiteldokument, oder der ZIP-Eintrag
+    selbst ist mit einem Passwort geschützt."""
+    return ValueError(
+        f"{path}: verschlüsselt ({_ENCRYPTION_PATH}) — Kopierschutz wird nicht umgangen."
+    )
+
+
+def read_chapter(path: Path, book: Book, chapter: ChapterReference) -> Chapter:
+    """Liest den Fließtext eines einzelnen Kapitels (bauplan.md T12b).
+
+    Bricht mit einer deutschen Meldung ab (Regel 13) statt eines leeren oder beschädigten
+    Ergebnisses: wenn `path` fehlt, die Datei kein gültiges ZIP-Archiv ist, das
+    Kapiteldokument im Archiv fehlt oder nicht UTF-8 kodiert ist, `META-INF/encryption.xml`
+    ausgerechnet dieses Dokument als verschlüsselt nennt oder der ZIP-Eintrag selbst
+    passwortgeschützt ist (Kopierschutz wird nicht umgangen, konzept.md Schritt 1), das
+    Kapitel überhaupt keinen Fließtext enthält — das Kennzeichen eines Bildbands ohne Text
+    (technik.md §8) — oder nach dem Aussteuern von Vorspann und Impressum keiner mehr übrig
+    bleibt, weil das Dokument nur aus Lizenztext bestand.
+    """
+    # (Befund 12, Review Runde 2): dieselben zwei Zeilen wie in read_structure — sonst
+    # entkäme hier der englische FileNotFoundError der Standardbibliothek.
+    if not path.is_file():
+        raise FileNotFoundError(f"EPUB nicht lesbar: {path}")
+
+    # (Befund 11, Review Runde 2): nur das Öffnen des Archivs steht im try — sonst meldete
+    # eine kaputte CRC-Summe beim späteren archive.read() fälschlich „kein ZIP-Archiv".
+    try:
+        archive = zipfile.ZipFile(path)
+    except zipfile.BadZipFile as error:
+        raise ValueError(f"{path}: keine gültige EPUB-Datei (kein ZIP-Archiv).") from error
+
+    with archive:
+        names = set(archive.namelist())
+        if _encrypts_document(archive, names, chapter.document):
+            raise _encrypted_error(path)
+        # (Befund 7, Review Runde 2): sonst entkäme hier ein englischer KeyError, wenn das
+        # Kapiteldokument im Archiv fehlt.
+        if chapter.document not in names:
+            raise ValueError(
+                f"{path}: {chapter.document} — das Dokument des Kapitels "
+                f"„{chapter.title}“ fehlt im Archiv."
+            )
+        try:
+            raw = archive.read(chapter.document)
+        except RuntimeError as error:
+            # (Befund 7, Review Runde 2): der dritte Ablehnfall in anderer Gestalt — ein
+            # passwortgeschützter ZIP-Eintrag ohne META-INF/encryption.xml.
+            raise _encrypted_error(path) from error
+
+    # (Befund 8, Review Runde 2): kein errors="replace" — sonst landete U+FFFD still im
+    # Wortschatz statt eines sichtbaren Fehlschlags.
+    try:
+        source = raw.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ValueError(
+            f"{path}: {chapter.document} ist nicht UTF-8 kodiert — der Text wäre still beschädigt."
+        ) from error
+
+    raw_text = _extract_flowing_text(source)
+    if not _WORD.search(raw_text):
+        raise ValueError(
+            f"{path}: Kapitel „{chapter.title}“ enthält keinen Fließtext — vermutlich ein "
+            "Bildband ohne Text."
+        )
+
+    # (Befund 1, Review Runde 2): Aussteuern kann auch das ganze Kapitel verschlingen — ein
+    # reines Lizenzdokument darf danach nicht als leerer Fließtext durchgehen (Regel 13).
+    text = _remove_boilerplate(raw_text)
+    if not _WORD.search(text):
+        raise ValueError(
+            f"{path}: Kapitel „{chapter.title}“ besteht nur aus Vorspann bzw. Impressum — "
+            "nach dem Aussteuern bleibt kein Fließtext übrig."
+        )
+
+    return Chapter(book=book, number=chapter.number, title=chapter.title, text=text)

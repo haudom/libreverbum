@@ -69,9 +69,11 @@ class Chapter:
 
     `number` zählt ab 1 in der Reihenfolge des `spine`, auch wenn die Kapitelliste aus der
     Navigation stammt; fehlt die Navigation, ist jedes Dokument der Lesereihenfolge ein
-    Kapitel (technik.md §8). `text` ist bereits von Inhaltsverzeichnis, Impressum und
-    Fußnoten getrennt — das tut `epub`, nicht `extraction`. Er gehört zum eingelesenen
-    Kapitel; ins Profil wandert davon nur, welches Kapitel verarbeitet wurde."""
+    Kapitel (technik.md §8). `text` ist bei Project-Gutenberg-Dateien um Vorspann und
+    Lizenz gekürzt (`epub._remove_boilerplate`); Inhaltsverzeichnis und Fußnoten bleiben
+    enthalten, eine allgemeine Trennung ist mangels `epub:type` nicht gebaut (technik.md
+    §8). Er gehört zum eingelesenen Kapitel; ins Profil wandert davon nur, welches Kapitel
+    verarbeitet wurde."""
 
     book: Book
     number: int

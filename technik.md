@@ -1116,6 +1116,16 @@ danach ein Kapitel am Stück zu lesen, wird sie nicht. Der saubere Weg führt ü
 Quelle: Calibre kann für solche Dateien ein Inhaltsverzeichnis erzeugen. Der Nachtrag zu
 Abnahmekriterium 1 in konzept.md hält das fest.
 
+### Befund 18.08.2026: wie viel Vorspann die Heuristik wegnimmt
+
+Beim Bau von `epub` (T12b) beantwortet: Die Trennung nutzt dieselben
+Project-Gutenberg-Textmarken wie `tools/coverage_check.py` (GUTENBERG_START, GUTENBERG_END).
+Bei Gutenberg-Dateien greift sie sauber — Vorspann und Lizenzdokument fallen weg. Außerhalb
+von Project Gutenberg, etwa bei der DRM-freien Verlagsdatei aus T17, fehlen die Marken, und
+die Trennung bleibt aus: eine allgemeine Schwelle ist durch keine Messung belegt (Regel 14).
+Das Inhaltsverzeichnis bleibt auch bei Gutenberg im Fließtext stehen, weil es nach der
+Startmarke steht, nicht davor (`entities.Chapter`, Docstring zu `text`).
+
 ### Was gemeldet und nicht verarbeitet wird
 
 Drei Fälle sind kein Fall für den Kernablauf und müssen als solche erkennbar sein statt als
@@ -1129,8 +1139,6 @@ leeres Ergebnis (Regel 13):
 
 ### Offene Punkte
 
-- **Wie viel Vorspann die Heuristik wegnimmt.** Gemessen ist nur, dass `epub:type` fehlt;
-  welche Schwelle Impressum und Widmung sauber trennt, entsteht beim Bau von `epub`
 - **Anker innerhalb eines Dokuments.** Bei allen zwölf Dateien gilt ein Kapitel gleich ein
   Dokument. Ob Navigationsziele mit `#anker` als eigene Kapitel zu behandeln sind, ist
   offen — der Fall kam nicht vor

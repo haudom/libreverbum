@@ -134,7 +134,7 @@ Vorstufe zu melden — der `saw`-Fall aus technik.md §3.
 | # | Teilaufgabe | Prüfung |
 |---|---|---|
 | **T12** | Struktur: `container.xml` → OPF → Metadaten, `spine`, Navigation. Kapitelliste nach **eindeutigen Zielen**; fehlt die Navigation, gilt jedes Dokument als Kapitel — mit Hinweis (technik.md §8) | Abnahmekriterium 1; Datei ohne Navigation ergibt Kapitel **und** Hinweis |
-| **T12b** | Fließtext mit `html.parser`, Vorspann und Impressum aussteuern. Die drei Ablehnfälle melden statt leer zurückgeben: kein ZIP-Archiv, Bildband ohne Text, verschlüsselt | Regel 13 an allen drei Fällen |
+| **T12b** | Fließtext mit `html.parser`, Vorspann und Impressum aussteuern — über die Project-Gutenberg-Textmarken aus `tools/coverage_check.py`; Dateien ohne diese Marken bleiben unverändert, auch die T17-Datei. Die drei Ablehnfälle melden statt leer zurückgeben: kein ZIP-Archiv, Bildband ohne Text, verschlüsselt | Regel 13 an allen drei Fällen |
 
 `tools/epub_check.py` hat beide Schritte an zwölf Dateien vorgeführt — es ist die Vorlage,
 nicht der Kern: Es misst, T12 baut.

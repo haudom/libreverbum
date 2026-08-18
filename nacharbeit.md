@@ -93,6 +93,18 @@ still weg.
 `dc:creator` genügt dasselbe — mehrere Autoren zusammenzuführen wäre Vorratsarbeit
 (Regel 14), `entities.Book.author` ist ein einzelnes Feld.
 
+## A12 — leicht · `td` und `hr` fehlen in `_BLOCK_TAGS`
+
+**Beobachtet (Review T12b, 18.08.2026).** Die Auswahl in `libreverbum/epub.py`
+(`_BLOCK_TAGS`) entspricht exakt `tools/epub_check.py:73-76`, das ist gewollt und richtig.
+Wirkung an den echten Dateien: Sherlocks Inhaltsverzeichnis steht in einer Tabelle mit zwei
+Zellen je Zeile, deren Text zusammenläuft („I." + Titel). Das betrifft nur das
+Vorspanndokument, keinen Erzähltext — Abnahmekriterium 2 ist nicht berührt. Absatzgrenzen
+im Erzähltext sind sauber: 2.529 bzw. 1.504 `<p>`, alle mit Umbruch (nachgemessen).
+
+**Vorschlag:** keine Codeänderung nötig. Falls doch angefasst, dann in
+`tools/epub_check.py` mitziehen, damit Vorlage und Kern nicht auseinanderlaufen.
+
 > **A6 gestrichen am 17.08.2026** (Parallelität erzeugt Phantomfehler): als Absprache
 > erledigt, der Dokumentteil ist in A8 aufgegangen.
 

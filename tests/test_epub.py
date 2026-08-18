@@ -1,5 +1,6 @@
-"""Prüft `libreverbum/epub.py` — bauplan.md T12, Struktur eines EPUB: Metadaten, `spine`,
-Navigation, Kapitelliste nach eindeutigen Zielen."""
+"""Prüft `libreverbum/epub.py` — bauplan.md T12 (Struktur eines EPUB: Metadaten, `spine`,
+Navigation, Kapitelliste nach eindeutigen Zielen) und T12b (Fließtext eines Kapitels,
+Vorspann und Impressum aussteuern, die drei Ablehnfälle)."""
 
 from __future__ import annotations
 
@@ -9,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from libreverbum import epub
+from libreverbum.entities import Book
 
 # ------------------------------------------------- Lokale Vorrichtung: umsortierte Navigation
 
@@ -547,3 +549,506 @@ def test_read_structure_deduplicates_a_trailing_navigation_entry_in_a_real_book(
     result = epub.read_structure(real_epub_paths["dorian_gray"])
 
     assert result.chapters[-1].title == "CHAPTER XX."
+
+
+# ============================================================ bauplan.md T12b: Fließtext
+
+_TEST_BOOK = Book(title="Testbuch", author="Test Autorin")
+
+
+def _chapter_reference(document: str, title: str = "Kapitel 1") -> epub.ChapterReference:
+    return epub.ChapterReference(number=1, title=title, document=document)
+
+
+def _write_single_document_epub(path: Path, *, document: str, xhtml: str) -> None:
+    """Baut ein EPUB, das nur aus dem einen zu lesenden Inhaltsdokument besteht.
+    `read_chapter` (T12b) liest weder `container.xml` noch die Package-Datei — anders als
+    `read_structure` (T12) braucht die Vorrichtung deshalb keine vollständige Struktur."""
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        archive.writestr(document, xhtml)
+
+
+# ------------------------------------------------- Lokale Vorrichtung: Skripte und Absätze
+
+_MARKUP_NOISE_XHTML = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title>Kapitelkopf, kein Fließtext</title>
+<style>body { color: red; }</style>
+<script>var geheim = "sollte nie im Fließtext stehen";</script>
+</head>
+<body>
+<script>document.write("auch das nicht");</script>
+<p>Erster Absatz mit echtem Fließtext.</p><p>Zweiter Absatz, durch eine Absatzgrenze getrennt.</p>
+</body>
+</html>
+"""
+
+
+def test_read_chapter_excludes_script_and_style_content_from_the_flowing_text(
+    tmp_path: Path,
+) -> None:
+    """Was am Ende in die Wortschatzextraktion geht: Skripte und Stilangaben dürfen nicht
+    als Wörter durchschlagen (bauplan.md T12b)."""
+    path = tmp_path / "markup_noise.epub"
+    _write_single_document_epub(path, document="OEBPS/chapter.xhtml", xhtml=_MARKUP_NOISE_XHTML)
+
+    chapter = epub.read_chapter(path, _TEST_BOOK, _chapter_reference("OEBPS/chapter.xhtml"))
+
+    assert "sollte nie im Fließtext stehen" not in chapter.text
+    assert "auch das nicht" not in chapter.text
+    assert "Kapitelkopf, kein Fließtext" not in chapter.text
+
+
+def test_read_chapter_keeps_a_paragraph_boundary_between_adjacent_paragraphs(
+    tmp_path: Path,
+) -> None:
+    """Absatzgrenzen müssen erhalten bleiben, weil T3 Belegsätze daraus zieht (bauplan.md
+    T12b) — zwei Absätze dürfen im Fließtext nicht zusammenkleben."""
+    path = tmp_path / "markup_noise.epub"
+    _write_single_document_epub(path, document="OEBPS/chapter.xhtml", xhtml=_MARKUP_NOISE_XHTML)
+
+    chapter = epub.read_chapter(path, _TEST_BOOK, _chapter_reference("OEBPS/chapter.xhtml"))
+
+    assert "Erster Absatz mit echtem Fließtext.\nZweiter Absatz" in chapter.text
+
+
+# --------------------------------------- Lokale Vorrichtung: Vorspann- und Impressum-Marken
+
+_START_MARKER_XHTML = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>Vorspann</title></head>
+<body>
+<p>Vorspann-Absatz vor der Startmarke, der aussteuern muss.</p>
+<p>*** START OF THE PROJECT GUTENBERG EBOOK TESTBUCH ***</p>
+<p>Erster echter Satz nach der Startmarke.</p>
+</body>
+</html>
+"""
+
+_END_MARKER_XHTML = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>Impressum</title></head>
+<body>
+<p>Letzter echter Satz vor der Endmarke.</p>
+<p>*** END OF THE PROJECT GUTENBERG EBOOK TESTBUCH ***</p>
+<p>Lizenztext, der aussteuern muss.</p>
+</body>
+</html>
+"""
+
+# Wie bei Dorian Gray (technik.md §8): Ein Kapitel und die angehängte Lizenz teilen sich
+# dasselbe Dokument — die Endmarke muss mitten im Dokument greifen, nicht nur am Rand.
+_MIXED_MARKER_XHTML = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>Letztes Kapitel mit angehängter Lizenz</title></head>
+<body>
+<p>Echter letzter Satz des Kapitels.</p>
+<p>*** END OF THE PROJECT GUTENBERG EBOOK TESTBUCH ***</p>
+<p>Lizenztext, der aussteuern muss.</p>
+</body>
+</html>
+"""
+
+
+def test_read_chapter_removes_the_front_matter_before_the_gutenberg_start_marker(
+    tmp_path: Path,
+) -> None:
+    """Vorspann aussteuern (bauplan.md T12b): Text vor „*** START OF THE PROJECT
+    GUTENBERG …" fällt weg — dieselbe Marke wie in tools/coverage_check.py
+    (GUTENBERG_START)."""
+    path = tmp_path / "start_marker.epub"
+    _write_single_document_epub(path, document="OEBPS/chapter.xhtml", xhtml=_START_MARKER_XHTML)
+
+    chapter = epub.read_chapter(path, _TEST_BOOK, _chapter_reference("OEBPS/chapter.xhtml"))
+
+    assert "Vorspann-Absatz" not in chapter.text
+    assert chapter.text == "Erster echter Satz nach der Startmarke."
+
+
+def test_read_chapter_removes_the_back_matter_after_the_gutenberg_end_marker(
+    tmp_path: Path,
+) -> None:
+    """Impressum aussteuern (bauplan.md T12b): Text nach „*** END OF THE PROJECT
+    GUTENBERG …" fällt weg — dieselbe Marke wie in tools/coverage_check.py
+    (GUTENBERG_END)."""
+    path = tmp_path / "end_marker.epub"
+    _write_single_document_epub(path, document="OEBPS/chapter.xhtml", xhtml=_END_MARKER_XHTML)
+
+    chapter = epub.read_chapter(path, _TEST_BOOK, _chapter_reference("OEBPS/chapter.xhtml"))
+
+    assert "Lizenztext" not in chapter.text
+    assert chapter.text == "Letzter echter Satz vor der Endmarke."
+
+
+def test_read_chapter_keeps_real_content_that_shares_a_document_with_the_license(
+    tmp_path: Path,
+) -> None:
+    """technik.md §8, Dorian-Gray-Fall: Die Gutenberg-Lizenz kann demselben Dokument wie
+    das letzte Kapitel angehängt sein — die Endmarke muss die Lizenz aussteuern, ohne den
+    echten Kapiteltext davor zu verlieren."""
+    path = tmp_path / "mixed_marker.epub"
+    _write_single_document_epub(path, document="OEBPS/chapter.xhtml", xhtml=_MIXED_MARKER_XHTML)
+
+    chapter = epub.read_chapter(path, _TEST_BOOK, _chapter_reference("OEBPS/chapter.xhtml"))
+
+    assert chapter.text == "Echter letzter Satz des Kapitels."
+
+
+def test_read_chapter_leaves_text_unchanged_without_a_gutenberg_marker(tmp_path: Path) -> None:
+    """technik.md §8, „epub:type gibt es in der Praxis nicht": Ohne Project-Gutenberg-Marke
+    bleibt der Text unverändert — eine allgemeine Schwelle ist nicht gebaut (Regel 14)."""
+    path = tmp_path / "markup_noise.epub"
+    _write_single_document_epub(path, document="OEBPS/chapter.xhtml", xhtml=_MARKUP_NOISE_XHTML)
+
+    chapter = epub.read_chapter(path, _TEST_BOOK, _chapter_reference("OEBPS/chapter.xhtml"))
+
+    assert chapter.text == (
+        "Erster Absatz mit echtem Fließtext.\nZweiter Absatz, durch eine Absatzgrenze getrennt."
+    )
+
+
+# --------------------------------------------------- Die drei Ablehnfälle (bauplan.md T12b)
+
+
+def test_read_chapter_reports_a_missing_file(tmp_path: Path) -> None:
+    """Regel 13 (Befund 12, Review Runde 2): Eine fehlende Datei bekommt dieselbe deutsche
+    Meldung wie `read_structure` — nicht den englischen `FileNotFoundError`, den
+    `zipfile.ZipFile` selbst ungeprüft geworfen hätte."""
+    missing = tmp_path / "does_not_exist.epub"
+
+    with pytest.raises(FileNotFoundError, match="EPUB nicht lesbar"):
+        epub.read_chapter(missing, _TEST_BOOK, _chapter_reference("OEBPS/chapter.xhtml"))
+
+
+def test_read_chapter_reports_a_file_that_is_not_a_zip_archive(tmp_path: Path) -> None:
+    """Regel 13: Kein `except`, das nur protokolliert und weiterläuft — eine Datei ohne
+    ZIP-Archiv wird gemeldet statt leer zurückgegeben (bauplan.md T12b)."""
+    path = tmp_path / "not_an_epub.epub"
+    path.write_bytes(b"dies ist kein ZIP-Archiv")
+
+    with pytest.raises(ValueError, match=r"keine gültige EPUB-Datei \(kein ZIP-Archiv\)"):
+        epub.read_chapter(path, _TEST_BOOK, _chapter_reference("OEBPS/chapter.xhtml"))
+
+
+def _corrupt_crc_of_zip_entry(path: Path, document: str) -> None:
+    """Verfälscht die CRC-32-Prüfsumme eines Eintrags in dessen lokalem Header **und** im
+    zentralen Verzeichnis, ohne die komprimierten Daten anzurühren — `zipfile` öffnet das
+    Archiv trotzdem klaglos und erkennt den Schaden erst beim tatsächlichen Lesen des
+    Eintrags (Befund 11, Review Runde 2)."""
+    data = bytearray(path.read_bytes())
+    target = document.encode("utf-8")
+
+    offset = 0
+    while (offset := data.find(b"PK\x03\x04", offset)) != -1:
+        length = int.from_bytes(data[offset + 26 : offset + 28], "little")
+        if bytes(data[offset + 30 : offset + 30 + length]) == target:
+            crc = int.from_bytes(data[offset + 14 : offset + 18], "little")
+            data[offset + 14 : offset + 18] = (crc ^ 0xFFFFFFFF).to_bytes(4, "little")
+        offset += 4
+
+    offset = 0
+    while (offset := data.find(b"PK\x01\x02", offset)) != -1:
+        length = int.from_bytes(data[offset + 28 : offset + 30], "little")
+        if bytes(data[offset + 46 : offset + 46 + length]) == target:
+            crc = int.from_bytes(data[offset + 16 : offset + 20], "little")
+            data[offset + 16 : offset + 20] = (crc ^ 0xFFFFFFFF).to_bytes(4, "little")
+        offset += 4
+
+    path.write_bytes(bytes(data))
+
+
+def test_read_chapter_does_not_call_a_corrupted_entry_a_missing_zip_archive(tmp_path: Path) -> None:
+    """Befund 11, Review Runde 2: Nur `zipfile.ZipFile(path)` steht im `try` — eine kaputte
+    CRC-Summe beim Lesen des Kapiteldokuments wird deshalb nicht mehr als „kein
+    ZIP-Archiv" gemeldet, obwohl sich das Archiv öffnen ließ. Sichtbar bleibt der
+    Fehlschlag trotzdem: `zipfile` wirft weiterhin `BadZipFile`."""
+    path = tmp_path / "corrupted_entry.epub"
+    _write_single_document_epub(path, document="OEBPS/chapter.xhtml", xhtml=_MARKUP_NOISE_XHTML)
+    _corrupt_crc_of_zip_entry(path, "OEBPS/chapter.xhtml")
+
+    with pytest.raises(zipfile.BadZipFile):
+        epub.read_chapter(path, _TEST_BOOK, _chapter_reference("OEBPS/chapter.xhtml"))
+
+
+def _encryption_xml_for(*documents: str) -> str:
+    """`META-INF/encryption.xml` nach OCF-Norm, mit je einer `CipherReference` je
+    übergebenem Dokument — dieselbe Form, die Calibre, InDesign und Sigil auch für bloße
+    Schriftverschleierung erzeugen (Befund 6, Review Runde 2)."""
+    references = "\n      ".join(f'<CipherReference URI="{document}"/>' for document in documents)
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <EncryptedData xmlns="http://www.w3.org/2001/04/xmlenc#">
+    <EncryptionMethod Algorithm="http://www.idpf.org/2008/embedding"/>
+    <CipherData>
+      {references}
+    </CipherData>
+  </EncryptedData>
+</encryption>
+"""
+
+
+def test_read_chapter_reports_an_encrypted_file(tmp_path: Path) -> None:
+    """Regel 13: Ein verschlüsseltes EPUB wird gemeldet statt leer zurückgegeben (bauplan.md
+    T12b) — Kopierschutz wird nicht umgangen (konzept.md, Schritt 1).
+    `META-INF/encryption.xml` nennt das gelesene Kapiteldokument als `CipherReference`
+    (Befund 6, Review Runde 2): bloße Anwesenheit der Datei genügt seither nicht mehr."""
+    path = tmp_path / "encrypted.epub"
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        archive.writestr("META-INF/encryption.xml", _encryption_xml_for("OEBPS/chapter.xhtml"))
+        archive.writestr("OEBPS/chapter.xhtml", _MARKUP_NOISE_XHTML)
+
+    with pytest.raises(ValueError, match=r"verschlüsselt \(META-INF/encryption\.xml\)"):
+        epub.read_chapter(path, _TEST_BOOK, _chapter_reference("OEBPS/chapter.xhtml"))
+
+
+def test_read_chapter_ignores_encryption_xml_that_only_obfuscates_a_font(tmp_path: Path) -> None:
+    """Befund 6, Review Runde 2: `META-INF/encryption.xml` kennzeichnet laut OCF-Norm auch
+    bloße Schriftverschleierung (`Algorithm=".../2008/embedding"`) ohne jeden Kopierschutz
+    auf dem Text — ein DRM-freies EPUB darf deshalb nicht allein wegen ihrer Anwesenheit
+    abgelehnt werden, solange keine `CipherReference` auf das Kapiteldokument zeigt."""
+    path = tmp_path / "font_obfuscation.epub"
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        archive.writestr("META-INF/encryption.xml", _encryption_xml_for("OEBPS/fonts/text.otf"))
+        archive.writestr("OEBPS/chapter.xhtml", _MARKUP_NOISE_XHTML)
+
+    chapter = epub.read_chapter(path, _TEST_BOOK, _chapter_reference("OEBPS/chapter.xhtml"))
+
+    assert "Erster Absatz mit echtem Fließtext." in chapter.text
+
+
+def test_read_chapter_reports_a_chapter_document_missing_from_the_archive(tmp_path: Path) -> None:
+    """Regel 13 (Befund 7, Review Runde 2): Fehlt das Kapiteldokument im Archiv, ist das ein
+    sichtbarer Fehlschlag mit deutscher Meldung — kein englischer `KeyError` aus `zipfile`,
+    den `archive.read()` sonst ungeprüft geworfen hätte."""
+    path = tmp_path / "missing_document.epub"
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+
+    with pytest.raises(ValueError, match=r"OEBPS/chapter\.xhtml.*fehlt im Archiv"):
+        epub.read_chapter(path, _TEST_BOOK, _chapter_reference("OEBPS/chapter.xhtml"))
+
+
+def _mark_zip_entry_as_password_protected(path: Path, document: str) -> None:
+    """Setzt das Verschlüsselungsbit (general purpose bit flag, Bit 0) im lokalen und im
+    zentralen Header eines ZIP-Eintrags — `zipfile` kann keine echte Verschlüsselung
+    schreiben, wirft beim Lesen aber denselben `RuntimeError` wie ein wirklich
+    passwortgeschütztes Archiv, sobald dieses Bit gesetzt ist (Befund 7, Review Runde 2)."""
+    data = bytearray(path.read_bytes())
+    target = document.encode("utf-8")
+
+    offset = 0
+    while (offset := data.find(b"PK\x03\x04", offset)) != -1:
+        length = int.from_bytes(data[offset + 26 : offset + 28], "little")
+        if bytes(data[offset + 30 : offset + 30 + length]) == target:
+            data[offset + 6] |= 0x01
+        offset += 4
+
+    offset = 0
+    while (offset := data.find(b"PK\x01\x02", offset)) != -1:
+        length = int.from_bytes(data[offset + 28 : offset + 30], "little")
+        if bytes(data[offset + 46 : offset + 46 + length]) == target:
+            data[offset + 8] |= 0x01
+        offset += 4
+
+    path.write_bytes(bytes(data))
+
+
+def test_read_chapter_reports_a_password_protected_zip_entry_as_encrypted(tmp_path: Path) -> None:
+    """Regel 13 (Befund 7, Review Runde 2): Ein ZIP-Eintrag kann auch ohne
+    `META-INF/encryption.xml` passwortgeschützt sein — der dritte Ablehnfall in anderer
+    Gestalt. `zipfile` wirft dafür beim Lesen einen englischen `RuntimeError`, der dieselbe
+    deutsche Verschlüsselungsmeldung bekommen muss statt unverändert durchzureichen."""
+    path = tmp_path / "password_protected.epub"
+    _write_single_document_epub(path, document="OEBPS/chapter.xhtml", xhtml=_MARKUP_NOISE_XHTML)
+    _mark_zip_entry_as_password_protected(path, "OEBPS/chapter.xhtml")
+
+    with pytest.raises(ValueError, match=r"verschlüsselt \(META-INF/encryption\.xml\)"):
+        epub.read_chapter(path, _TEST_BOOK, _chapter_reference("OEBPS/chapter.xhtml"))
+
+
+def test_read_chapter_reports_bytes_that_are_not_utf8(tmp_path: Path) -> None:
+    """Regel 13 (Befund 8, Review Runde 2): Nicht-UTF-8-Bytes werden gemeldet statt mit
+    `errors="replace"` still durch U+FFFD ersetzt — sonst landete das Ersatzzeichen im
+    Wortschatz, in der Triage und auf der Anki-Karte."""
+    path = tmp_path / "invalid_encoding.epub"
+    invalid_bytes = b"<html><body><p>Ung\xffltiges UTF-8</p></body></html>"
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        archive.writestr("OEBPS/chapter.xhtml", invalid_bytes)
+
+    with pytest.raises(ValueError, match=r"OEBPS/chapter\.xhtml ist nicht UTF-8 kodiert"):
+        epub.read_chapter(path, _TEST_BOOK, _chapter_reference("OEBPS/chapter.xhtml"))
+
+
+_IMAGE_ONLY_XHTML = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>Bildseite</title></head>
+<body><img src="page1.png" alt=""/></body>
+</html>
+"""
+
+
+def test_read_chapter_reports_a_picture_book_without_text(tmp_path: Path) -> None:
+    """Regel 13, technik.md §8 („Bildband ohne Text", 2 Manga mit 0 Wörtern gemessen): Ein
+    Kapitel ohne Fließtext wird gemeldet statt leer zurückgegeben (bauplan.md T12b)."""
+    path = tmp_path / "picture_book.epub"
+    _write_single_document_epub(path, document="OEBPS/page1.xhtml", xhtml=_IMAGE_ONLY_XHTML)
+
+    with pytest.raises(
+        ValueError, match=r"Bildseite.*enthält keinen Fließtext.*Bildband ohne Text"
+    ):
+        epub.read_chapter(
+            path, _TEST_BOOK, _chapter_reference("OEBPS/page1.xhtml", title="Bildseite")
+        )
+
+
+_LICENSE_ONLY_XHTML = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>Volle Lizenz</title></head>
+<body>
+<p>*** END OF THE PROJECT GUTENBERG EBOOK TESTBUCH ***</p>
+<p>Lizenztext, der komplett aussteuern muss.</p>
+</body>
+</html>
+"""
+
+
+def test_read_chapter_reports_when_only_boilerplate_remains_after_removing_it(
+    tmp_path: Path,
+) -> None:
+    """Regel 13 (Befund 1 und 2, Review Runde 2): Ein Dokument, das roh Wörter trägt und
+    nach dem Aussteuern von Vorspann und Impressum keine mehr, wird gemeldet statt still als
+    leerer Fließtext durchzugehen — nachgewiesen am letzten Sherlock-Kapitel, der vollen
+    Gutenberg-Lizenz (siehe Test gegen die echte Datei weiter unten)."""
+    path = tmp_path / "license_only.epub"
+    _write_single_document_epub(path, document="OEBPS/license.xhtml", xhtml=_LICENSE_ONLY_XHTML)
+
+    with pytest.raises(ValueError, match=r"besteht nur aus Vorspann bzw\. Impressum"):
+        epub.read_chapter(
+            path, _TEST_BOOK, _chapter_reference("OEBPS/license.xhtml", title="Lizenz")
+        )
+
+
+def test_read_chapter_reports_an_encrypted_picture_book_as_encrypted_not_as_a_picture_book(
+    tmp_path: Path,
+) -> None:
+    """Befund 9, Review Runde 2: Die Reihenfolge der drei Ablehnfälle ist geprüft, nicht nur
+    behauptet — ein verschlüsseltes Kapitel ohne Fließtext muss „verschlüsselt" melden,
+    nicht „Bildband ohne Text". Gegen eine absichtlich umgedrehte Reihenfolge einmal rot
+    gelaufen (siehe Bericht)."""
+    path = tmp_path / "encrypted_picture_book.epub"
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        archive.writestr("META-INF/encryption.xml", _encryption_xml_for("OEBPS/page1.xhtml"))
+        archive.writestr("OEBPS/page1.xhtml", _IMAGE_ONLY_XHTML)
+
+    with pytest.raises(ValueError, match=r"verschlüsselt \(META-INF/encryption\.xml\)"):
+        epub.read_chapter(
+            path, _TEST_BOOK, _chapter_reference("OEBPS/page1.xhtml", title="Bildseite")
+        )
+
+
+def test_read_chapter_reports_a_non_zip_file_before_inspecting_its_bytes_for_encryption(
+    tmp_path: Path,
+) -> None:
+    """Befund 9, Review Runde 2: Eine Nicht-ZIP-Datei, deren Bytes zufällig
+    `META-INF/encryption.xml` als Text enthalten, muss weiterhin „kein ZIP-Archiv" melden —
+    die ZIP-Prüfung steht vor der Verschlüsselungsprüfung. Gegen eine absichtlich
+    umgedrehte Reihenfolge einmal rot gelaufen (siehe Bericht)."""
+    path = tmp_path / "not_a_zip_with_encryption_text.epub"
+    path.write_bytes(b"kein ZIP-Archiv, nennt aber META-INF/encryption.xml im Klartext")
+
+    with pytest.raises(ValueError, match=r"keine gültige EPUB-Datei \(kein ZIP-Archiv\)"):
+        epub.read_chapter(path, _TEST_BOOK, _chapter_reference("OEBPS/chapter.xhtml"))
+
+
+_ENTITIES_XHTML = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>Entitäten</title></head>
+<body>
+<p>Leerraum:&nbsp;Gedankenstrich&mdash;Anführung&#8217;Kaufmannsund&amp;Ende.</p>
+</body>
+</html>
+"""
+
+
+def test_read_chapter_resolves_html_entities(tmp_path: Path) -> None:
+    """technik.md §8, „befürchtete Bruchstelle": HTML-Entitäten werden aufgelöst
+    (`convert_charrefs=True`) statt als literale `&nbsp;` oder `&mdash;` in den Wortschatz
+    zu gelangen (Befund 10, Review Runde 2)."""
+    path = tmp_path / "entities.epub"
+    _write_single_document_epub(path, document="OEBPS/chapter.xhtml", xhtml=_ENTITIES_XHTML)
+
+    chapter = epub.read_chapter(path, _TEST_BOOK, _chapter_reference("OEBPS/chapter.xhtml"))
+
+    assert "Leerraum: Gedankenstrich—Anführung’Kaufmannsund&Ende." in chapter.text
+    assert "&nbsp;" not in chapter.text
+    assert "&mdash;" not in chapter.text
+    assert "&#8217;" not in chapter.text
+
+
+# ------------------------------------------------------- Echte Dateien (bauplan.md T12b)
+
+
+@pytest.mark.needs_epub
+def test_read_chapter_removes_project_gutenberg_front_matter_from_a_real_book(
+    real_epub_paths: dict[str, Path],
+) -> None:
+    """technik.md §8, Sherlock-Fall: Das erste Kapitel der echten Navigation ist der
+    Titel-/Vorspanndokument (`chapters[0]`) — der Gutenberg-Vorspanntext darf danach nicht
+    mehr im Fließtext stehen."""
+    structure = epub.read_structure(real_epub_paths["sherlock"])
+
+    chapter = epub.read_chapter(real_epub_paths["sherlock"], structure.book, structure.chapters[0])
+
+    assert "This eBook is for the use of anyone" not in chapter.text
+    assert "Release date" not in chapter.text
+
+
+@pytest.mark.needs_epub
+def test_read_chapter_reports_the_real_license_chapter_as_boilerplate_only(
+    real_epub_paths: dict[str, Path],
+) -> None:
+    """Regel 13 (Befund 1 und 2, Review Runde 2): Das letzte Kapitel der echten Navigation
+    ist die volle Gutenberg-Lizenz (`chapters[-1]`, 18.417 Zeichen vor dem Aussteuern) — die
+    Endmarke steht dort an dessen Anfang, danach bleibt kein Fließtext mehr übrig. Statt
+    still ein `Chapter` mit leerem Text zurückzugeben, meldet `read_chapter` das."""
+    structure = epub.read_structure(real_epub_paths["sherlock"])
+
+    with pytest.raises(ValueError, match=r"nach dem Aussteuern bleibt kein Fließtext übrig"):
+        epub.read_chapter(real_epub_paths["sherlock"], structure.book, structure.chapters[-1])
+
+
+@pytest.mark.needs_epub
+def test_read_chapter_keeps_the_real_final_chapter_but_drops_the_appended_license(
+    real_epub_paths: dict[str, Path],
+) -> None:
+    """technik.md §8, Dorian-Gray-Fall: Die Lizenz hängt am selben Dokument wie „CHAPTER
+    XX." — der echte Kapiteltext bleibt bis „THE END" erhalten, die angehängte Lizenz
+    nicht."""
+    structure = epub.read_structure(real_epub_paths["dorian_gray"])
+
+    chapter = epub.read_chapter(
+        real_epub_paths["dorian_gray"], structure.book, structure.chapters[-1]
+    )
+
+    assert chapter.text.endswith("THE END")
+    assert "PLEASE READ THIS BEFORE YOU DISTRIBUTE" not in chapter.text
+
+
+@pytest.mark.needs_epub
+def test_read_chapter_reads_a_real_story_chapter_unchanged(
+    real_epub_paths: dict[str, Path],
+) -> None:
+    """Gegenprobe gegen die echte Datei: Ein gewöhnliches Erzählkapitel ohne
+    Gutenberg-Marken bleibt inhaltlich unangetastet."""
+    structure = epub.read_structure(real_epub_paths["sherlock"])
+
+    chapter = epub.read_chapter(real_epub_paths["sherlock"], structure.book, structure.chapters[1])
+
+    assert chapter.text.startswith("I.\nA SCANDAL IN BOHEMIA")
+    assert "Sherlock Holmes" in chapter.text
