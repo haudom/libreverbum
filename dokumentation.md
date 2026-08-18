@@ -74,6 +74,7 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | Profil, Kenntnisstand | `profile`, `knowledge_state` |
 | bekannt / lernt / zurückgestellt / vergessen | `known` / `learning` / `deferred` / `forgotten` |
 | Herkunft und Zeitpunkt (einer Kenntnisangabe) | `origin`, `timestamp` |
+| unbekannt / bekannt / neue Bedeutung eines bekannten Wortes (Abgleich Kapitelwortschatz ↔ Profil) | `unknown` / `known` / `new_meaning_of_known_word` (`VocabularyStatus`) |
 | Triage, Sammelaktion, Wortobergrenze | `triage`, `bulk_mark`, `word_limit` |
 | Wörterbuch, Nachschlagen | `dictionary`, `lookup` |
 | Auswahlliste, Kandidat | `candidate` |

@@ -2,11 +2,10 @@
 
 Aufgabe
 -------
-Schritt 3 des Kernablaufs (konzept.md), erste Hälfte (bauplan.md T8): das Schema anlegen
-und Kenntnis als Ereignisfolge festhalten — pro Bedeutung, nicht pro Wort (technik.md §4,
-„Kernentscheidung: Kenntnis pro Bedeutung, nicht pro Wort"). Der daraus abgeleitete
-Kenntnisstand und der Abgleich gegen den Kapitelwortschatz sind T9 und liegen bewusst noch
-nicht hier (Regel 14).
+Schritt 3 des Kernablaufs (konzept.md): das Schema anlegen und Kenntnis als Ereignisfolge
+festhalten — pro Bedeutung, nicht pro Wort (technik.md §4, „Kernentscheidung: Kenntnis pro
+Bedeutung, nicht pro Wort", bauplan.md T8) —, daraus den Kenntnisstand ableiten und den
+Kapitelwortschatz dagegen abgleichen (bauplan.md T9).
 
 Voraussetzungen
 ---------------
@@ -15,6 +14,12 @@ Dateien (technik.md §4, „Getrennte Datei — nicht mit dem Wörterbuch mische
 Modul kennt `en-de.sqlite3` an keiner Stelle und importiert nichts aus `dictionary`. Der
 Kern kennt auch keine Vorgabe für den Pfad selbst; den setzt der Aufrufer (technik.md §9).
 
+`compare_chapter_vocabulary` erwartet bereits aufgelöste Bedeutungen (`entities.Sense`
+samt `wikdict_`-Feldern) und läuft deshalb erst, nachdem „Bedeutungen beschaffen" den
+Kapitelwortschatz angereichert hat (konzept.md, Nachtrag 18.08.2026 beim Kernablauf) —
+ein Abgleich auf Grundformebene könnte „neue Bedeutung eines bekannten Wortes" gar nicht
+erkennen (technik.md §4, „Kernentscheidung: Kenntnis pro Bedeutung, nicht pro Wort").
+
 Liefert
 -------
 `open_profile` legt beim ersten Aufruf das vollständige Schema an und setzt `PRAGMA
@@ -22,17 +27,39 @@ user_version` (Regel 5). `ensure_book`, `ensure_lemma` und `ensure_sense` liefer
 bestehende oder neu angelegte Zeile anhand ihrer Identität. `record_event` hängt ein
 Ereignis an, ohne ein vorheriges zu ersetzen (technik.md §4, „Kernentscheidung:
 Ereignisfolge statt überschreibbarem Zustand"); `events_for_sense` liest die volle Folge zu
-einer Bedeutung zurück. Der aktuelle Kenntnisstand selbst — jeweils das jüngste Ereignis —
-ist **nicht** Teil dieses Moduls; das baut T9 als Sicht auf dieser Ereignisfolge.
+einer Bedeutung zurück. `current_knowledge_state` ist die Sicht darauf: das jüngste
+Ereignis je Bedeutung, `None` ohne jedes Ereignis. `compare_chapter_vocabulary` hält einen
+Kapitelwortschatz gegen diese Sicht: je Bedeutung `VocabularyStatus.UNKNOWN`, `.KNOWN` oder
+`.NEW_MEANING_OF_KNOWN_WORD` — Letzteres, wenn eine andere Bedeutung derselben Grundform
+bereits bekannt ist (konzept.md §5, „Mehrdeutigkeit"). Ein reiner Lesezugriff: Bedeutungen
+ohne bisheriges Ereignis werden dabei nicht angelegt.
 """
 
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime
+from collections.abc import Iterable
+from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 
 from libreverbum.entities import Book, Event, KnowledgeState, Lemma, Origin, Sense
+
+
+class VocabularyStatus(StrEnum):
+    """Ergebnis des Abgleichs einer Bedeutung aus dem Kapitelwortschatz gegen das Profil
+    (bauplan.md T9). Kein Kenntnisstand im Sinn von `entities.KnowledgeState` — der gilt je
+    Ereignis, dieser Wert ist das Ergebnis eines Vergleichs mit dem gesamten Profil.
+
+    `NEW_MEANING_OF_KNOWN_WORD` ist der Grund für diese Kennzeichnung (konzept.md §5,
+    „Mehrdeutigkeit"): Eine andere Bedeutung derselben Grundform ist bereits bekannt, diese
+    hier noch nicht — ohne die Kennzeichnung würde der Nutzer „kenne ich" für eine
+    Bedeutung drücken, die er noch nie gesehen hat (konzept.md, Nachtrag beim Kernablauf)."""
+
+    UNKNOWN = "unknown"
+    KNOWN = "known"
+    NEW_MEANING_OF_KNOWN_WORD = "new_meaning_of_known_word"
+
 
 # REGEL (dokumentation.md §4 Regel 5): PRAGMA user_version ab der ersten Fassung gesetzt,
 # bei jeder Schemaänderung zu erhöhen. Ohne die Zahl ist eine spätere Migration Ratearbeit.
@@ -243,7 +270,11 @@ def record_event(con: sqlite3.Connection, event: Event) -> int:
 
     Legt Buch und Bedeutung (samt Grundform) an, falls sie noch fehlen, und liefert die id
     des neuen Ereignisses. Ein naiver (nicht zeitzonenbehafteter) Zeitstempel wird
-    zurückgewiesen (Regel 13), bevor Buch oder Bedeutung überhaupt angelegt werden.
+    zurückgewiesen (Regel 13), bevor Buch oder Bedeutung überhaupt angelegt werden. Ein
+    zeitzonenbehafteter Zeitstempel wird vor dem Speichern auf UTC normalisiert (Befund 1,
+    Review T9) — ein Ereignis entsteht in der Ortszeit des Nutzers, und erst nach der
+    Normalisierung ist die lexikografische Sortierung über die TEXT-Spalte in
+    `events_for_sense` wieder mit der zeitlichen Reihenfolge deckungsgleich.
     """
     # (Befund 5, Review T8): Ein naiver Zeitstempel landete unbemerkt als
     # „2026-08-18T00:00:00" neben zeitzonenbehafteten Werten wie „…+00:00" in derselben
@@ -256,6 +287,11 @@ def record_event(con: sqlite3.Connection, event: Event) -> int:
             "erwartet wird ein zeitzonenbehafteter Zeitstempel (UTC), siehe "
             'entities.Event, „timestamp ist zeitzonenbehaftet".'
         )
+    # (Befund 1, Review T9): Unterschiedliche UTC-Versätze in derselben TEXT-Spalte sortieren
+    # lexikografisch falsch — „…T10:30:00+02:00" (= 08:30 UTC) stünde nach „…T09:00:00+00:00"
+    # (= 09:00 UTC), obwohl es das ältere Ereignis ist. Normalisieren statt nur prüfen, weil
+    # das auch Altbestand mit unterschiedlichen Versätzen vereinheitlicht.
+    timestamp = event.timestamp.astimezone(UTC)
     sense_id = ensure_sense(con, event.sense)
     book_id = ensure_book(con, event.book)
     cursor = con.execute(
@@ -265,7 +301,7 @@ def record_event(con: sqlite3.Connection, event: Event) -> int:
             sense_id,
             event.knowledge_state,
             event.origin,
-            event.timestamp.isoformat(),
+            timestamp.isoformat(),
             book_id,
             event.chapter_number,
         ),
@@ -277,7 +313,8 @@ def record_event(con: sqlite3.Connection, event: Event) -> int:
 
 def events_for_sense(con: sqlite3.Connection, sense_id: int) -> list[Event]:
     """Die volle Ereignisfolge zu einer Bedeutung, älteste zuerst — unverkürzt: Der aktuelle
-    Kenntnisstand ist erst die Ableitung, die T9 als Sicht darauf baut (Regel 14)."""
+    Kenntnisstand ist erst die Ableitung, die `current_knowledge_state` als Sicht darauf
+    bildet."""
     sense_row = con.execute(
         "SELECT l.text, l.pos, s.wikdict_lexentry, s.wikdict_sense, s.wikdict_trans_list "
         "FROM sense s JOIN lemma l ON l.id = s.lemma_id WHERE s.id = ?",
@@ -315,3 +352,92 @@ def events_for_sense(con: sqlite3.Connection, sense_id: int) -> list[Event]:
         )
         for knowledge_state, origin, timestamp, title, author, chapter_number in rows
     ]
+
+
+def current_knowledge_state(con: sqlite3.Connection, sense_id: int) -> KnowledgeState | None:
+    """Der Kenntnisstand als Sicht auf die Ereignisse (bauplan.md T9, technik.md §4 „Der
+    aktuelle Kenntnisstand ist eine Sicht auf die Ereignistabelle"): das jüngste Ereignis zu
+    dieser Bedeutung nach Zeitstempel. `None`, wenn noch kein Ereignis vorliegt — das ist
+    nicht dasselbe wie `KnowledgeState.FORGOTTEN`, das selbst ein Ereignis ist (Phase 3,
+    Anki-Rückkanal) und hier nichts vorwegnimmt."""
+    events = events_for_sense(con, sense_id)
+    if not events:
+        return None
+    return events[-1].knowledge_state
+
+
+def _find_sense_id(con: sqlite3.Connection, sense: Sense) -> int | None:
+    """Liefert die id einer Bedeutung, falls sie im Profil bereits vorkommt — anders als
+    `ensure_sense` legt dieser Lesezugriff keine Zeile an. `compare_chapter_vocabulary`
+    braucht das: Der Abgleich prüft den Kenntnisstand, er stellt ihn nicht her — eine
+    Bedeutung, die im Profil noch nie ein Ereignis hatte, bekommt dadurch keine Zeile.
+
+    Der Vergleich der drei `wikdict_`-Felder folgt denselben `ifnull(..., '')`-Ausdrücken
+    wie der Index `sense_identity` (Befund 6, Review T9): Der Index behandelt `NULL` und
+    `''` als dieselbe Bedeutung, ein `IS`-Vergleich würde beide dagegen trennen und eine
+    vorhandene Zeile stillschweigend verfehlen.
+    """
+    row = con.execute(
+        "SELECT s.id FROM sense s JOIN lemma l ON l.id = s.lemma_id "
+        "WHERE l.text = ? AND l.pos = ? "
+        "AND ifnull(s.wikdict_lexentry, '') = ifnull(?, '') "
+        "AND ifnull(s.wikdict_sense, '') = ifnull(?, '') "
+        "AND ifnull(s.wikdict_trans_list, '') = ifnull(?, '')",
+        (
+            sense.lemma.text,
+            sense.lemma.pos,
+            sense.wikdict_lexentry,
+            sense.wikdict_sense,
+            sense.wikdict_trans_list,
+        ),
+    ).fetchone()
+    return int(row[0]) if row is not None else None
+
+
+def _sense_ids_for_lemma(con: sqlite3.Connection, lemma: Lemma) -> list[int]:
+    """Alle im Profil bereits vorkommenden Bedeutungs-ids einer Grundform — die Grundlage
+    für die Kennzeichnung „neue Bedeutung eines bekannten Wortes" in
+    `compare_chapter_vocabulary` (konzept.md §5, „Mehrdeutigkeit")."""
+    rows = con.execute(
+        "SELECT s.id FROM sense s JOIN lemma l ON l.id = s.lemma_id WHERE l.text = ? AND l.pos = ?",
+        (lemma.text, lemma.pos),
+    ).fetchall()
+    return [int(row[0]) for row in rows]
+
+
+def compare_chapter_vocabulary(
+    con: sqlite3.Connection, senses: Iterable[Sense]
+) -> dict[Sense, VocabularyStatus]:
+    """Abgleich des Kapitelwortschatzes gegen das Profil (bauplan.md T9, Abnahmekriterium
+    6): je Bedeutung `VocabularyStatus.KNOWN`, `.UNKNOWN` oder
+    `.NEW_MEANING_OF_KNOWN_WORD`.
+
+    „Kenne ich das Wort?" ist eine aus der Bedeutung abgeleitete Frage (technik.md §4,
+    „Kernentscheidung: Kenntnis pro Bedeutung, nicht pro Wort") — deshalb prüft dieser
+    Abgleich zuerst den Kenntnisstand der Bedeutung selbst und erst danach, ob eine andere
+    Bedeutung derselben Grundform bereits bekannt ist. Ein reiner Lesezugriff: Bedeutungen
+    ohne bisheriges Ereignis werden dabei nicht angelegt (`_find_sense_id`).
+
+    Allein `KnowledgeState.KNOWN` gilt als bekannt (Befund 3, Review T9, Abnahmekriterium
+    6: „bekannt" ist der abgeschlossene Zustand, nicht der begonnene) — `learning`,
+    `deferred` und `forgotten` gelten als nicht bekannt und werden erneut abgefragt.
+    Dasselbe gilt für die Geschwisterbedeutung: Nur ein `known` bei ihr löst
+    `NEW_MEANING_OF_KNOWN_WORD` aus, ein begonnenes oder zurückgestelltes Lernen nicht.
+    """
+    result: dict[Sense, VocabularyStatus] = {}
+    for sense in senses:
+        sense_id = _find_sense_id(con, sense)
+        if sense_id is not None and current_knowledge_state(con, sense_id) == KnowledgeState.KNOWN:
+            result[sense] = VocabularyStatus.KNOWN
+            continue
+        has_known_sibling = any(
+            current_knowledge_state(con, sibling_id) == KnowledgeState.KNOWN
+            for sibling_id in _sense_ids_for_lemma(con, sense.lemma)
+            if sibling_id != sense_id
+        )
+        result[sense] = (
+            VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD
+            if has_known_sibling
+            else VocabularyStatus.UNKNOWN
+        )
+    return result

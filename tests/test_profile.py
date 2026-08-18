@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from os import PathLike
 from pathlib import Path
 from typing import Any, cast
@@ -343,6 +343,54 @@ def test_record_event_rejects_a_naive_timestamp(tmp_path: Path) -> None:
         profile.record_event(con, _event(sense, KnowledgeState.KNOWN, naive_timestamp))
 
 
+def test_record_event_normalizes_the_timestamp_to_utc_before_storing(tmp_path: Path) -> None:
+    """Befund 1 (Review T9): `events_for_sense` sortiert den Zeitstempel lexikografisch als
+    TEXT — über verschiedene UTC-Versätze hinweg ist das nur dann die zeitliche Reihenfolge,
+    wenn `record_event` vor dem Speichern auf UTC normalisiert. Ein Ereignis um 10:30+02:00
+    (= 08:30 UTC) ist älter als eines um 09:00+00:00, auch wenn es zuletzt eingetragen wird
+    — der Kenntnisstand bleibt trotzdem der des früher eingetragenen, aber später liegenden
+    Ereignisses."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    book_id = profile.ensure_book(con, _BOOK)
+    _add_chapter(con, book_id)
+    sense = Sense(
+        lemma=Lemma(text="draw", pos="VERB"),
+        wikdict_sense="to pull out, unsheath",
+        wikdict_trans_list="ziehen | herausziehen",
+        wikdict_lexentry="eng/draw__Verb__1",
+    )
+    later_in_utc = datetime(2026, 8, 17, 9, 0, tzinfo=UTC)
+    earlier_with_offset = datetime(2026, 8, 17, 10, 30, tzinfo=timezone(timedelta(hours=2)))
+
+    profile.record_event(con, _event(sense, KnowledgeState.KNOWN, later_in_utc))
+    profile.record_event(con, _event(sense, KnowledgeState.DEFERRED, earlier_with_offset))
+
+    sense_id = profile.ensure_sense(con, sense)
+    assert profile.current_knowledge_state(con, sense_id) == KnowledgeState.KNOWN
+
+
+def test_events_for_sense_breaks_a_timestamp_tie_by_insertion_order(tmp_path: Path) -> None:
+    """technik.md §4, „jeweils jüngstes Ereignis je Bedeutung": Zwei Ereignisse mit
+    identischem Zeitstempel werden über die Einfügereihenfolge entschieden — das zuletzt
+    eingetragene Ereignis gilt als das jüngere (Befund 2, Review T9)."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    book_id = profile.ensure_book(con, _BOOK)
+    _add_chapter(con, book_id)
+    sense = Sense(
+        lemma=Lemma(text="draw", pos="VERB"),
+        wikdict_sense="to pull out, unsheath",
+        wikdict_trans_list="ziehen | herausziehen",
+        wikdict_lexentry="eng/draw__Verb__1",
+    )
+    timestamp = datetime(2026, 8, 17, tzinfo=UTC)
+
+    profile.record_event(con, _event(sense, KnowledgeState.KNOWN, timestamp))
+    profile.record_event(con, _event(sense, KnowledgeState.DEFERRED, timestamp))
+
+    sense_id = profile.ensure_sense(con, sense)
+    assert profile.current_knowledge_state(con, sense_id) == KnowledgeState.DEFERRED
+
+
 def test_recording_an_event_for_an_unknown_chapter_is_rejected(tmp_path: Path) -> None:
     """bauplan.md T8, Befund 6 (Review T8): `event.chapter_number` ist jetzt ein
     Fremdschlüssel auf `chapter(book_id, number)` — ein Ereignis zu einem Kapitel, das nie
@@ -374,3 +422,261 @@ def test_foreign_keys_pragma_is_enforced(tmp_path: Path) -> None:
             "VALUES (?, ?, ?, ?, ?, ?)",
             (999, "known", "triage", "2026-08-17T00:00:00+00:00", 999, 1),
         )
+
+
+def test_current_knowledge_state_is_none_for_a_sense_without_events(tmp_path: Path) -> None:
+    """bauplan.md T9, „Kenntnisstand als Sicht auf die Ereignisse": Eine Bedeutung ohne
+    jedes Ereignis hat keinen Kenntnisstand — das ist nicht dasselbe wie
+    `KnowledgeState.FORGOTTEN`, das selbst ein Ereignis wäre."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    sense = Sense(
+        lemma=Lemma(text="draw", pos="VERB"),
+        wikdict_sense="to pull out, unsheath",
+        wikdict_trans_list="ziehen | herausziehen",
+        wikdict_lexentry="eng/draw__Verb__1",
+    )
+    sense_id = profile.ensure_sense(con, sense)
+
+    assert profile.current_knowledge_state(con, sense_id) is None
+
+
+def test_current_knowledge_state_reflects_the_latest_event_by_timestamp(tmp_path: Path) -> None:
+    """bauplan.md T9, „Kenntnisstand als Sicht auf die Ereignisse": Der abgeleitete Stand
+    ist das jüngste Ereignis nach Zeitstempel, nicht das zuletzt eingetragene — ein
+    nachgetragenes, älteres Ereignis darf den bereits vorhandenen jüngeren Stand nicht
+    verdrängen."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    book_id = profile.ensure_book(con, _BOOK)
+    _add_chapter(con, book_id)
+    sense = Sense(
+        lemma=Lemma(text="forget", pos="VERB"),
+        wikdict_sense="fail to remember",
+        wikdict_trans_list="vergessen",
+        wikdict_lexentry="eng/forget__Verb__1",
+    )
+    newer = datetime(2026, 8, 17, tzinfo=UTC)
+    older = datetime(2026, 8, 10, tzinfo=UTC)
+
+    profile.record_event(con, _event(sense, KnowledgeState.KNOWN, newer))
+    profile.record_event(con, _event(sense, KnowledgeState.DEFERRED, older))
+
+    sense_id = profile.ensure_sense(con, sense)
+    assert profile.current_knowledge_state(con, sense_id) == KnowledgeState.KNOWN
+
+
+def test_compare_chapter_vocabulary_marks_a_never_seen_sense_as_unknown(tmp_path: Path) -> None:
+    """bauplan.md T9, Abgleich gegen den Kapitelwortschatz: Eine Bedeutung ohne jedes
+    Ereignis im Profil gilt als unbekannt."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    sense = Sense(
+        lemma=Lemma(text="forget", pos="VERB"),
+        wikdict_sense="fail to remember",
+        wikdict_trans_list="vergessen",
+        wikdict_lexentry="eng/forget__Verb__1",
+    )
+
+    result = profile.compare_chapter_vocabulary(con, [sense])
+
+    assert result[sense] == profile.VocabularyStatus.UNKNOWN
+
+
+def test_compare_chapter_vocabulary_marks_a_deferred_sense_as_unknown(tmp_path: Path) -> None:
+    """Abnahmekriterium 6: „bekannt" ist der abgeschlossene Zustand, nicht der begonnene —
+    eine zurückgestellte Bedeutung gilt beim Abgleich weiterhin als unbekannt und wird
+    erneut abgefragt (Befund 3, Review T9; konzept.md, „Zurückgestellte Wörter —
+    übersprungen, werden erneut gefragt")."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    book_id = profile.ensure_book(con, _BOOK)
+    _add_chapter(con, book_id)
+    sense = Sense(
+        lemma=Lemma(text="forget", pos="VERB"),
+        wikdict_sense="fail to remember",
+        wikdict_trans_list="vergessen",
+        wikdict_lexentry="eng/forget__Verb__1",
+    )
+    profile.record_event(con, _event(sense, KnowledgeState.DEFERRED, datetime.now(UTC)))
+
+    result = profile.compare_chapter_vocabulary(con, [sense])
+
+    assert result[sense] == profile.VocabularyStatus.UNKNOWN
+
+
+def test_compare_chapter_vocabulary_marks_a_forgotten_sense_as_unknown_again(
+    tmp_path: Path,
+) -> None:
+    """konzept.md Phase 3: Ein zunächst bekanntes Wort, das später als vergessen markiert
+    wurde, „wandert im Profil zurück auf unbekannt" — der Abgleich hält den zuletzt
+    eingetragenen Rückschritt fest, nicht die frühere Kenntnis (Befund 3, Review T9)."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    book_id = profile.ensure_book(con, _BOOK)
+    _add_chapter(con, book_id)
+    sense = Sense(
+        lemma=Lemma(text="forget", pos="VERB"),
+        wikdict_sense="fail to remember",
+        wikdict_trans_list="vergessen",
+        wikdict_lexentry="eng/forget__Verb__1",
+    )
+    earlier = datetime(2026, 8, 10, tzinfo=UTC)
+    later = datetime(2026, 8, 17, tzinfo=UTC)
+    profile.record_event(con, _event(sense, KnowledgeState.KNOWN, earlier))
+    profile.record_event(con, _event(sense, KnowledgeState.FORGOTTEN, later))
+
+    result = profile.compare_chapter_vocabulary(con, [sense])
+
+    assert result[sense] == profile.VocabularyStatus.UNKNOWN
+
+
+def test_compare_chapter_vocabulary_does_not_treat_a_deferred_sibling_as_known(
+    tmp_path: Path,
+) -> None:
+    """technik.md §4, „ob mindestens eine seiner Bedeutungen bekannt ist": Eine
+    zurückgestellte Geschwisterbedeutung zählt nicht als bekannt — die andere Bedeutung
+    bleibt unbekannt, statt als neue Bedeutung eines bekannten Wortes markiert zu werden
+    (Befund 3, Review T9)."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    book_id = profile.ensure_book(con, _BOOK)
+    _add_chapter(con, book_id)
+    lemma = Lemma(text="watch", pos="NOUN")
+    watch_clock = Sense(
+        lemma=lemma,
+        wikdict_sense=None,
+        wikdict_trans_list="Uhr | Armbanduhr",
+        wikdict_lexentry="eng/watch__Noun__1",
+    )
+    watch_guard = Sense(
+        lemma=lemma,
+        wikdict_sense="person or group of people who guard",
+        wikdict_trans_list="Wache",
+        wikdict_lexentry="eng/watch__Noun__2",
+    )
+    profile.record_event(con, _event(watch_clock, KnowledgeState.DEFERRED, datetime.now(UTC)))
+
+    result = profile.compare_chapter_vocabulary(con, [watch_clock, watch_guard])
+
+    assert result[watch_guard] == profile.VocabularyStatus.UNKNOWN
+
+
+def test_acceptance_6_known_words_are_not_asked_again(tmp_path: Path) -> None:
+    """Abnahmekriterium 6: Beim zweiten Durchlauf desselben Kapitels werden als bekannt
+    markierte Wörter nicht erneut abgefragt — das Profil greift."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    book_id = profile.ensure_book(con, _BOOK)
+    _add_chapter(con, book_id)
+    sense = Sense(
+        lemma=Lemma(text="bank", pos="NOUN"),
+        wikdict_sense="financial institution",
+        wikdict_trans_list="Bank",
+        wikdict_lexentry="eng/bank__Noun__1",
+    )
+
+    # erster Durchlauf: die Triage stuft die Bedeutung als bekannt ein
+    profile.record_event(con, _event(sense, KnowledgeState.KNOWN, datetime.now(UTC)))
+
+    # zweiter Durchlauf desselben Kapitels: derselbe Kapitelwortschatz wird erneut abgeglichen
+    result = profile.compare_chapter_vocabulary(con, [sense])
+
+    assert result[sense] == profile.VocabularyStatus.KNOWN
+
+
+def test_compare_chapter_vocabulary_marks_a_new_sense_of_a_known_lemma(tmp_path: Path) -> None:
+    """bauplan.md T9, Kennzeichnung „neue Bedeutung eines bekannten Wortes" (konzept.md §5,
+    „Mehrdeutigkeit"): watch als Uhr ist bekannt, watch als Wache noch nicht — die zweite
+    Bedeutung wird als neue Bedeutung eines bekannten Wortes markiert, nicht als
+    unbekanntes Wort."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    book_id = profile.ensure_book(con, _BOOK)
+    _add_chapter(con, book_id)
+    lemma = Lemma(text="watch", pos="NOUN")
+    watch_clock = Sense(
+        lemma=lemma,
+        wikdict_sense=None,
+        wikdict_trans_list="Uhr | Armbanduhr",
+        wikdict_lexentry="eng/watch__Noun__1",
+    )
+    watch_guard = Sense(
+        lemma=lemma,
+        wikdict_sense="person or group of people who guard",
+        wikdict_trans_list="Wache",
+        wikdict_lexentry="eng/watch__Noun__2",
+    )
+    profile.record_event(con, _event(watch_clock, KnowledgeState.KNOWN, datetime.now(UTC)))
+
+    result = profile.compare_chapter_vocabulary(con, [watch_clock, watch_guard])
+
+    assert result[watch_clock] == profile.VocabularyStatus.KNOWN
+    assert result[watch_guard] == profile.VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD
+
+
+def test_compare_chapter_vocabulary_does_not_mark_an_unrelated_lemma_as_a_new_meaning(
+    tmp_path: Path,
+) -> None:
+    """bauplan.md T9: Ein bekanntes Wort steckt eine andere Grundform nicht an — die
+    Kennzeichnung „neue Bedeutung eines bekannten Wortes" gilt nur innerhalb **derselben**
+    Grundform (konzept.md §5, „Mehrdeutigkeit"), nicht profilweit."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    book_id = profile.ensure_book(con, _BOOK)
+    _add_chapter(con, book_id)
+    sense_bank = Sense(
+        lemma=Lemma(text="bank", pos="NOUN"),
+        wikdict_sense="financial institution",
+        wikdict_trans_list="Bank",
+        wikdict_lexentry="eng/bank__Noun__1",
+    )
+    sense_forget = Sense(
+        lemma=Lemma(text="forget", pos="VERB"),
+        wikdict_sense="fail to remember",
+        wikdict_trans_list="vergessen",
+        wikdict_lexentry="eng/forget__Verb__1",
+    )
+    profile.record_event(con, _event(sense_bank, KnowledgeState.KNOWN, datetime.now(UTC)))
+
+    result = profile.compare_chapter_vocabulary(con, [sense_bank, sense_forget])
+
+    assert result[sense_forget] == profile.VocabularyStatus.UNKNOWN
+
+
+def test_compare_chapter_vocabulary_does_not_mark_a_different_pos_as_a_new_meaning(
+    tmp_path: Path,
+) -> None:
+    """bauplan.md T9, der `saw`-Fall (technik.md, „Warum die Reihenfolge zwingend ist"):
+    `watch` als Substantiv (Uhr) bekannt zu markieren, steckt `watch` als Verb (beobachten)
+    nicht an — dieselbe Grundform mit anderer Wortart ist eine andere Lemma-Identität
+    (Befund 4, Review T9)."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    book_id = profile.ensure_book(con, _BOOK)
+    _add_chapter(con, book_id)
+    watch_noun = Sense(
+        lemma=Lemma(text="watch", pos="NOUN"),
+        wikdict_sense=None,
+        wikdict_trans_list="Uhr | Armbanduhr",
+        wikdict_lexentry="eng/watch__Noun__1",
+    )
+    watch_verb = Sense(
+        lemma=Lemma(text="watch", pos="VERB"),
+        wikdict_sense="to look at attentively",
+        wikdict_trans_list="beobachten | zusehen",
+        wikdict_lexentry="eng/watch__Verb__1",
+    )
+    profile.record_event(con, _event(watch_noun, KnowledgeState.KNOWN, datetime.now(UTC)))
+
+    result = profile.compare_chapter_vocabulary(con, [watch_verb])
+
+    assert result[watch_verb] == profile.VocabularyStatus.UNKNOWN
+
+
+def test_compare_chapter_vocabulary_does_not_create_a_row_for_an_unseen_sense(
+    tmp_path: Path,
+) -> None:
+    """bauplan.md T9: Der Abgleich ist ein reiner Lesezugriff — eine Bedeutung, die im
+    Profil noch nie ein Ereignis hatte, bekommt dadurch keine eigene Zeile."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    sense = Sense(
+        lemma=Lemma(text="draw", pos="VERB"),
+        wikdict_sense="to pull out, unsheath",
+        wikdict_trans_list="ziehen | herausziehen",
+        wikdict_lexentry="eng/draw__Verb__1",
+    )
+
+    profile.compare_chapter_vocabulary(con, [sense])
+
+    assert con.execute("SELECT count(*) FROM sense").fetchone()[0] == 0

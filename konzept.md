@@ -59,6 +59,16 @@ EPUB einlesen  →  Kapitel wählen  →  Wortschatz extrahieren
 > **Die Abschnittsnummern bleiben**, damit die Verweise aus technik.md gültig bleiben.
 > Geändert hat sich die Reihenfolge, nicht die Sache: Abschnitt 5 beschreibt weiterhin
 > denselben Hybrid, er läuft nur früher.
+>
+> **Nachtrag 18.08.2026 — Folge für „Gegen das Profil filtern".** Der Abgleich gegen das
+> Profil (technik.md §4, „Kernentscheidung: Kenntnis pro Bedeutung, nicht pro Wort")
+> vergleicht auf Ebene der Bedeutung, nicht der Grundform — sonst könnte er „neue Bedeutung
+> eines bekannten Wortes" gar nicht erkennen. Er setzt damit bereits aufgelöste Bedeutungen
+> voraus und läuft folglich **nach** „Bedeutungen beschaffen", nicht davor, wie es das
+> Diagramm oben suggeriert. Das ist mit dem Nachtrag vom 17.08.2026 verträglich (die
+> Bedeutungen stehen ohnehin vor der Triage fest) und wurde bei dessen Formulierung nicht
+> ausgesprochen; festgehalten bei T9 (bauplan.md), Befund 5, Review T9, damit T15 die
+> Reihenfolge nicht neu entscheidet.
 
 ### 1. Buch einlesen
 EPUB öffnen, Metadaten (Titel, Autor) und die Kapitelstruktur auslesen. Fließtext von
