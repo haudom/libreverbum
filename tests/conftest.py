@@ -21,6 +21,10 @@ Dieses Modul legt dafür drei Vorrichtungen an, alle auf `tmp_path`:
 Dazu die Marken `needs_dictionary` und `needs_model`: Tests, die das echte Wörterbuch
 beziehungsweise einen echten Modellserver brauchen, werden ohne die Voraussetzung
 übersprungen statt zu scheitern.
+
+Die Marke `needs_epub` (bauplan.md T12) folgt demselben Muster für die beiden
+Gutenberg-EPUBs `tools/sherlock.epub` und `tools/dorian_gray.epub`, an denen technik.md
+§8 die Navigationsauswertung gemessen hat.
 """
 
 from __future__ import annotations
@@ -488,9 +492,23 @@ def _real_model_url() -> str | None:
     return os.environ.get("LIBREVERBUM_MODEL_URL")
 
 
+def _real_epub_paths() -> dict[str, Path]:
+    tools_dir = Path(__file__).resolve().parent.parent / "tools"
+    return {"sherlock": tools_dir / "sherlock.epub", "dorian_gray": tools_dir / "dorian_gray.epub"}
+
+
+@pytest.fixture
+def real_epub_paths() -> dict[str, Path]:
+    """Pfade zu `tools/sherlock.epub` und `tools/dorian_gray.epub` — den beiden Dateien,
+    an denen technik.md §8 die Navigationsauswertung gemessen hat (bauplan.md T12).
+    Dieselbe Stelle, gegen die auch `pytest_collection_modifyitems` die Marke
+    `needs_epub` prüft."""
+    return _real_epub_paths()
+
+
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
-    """Überspringt `needs_dictionary`- und `needs_model`-Tests ohne ihre Voraussetzung,
-    statt sie scheitern zu lassen (bauplan.md, T2)."""
+    """Überspringt `needs_dictionary`-, `needs_model`- und `needs_epub`-Tests ohne ihre
+    Voraussetzung, statt sie scheitern zu lassen (bauplan.md, T2 und T12)."""
     if not _real_dictionary_path().exists():
         skip_dictionary = pytest.mark.skip(reason="echtes Wörterbuch tools/en-de.sqlite3 fehlt")
         for item in items:
@@ -503,3 +521,10 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
         for item in items:
             if item.get_closest_marker("needs_model") is not None:
                 item.add_marker(skip_model)
+    if not all(path.is_file() for path in _real_epub_paths().values()):
+        skip_epub = pytest.mark.skip(
+            reason="echte EPUB-Dateien tools/sherlock.epub, tools/dorian_gray.epub fehlen"
+        )
+        for item in items:
+            if item.get_closest_marker("needs_epub") is not None:
+                item.add_marker(skip_epub)

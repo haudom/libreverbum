@@ -1,6 +1,6 @@
 # LibreVerbum — Nacharbeit
 
-> Stand: 17.08.2026 · Befunde aus dem Bau von T3, T4, T5 und T8, die **nicht** in die
+> Stand: 18.08.2026 · Befunde aus dem Bau von T3, T4, T5, T8 und T12, die **nicht** in die
 > jeweilige Teilaufgabe gehören. Zwei Arten: Änderungen an den Regeln und der Arbeitsweise
 > (Teil A), Nachträge an den Dokumenten aus gemessenen Ergebnissen (Teil B).
 >
@@ -66,6 +66,32 @@ LF in CRLF — gezeigt hat es allein der Hash-Vergleich, nicht der Augenschein.
 
 **Vorschlag:** Ein Satz in dokumentation.md §5 — wer an einer unversionierten Datei
 verfälscht, sichert sie binär und prüft die Wiederherstellung per Hash.
+
+## A10 — leicht · Der EPUB-3-Zweig wird an keiner Fremdquelle geprüft
+
+**Beobachtet (Review T12, 18.08.2026).** In `tools/` liegen nur `sherlock.epub` und
+`dorian_gray.epub` — beide EPUB 2.0 mit `toc.ncx` und ohne `nav.xhtml` (nachgeprüft). Der
+gesamte EPUB-3-Pfad in `libreverbum/epub.py` (`_read_nav`, `properties="nav"`,
+`epub:type`) läuft deshalb nur gegen die selbstgebaute Vorrichtung, nie gegen ein echtes
+Buch — genau die Konstellation, vor der dokumentation.md §5 warnt („Die Vorrichtung zeigt,
+dass der Code läuft; die Fremdquelle zeigt, ob er stimmt").
+
+**Vorschlag:** keine Codeänderung. Optional der Hinweis an den Nutzer, eine EPUB-3-Datei
+aus seinem Bestand nach `tools/` zu legen (laut technik.md §8 sind die beiden dort
+gemessenen Manga-Bände 3.0); die Marke `needs_epub` müsste dann um sie erweitert werden.
+
+## A11 — leicht · `_text_of` nimmt nur den ersten Treffer
+
+**Beobachtet (Review T12, 18.08.2026).** `_text_of` in `libreverbum/epub.py` liest mit
+`root.find` nur das erste `dc:title` beziehungsweise `dc:creator`. Ist das erste `dc:title`
+leer (kommt bei Konvertaten vor, die ein leeres `dc:title` voranstellen und den echten
+Titel als zweites führen), bricht `read_structure` mit „nennt keinen Titel" ab, obwohl die
+Datei einen hat. Bei mehreren `dc:creator` (Ko-Autoren, Übersetzer) fallen die weiteren
+still weg.
+
+**Vorschlag:** `findall` statt `find`, den ersten nichtleeren Text nehmen. Für
+`dc:creator` genügt dasselbe — mehrere Autoren zusammenzuführen wäre Vorratsarbeit
+(Regel 14), `entities.Book.author` ist ein einzelnes Feld.
 
 > **A6 gestrichen am 17.08.2026** (Parallelität erzeugt Phantomfehler): als Absprache
 > erledigt, der Dokumentteil ist in A8 aufgegangen.

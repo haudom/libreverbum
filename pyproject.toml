@@ -80,4 +80,5 @@ pythonpath = ["."]
 markers = [
     "needs_dictionary: benötigt die echte WikDict-Datenbank (tools/en-de.sqlite3)",
     "needs_model: benötigt einen erreichbaren, echten Modellserver (LIBREVERBUM_MODEL_URL)",
+    "needs_epub: benötigt die echten EPUBs tools/sherlock.epub und tools/dorian_gray.epub",
 ]
