@@ -373,6 +373,60 @@ nicht bei T5. Und **kein Zwischenspeicher**: Regel 14 verlangt für einen solche
 gemessenen Anlass, und die Messung zeigt auf den fehlenden Index, nicht auf einen zweiten
 Datenbestand.
 
+### Nachtrag 18.08.2026: zwei Drittel der Grundformen eines Kapitels sind mehrdeutig
+
+Die erste der beiden Zahlen, die bauplan.md unter E10 offen hielt. Gemessen mit
+[`tools/ambiguity_check.py`](tools/ambiguity_check.py) an beiden Romanen, jedes Kapitel
+einzeln — 32 Kapitel, 32.409 Grundformen — über `extraction.extract_vocabulary` (T3) und
+`dictionary.candidates` (T5), also nach den dort geltenden Regeln samt Regel 1:
+
+| je Kapitel | Sherlock Holmes (12 Kapitel) | Dorian Gray (20 Kapitel) |
+|---|---|---|
+| Grundformen im Mittel | 1.368 | 800 |
+| ohne Wörterbucheintrag | 7,2 % | 7,6 % |
+| eindeutig — genau eine Bedeutung | 26,9 % | 26,4 % |
+| **mehrdeutig — mehr als eine** | **65,8 %** | **66,0 %** |
+| Median aller Grundformen mit Eintrag | 2 | 2 |
+| Median unter den mehrdeutigen | 3 | 3 |
+
+Beide Bücher ergeben dieselbe Verteilung, und die dicken Enden sind schmal:
+
+| Bedeutungen | Sherlock Holmes | Dorian Gray |
+|---|---|---|
+| 2 | 21,6 % | 20,5 % |
+| 3 bis 5 | 31,2 % | 31,6 % |
+| 6 bis 10 | 10,8 % | 11,1 % |
+| über 10 | 2,2 % | 2,7 % |
+
+Die längsten Listen sind in beiden Texten dieselben Wörter: `break` 31, `run` 25,
+`right` 23, `get` 20, `line` 19, `head` 17. Die 48 Bedeutungen von `run` aus dem offenen
+Punkt unten sind die Zahl **ohne** Wortartfilter — mit ihm bleiben 25.
+
+> **Antwort auf die Frage aus E10: eine Triage-Entscheidung je Wort genügt.**
+
+Nicht, weil die Mehrdeutigkeit selten wäre — sie ist der Normalfall —, sondern weil der
+Kernablauf je Kapitel und Grundform ohnehin nur **eine** Bedeutung erzeugt:
+`extract_vocabulary` liefert ein einziges `Occurrence` je Grundform mit einer gewählten
+Wortart und einem Belegsatz, und `translation` wählt daraus genau eine Bedeutung. Eine
+Entscheidung je Bedeutung hieße, dem Nutzer alle Zeilen des Stichworts vorzulegen: **97.416
+statt 32.409** Einträgen, Faktor **3,0** (Sherlock) beziehungsweise **3,1** (Dorian) — für
+Sherlock rund 4.000 statt 1.370 Einträge je Kapitel. Abnahmekriterium 7 (Triage in unter
+zehn Minuten) ist so nicht mehr erreichbar, und der Zugewinn wäre gering: Über eine
+Bedeutung, die im Kapitel gar nicht vorkommt, kann der Nutzer nichts sagen.
+
+Was die Zahl **doch** verlangt: Die Triage darf nicht bloß das Wort zeigen. Bei zwei
+Dritteln der Einträge entscheidet der Nutzer sonst über ein Stichwort, dessen gemeinte
+Bedeutung er nicht sieht. Die gewählte Bedeutung samt Belegsatz gehört also in die
+Anzeige — das ist Darstellung, keine zweite Entscheidung.
+
+Offen bleibt davon unberührt der Fall, dass dieselbe Grundform **innerhalb eines Kapitels**
+in zwei Bedeutungen vorkommt (`bank` als Ufer und als Geldhaus). `extract_vocabulary` fasst
+ihn bewusst zu einem Eintrag zusammen (`extraction.py`, Moduldocstring „Regeln"); wie oft
+das eintritt, sagt diese Messung nicht — dafür müsste das Modell je Vorkommen laufen.
+Dauerhaft verloren geht dabei nichts: Das Profil führt Kenntnis je Bedeutung (Abschnitt 4),
+die zweite Bedeutung erscheint im nächsten Kapitel als „neue Bedeutung eines bekannten
+Wortes" (Abnahmekriterium 6).
+
 ### Zwingende Einstellung: Denkschritt abschalten
 
 Qwen 3.5 denkt in Ollama standardmäßig mit. Ohne Gegenmaßnahme verbraucht das Modell
@@ -433,13 +487,34 @@ Siehe Abschnitt „Warum die Reihenfolge zwingend ist".
 
 ### Offene Punkte
 
+- **Skaliert das Bündeln beim Modell?** Die zweite Zahl zu E10 (bauplan.md, Tor 0) und die
+  Fortschreibung der Messung unten in „Beurteilen statt erzeugen": 12 Sekunden für 16
+  Urteile in einer einzigen Anfrage — gilt das auch für 32 und 64? Am 18.08.2026 nicht
+  messbar: Der Modellserver unter `192.168.2.129:11434` war nicht erreichbar (weder TCP
+  noch Ping, der Rechner stand nicht im Netz), und keine der üblichen örtlichen Adressen
+  aus `tools/sense_check.py` antwortete. Die Messung bleibt offen und mit ihr **T11**
+- **`candidates()` vergleicht Groß- und Kleinschreibung binär — ob das bleiben soll, ist
+  nicht entschieden.** Gemessen beim Review zu T7 an `tools/en-de.sqlite3`: `'polish'`
+  findet 6 Zeilen, case-insensitiv 8; `'german'` 3 gegen 12. **11,3 % der 84.167
+  einwortigen Zeilen mit `lexentry` sind großgeschrieben** (`German`, `Polish`, `China`,
+  …), und T3 schreibt jede Grundform klein (`token.lemma_.lower()`) — für `candidates`
+  sind diese Zeilen damit unerreichbar. Anders als bei den Wendungen, wo `COLLATE NOCASE`
+  entschieden ist (`dictionary._lookup_matches`, Befund 2 Review T7), trägt der Unterschied
+  hier Bedeutung: `Polish` (die Nationalität, score 202,5) und `polish` (polieren, 135,0)
+  sind **verschiedene Einträge**, nicht dieselbe Zeile in zwei Schreibungen. Wer stumpf
+  case-insensitiv nachschlägt, mischt sie; wer es lässt, verliert die großgeschriebenen
+  ganz. Zu entscheiden beim Einfalten
 - **Ausweichantwort „keine passt"** in die Auswahlliste aufnehmen. Der `saw`-Fall zeigt,
   dass das Modell sonst kein Mittel hat, einen Fehler der Vorstufe zu melden. Mit dieser
   Möglichkeit wird aus einem stillen Fehler ein markierter Eintrag — das Konzept sieht
   Markierung bei Unsicherheit ohnehin vor
 - **Sehr lange Auswahllisten**: `run` hat 48 Bedeutungen, `draw` 16, `light` 14. Ob das
-  die Trefferquote drückt, ist noch nicht gemessen. Naheliegende Abhilfe: nach der von
-  spaCy bestimmten Wortart vorfiltern, das halbiert die Liste oft
+  die Trefferquote drückt, ist noch nicht gemessen — das bleibt der Messauftrag aus T18 und
+  braucht den Modellserver. Die **Verkürzung** durch den Wortartfilter ist es dagegen seit
+  dem Nachtrag 18.08.2026 oben: `run` fällt von 48 auf 25, und über 32 Kapitel sinkt der
+  Anteil mehrdeutiger Grundformen von 75,4 % auf 65,8 % (Sherlock) beziehungsweise von
+  76,7 % auf 66,0 % (Dorian). Der Filter halbiert also einzelne lange Listen, verschiebt
+  aber die Verteilung im Ganzen nur um rund zehn Punkte
 - **Die Wortart als Filter schließt mehr aus als gedacht.** Gemessen am 17.08.2026 über
   ganz `tools/sherlock.txt` (5.544 Grundformen): **181 (3,3 %)** bekommen eine leere
   Auswahlliste, obwohl ihr Stichwort im Wörterbuch steht — gegenüber 480 Grundformen, die
