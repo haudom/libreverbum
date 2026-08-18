@@ -5,9 +5,9 @@ Arbeitsanweisung für Claude Code in diesem Repository.
 ## Was das Projekt ist
 
 LibreVerbum bereitet den Wortschatz eines Buchkapitels **vor dem Lesen** auf: EPUB
-einlesen → Kapitel wählen → Wortschatz extrahieren → gegen das Nutzerprofil filtern →
-Bedeutungen beschaffen (Wörterbuch + LLM) → Triage durch den Nutzer → Export nach Anki
-und Druck. Einzelheiten in [konzept.md](konzept.md).
+einlesen → Kapitel wählen → Wortschatz extrahieren → Bedeutungen beschaffen (Wörterbuch +
+LLM) → gegen das Nutzerprofil filtern → Triage durch den Nutzer → Export nach Anki und
+Druck. Einzelheiten in [konzept.md](konzept.md).
 
 **Stand:** steht nicht hier, sondern in [bauplan.md](bauplan.md) und in `git log`. Eine
 Momentaufnahme in Prosa veraltet mit jeder Teilaufgabe, und diese Datei liest jeder
