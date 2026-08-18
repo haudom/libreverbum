@@ -1,5 +1,6 @@
 """Prüft `libreverbum/dictionary.py` — bauplan.md T5, Auswahlliste je Grundform und
-Wortart, und bauplan.md T6, Erstbezug der Wörterbuchdatei."""
+Wortart, bauplan.md T6, Erstbezug der Wörterbuchdatei, und bauplan.md T7, Abgleich der
+Mehrwortausdruck-Kandidaten aus T4."""
 
 from __future__ import annotations
 
@@ -15,7 +16,7 @@ from typing import Literal, cast
 import pytest
 
 from libreverbum import dictionary
-from libreverbum.entities import Lemma
+from libreverbum.entities import Lemma, Sense
 
 
 def test_rule_1_watch_keeps_its_headline_meaning_without_sense_text(
@@ -175,6 +176,286 @@ def test_two_rows_with_same_lexentry_but_different_meaning_stay_distinct(
     assert len(set(result)) == len(result) == 2
 
 
+# ------------------------------------------------- Mehrwortausdrücke (bauplan.md T7)
+
+
+def _own_dictionary(path: Path, rows: list[tuple[object, ...]]) -> None:
+    """Baut eine eigene, kleine Wörterbuchdatei für einen einzelnen Test auf (wie bei
+    `test_candidates_are_sorted_by_score_descending`) — für Fälle, die `mini_dictionary_db`
+    nicht abdeckt und die die gemeinsame, von einem zweiten Bearbeiter nicht angefasste
+    Vorrichtung deshalb nicht bekommen soll."""
+    con = sqlite3.connect(path)
+    con.execute(
+        "CREATE TABLE translation("
+        "lexentry, sense_num, sense, written_rep TEXT, trans_list, score, is_good, importance"
+        ")"
+    )
+    con.executemany("INSERT INTO translation VALUES (?, ?, ?, ?, ?, ?, ?, ?)", rows)
+    con.commit()
+    con.close()
+
+
+def test_missing_dictionary_file_is_a_visible_failure_for_contiguous_candidates(
+    tmp_path: Path,
+) -> None:
+    """Regel 13 (dokumentation.md §4): eine fehlende Wörterbuchdatei ergibt bei
+    `contiguous_candidates` denselben sichtbaren Fehlschlag wie bei `candidates` — kein
+    leerer Kandidat, sondern ein vollständig fehlendes Wörterbuch."""
+    missing = tmp_path / "en-de.sqlite3"
+
+    with pytest.raises(FileNotFoundError):
+        dictionary.contiguous_candidates(missing, [Lemma(text="give up", pos="")])
+
+
+def test_missing_dictionary_file_is_a_visible_failure_for_particle_verb_candidates(
+    tmp_path: Path,
+) -> None:
+    """Regel 13 (dokumentation.md §4): derselbe sichtbare Fehlschlag bei
+    `particle_verb_candidates`."""
+    missing = tmp_path / "en-de.sqlite3"
+
+    with pytest.raises(FileNotFoundError):
+        dictionary.particle_verb_candidates(missing, [Lemma(text="give up", pos="VERB")])
+
+
+def test_contiguous_candidates_drop_entries_without_a_dictionary_match(
+    mini_dictionary_db: Path,
+) -> None:
+    """Befund 1 (Review T7): Ein Kandidat aus `extraction.extract_contiguous_candidates`
+    ohne bestandenen Filter — kein Eintrag, score unter der Schwelle, oder `Proper_noun` —
+    wird verworfen, nicht markiert; die n-Gramm-Hypothese verschwindet einfach, wie es der
+    Filter aus technik.md, „Messung: Mehrwortausdrücke" verlangt. `south america`
+    kleingeschrieben (Befund 2, so wie T4 die Grundform wirklich liefert) prüft dabei die
+    case-insensitive Suche und den `Proper_noun`-Filter in einem Zug: Nur wer die
+    großgeschriebene Zeile überhaupt findet, kann sie auch als `Proper_noun` ausschließen.
+    Eine einzige Liste für vier Kandidaten prüft außerdem, dass die Rückgabe in der
+    Reihenfolge der Eingabe steht (Befund 5, Review T7)."""
+    lemmas = [
+        Lemma(text="give up", pos="VERB"),
+        Lemma(text="completely unknown phrase", pos=""),
+        Lemma(text="of the", pos=""),
+        Lemma(text="south america", pos=""),
+    ]
+
+    result = dictionary.contiguous_candidates(mini_dictionary_db, lemmas)
+
+    assert len(result) == 4
+    assert {sense.wikdict_trans_list for sense in result[0]} == {
+        "aufgeben | kapitulieren",
+        "aufgeben | ergeben",
+    }
+    assert result[1] == []
+    assert result[2] == []
+    assert result[3] == []
+
+
+def test_particle_verb_candidates_mark_entries_without_a_dictionary_match_as_uncertain(
+    mini_dictionary_db: Path,
+) -> None:
+    """Befund 1 (Review T7): Ein Kandidat aus `extraction.extract_particle_verb_candidates`
+    ohne bestandenen Filter wird als `uncertain` markiert (Regel 10, Regel 11), nicht
+    verworfen — anders als bei `contiguous_candidates`, geprüft an derselben Liste mit
+    denselben drei Gründen, an einem Kandidaten zu scheitern (kein Eintrag, score unter der
+    Schwelle, `Proper_noun`), plus derselben Reihenfolgeprüfung (Befund 5, Review T7)."""
+    lemmas = [
+        Lemma(text="give up", pos="VERB"),
+        Lemma(text="completely unknown phrase", pos=""),
+        Lemma(text="of the", pos=""),
+        Lemma(text="south america", pos=""),
+    ]
+
+    result = dictionary.particle_verb_candidates(mini_dictionary_db, lemmas)
+
+    assert len(result) == 4
+    assert len(result[0]) == 2
+    assert all(sense.uncertain is False for sense in result[0])
+    for lemma, matches in zip(lemmas[1:], result[1:], strict=True):
+        assert len(matches) == 1
+        assert matches[0].uncertain is True
+        assert matches[0].lemma == lemma
+        assert matches[0].wikdict_sense is None
+        assert matches[0].wikdict_trans_list is None
+
+
+def test_contiguous_candidates_are_sorted_by_score_descending(tmp_path: Path) -> None:
+    """bauplan.md T7, wie bei T5 (test_candidates_are_sorted_by_score_descending): die
+    Auswahlliste steht nach score absteigend. Eigens aufgebaute Vorrichtung mit einer
+    Einfügereihenfolge, die genau umgekehrt zu score ist, damit der Test ohne
+    `ORDER BY score DESC` tatsächlich fehlschlägt."""
+    path = tmp_path / "en-de.sqlite3"
+    _own_dictionary(
+        path,
+        [
+            ("eng/phrase__Verb__1", None, "lowest", "some phrase", "niedrig", 51.0, 1, 1.0),
+            ("eng/phrase__Verb__1", None, "highest", "some phrase", "hoch", 99.0, 1, 1.0),
+            ("eng/phrase__Verb__1", None, "middle", "some phrase", "mittel", 75.0, 1, 1.0),
+        ],
+    )
+
+    result = dictionary.contiguous_candidates(path, [Lemma(text="some phrase", pos="VERB")])
+
+    assert [s.wikdict_sense for s in result[0]] == ["highest", "middle", "lowest"]
+
+
+def test_lowercase_candidate_matches_capitalised_dictionary_entry_regardless_of_case(
+    tmp_path: Path,
+) -> None:
+    """Befund 2 (Review T7): T4 liefert jede Grundform kleingeschrieben
+    (`extraction.py`, `token.lemma_.lower()`), WikDicts `written_rep` ist schreibungsecht
+    (`New York`, nicht `new york`) — ohne case-insensitiven Vergleich fände `new york` die
+    Zeile nie. Eigene Vorrichtung, weil `mini_dictionary_db` keine großgeschriebene
+    Mehrwortzeile ohne `Proper_noun` enthält, an der sich das prüfen ließe."""
+    path = tmp_path / "en-de.sqlite3"
+    _own_dictionary(
+        path,
+        [
+            (
+                "eng/New_York__Noun__1",
+                None,
+                "city in the United States",
+                "New York",
+                "New York",
+                163.6,
+                1,
+                1.0,
+            )
+        ],
+    )
+
+    result = dictionary.particle_verb_candidates(path, [Lemma(text="new york", pos="")])
+
+    assert len(result[0]) == 1
+    assert result[0][0].uncertain is False
+    assert result[0][0].wikdict_trans_list == "New York"
+
+
+def test_rule_1_row_without_sense_text_is_not_filtered_for_multiword_candidates(
+    tmp_path: Path,
+) -> None:
+    """Regel 1 (dokumentation.md §4), Befund 4 (Review T7): `put up with` steht in
+    `tools/en-de.sqlite3` ohne `sense`-Text (score 101,7) — die Abfrage aus T7 darf solche
+    Zeilen nicht wegfiltern, genau wie `candidates` aus T5. Eigene Vorrichtung, wie vom
+    Review vorgeschlagen, weil `mini_dictionary_db` keine mehrwortige Zeile ohne
+    `sense`-Text enthält und von einem zweiten Bearbeiter nicht angefasst wird."""
+    path = tmp_path / "en-de.sqlite3"
+    _own_dictionary(
+        path,
+        [
+            (
+                "eng/put_up_with__Verb__1",
+                None,
+                None,
+                "put up with",
+                "ertragen | aushalten | akzeptieren",
+                101.7,
+                1,
+                1.0,
+            )
+        ],
+    )
+
+    result = dictionary.contiguous_candidates(path, [Lemma(text="put up with", pos="VERB")])
+
+    assert len(result[0]) == 1
+    assert result[0][0].wikdict_sense is None
+    assert result[0][0].wikdict_trans_list == "ertragen | aushalten | akzeptieren"
+
+
+def test_uncertain_placeholder_has_a_different_label_than_a_real_rule_1_row() -> None:
+    """Befund 3 (Review T7): Der Platzhalter für einen Mehrwortausdruck-Kandidaten ohne
+    Wörterbucheintrag (`uncertain=True`, kein `wikdict_sense`) darf nicht dieselbe
+    Beschriftung tragen wie eine echte Regel-1-Zeile ohne `sense`-Text — sonst sähe ein
+    leeres Übersetzungsfeld in der Auswahlliste (T11) wie eine belegte Hauptbedeutung aus."""
+    real_rule_1_row = Sense(
+        lemma=Lemma(text="watch", pos="NOUN"), wikdict_trans_list="Uhr | Armbanduhr"
+    )
+    uncertain_placeholder = Sense(lemma=Lemma(text="unknown phrase", pos=""), uncertain=True)
+
+    assert dictionary.label(real_rule_1_row) == dictionary.NO_SENSE_LABEL
+    assert dictionary.label(uncertain_placeholder) == dictionary.UNCERTAIN_LABEL
+    assert dictionary.label(real_rule_1_row) != dictionary.label(uncertain_placeholder)
+
+
+@pytest.mark.needs_dictionary
+def test_give_up_passes_the_filter_against_real_dictionary(real_dictionary_path: Path) -> None:
+    """technik.md, „Messung: Mehrwortausdrücke": `give up` liegt in `tools/en-de.sqlite3`
+    bei score 120,0 und besteht den Filter — dieselbe Behauptung wie an der Vorrichtung,
+    zusätzlich gegen die echte Datei geprüft (dokumentation.md §5, „Woran geprüft wird")."""
+    result = dictionary.particle_verb_candidates(
+        real_dictionary_path, [Lemma(text="give up", pos="VERB")]
+    )
+
+    assert len(result[0]) > 1
+    assert all(sense.uncertain is False for sense in result[0])
+
+
+@pytest.mark.needs_dictionary
+def test_take_up_is_marked_uncertain_against_real_dictionary(real_dictionary_path: Path) -> None:
+    """technik.md §3, „Grenze: rund ein Fünftel der Phrasal Verbs steht getrennt": `take
+    up` steht zwar in `tools/en-de.sqlite3`, aber keine seiner Zeilen erreicht score 50 —
+    der Filter markiert den Kandidaten trotzdem als unsicher, statt ihn stillschweigend mit
+    einer der niedrig bewerteten Zeilen zu übersetzen."""
+    result = dictionary.particle_verb_candidates(
+        real_dictionary_path, [Lemma(text="take up", pos="VERB")]
+    )
+
+    assert len(result[0]) == 1
+    assert result[0][0].uncertain is True
+
+
+@pytest.mark.needs_dictionary
+def test_indian_summer_lowercase_matches_capitalised_entry_against_real_dictionary(
+    real_dictionary_path: Path,
+) -> None:
+    """Befund 2 (Review T7): `indian summer` kleingeschrieben — so, wie T4 die Grundform
+    wirklich liefert (`token.lemma_.lower()`) — findet in `tools/en-de.sqlite3` die
+    großgeschriebene Zeile `Indian summer` (`Noun`, score 112,1) und wird nicht `uncertain`.
+    Vor der Behebung liefert die binäre Abfrage keinen Treffer."""
+    result = dictionary.particle_verb_candidates(
+        real_dictionary_path, [Lemma(text="indian summer", pos="")]
+    )
+
+    assert len(result[0]) >= 1
+    assert all(sense.uncertain is False for sense in result[0])
+
+
+@pytest.mark.needs_dictionary
+def test_great_britain_lowercase_is_marked_uncertain_against_real_dictionary(
+    real_dictionary_path: Path,
+) -> None:
+    """Befund 2 (Review T7): `great britain` kleingeschrieben findet in
+    `tools/en-de.sqlite3` trotz case-insensitiver Suche keine Lernvokabel — die Zeile
+    `Great Britain` (score 210,0) ist `Proper_noun` und bleibt deshalb `uncertain`, wie
+    schon vor der Behebung, aber jetzt, weil der Filter greift, nicht weil die Suche die
+    Zeile verfehlt."""
+    result = dictionary.particle_verb_candidates(
+        real_dictionary_path, [Lemma(text="great britain", pos="")]
+    )
+
+    assert len(result[0]) == 1
+    assert result[0][0].uncertain is True
+
+
+@pytest.mark.needs_dictionary
+def test_put_up_with_row_without_sense_text_is_not_filtered_against_real_dictionary(
+    real_dictionary_path: Path,
+) -> None:
+    """Regel 1 (dokumentation.md §4), Befund 4 (Review T7): `put up with` hat in
+    `tools/en-de.sqlite3` genau eine Zeile ohne `sense`-Text (score 101,7) — dieselbe
+    Behauptung wie an der eigenen Vorrichtung
+    (test_rule_1_row_without_sense_text_is_not_filtered_for_multiword_candidates),
+    zusätzlich gegen die echte Datei geprüft. Entsteht laut `extraction.py` als eigener
+    3-Gramm-Kandidat, deshalb hier über `contiguous_candidates`."""
+    result = dictionary.contiguous_candidates(
+        real_dictionary_path, [Lemma(text="put up with", pos="VERB")]
+    )
+
+    assert len(result[0]) == 1
+    assert result[0][0].wikdict_sense is None
+    assert result[0][0].wikdict_trans_list
+    assert result[0][0].uncertain is False
+
+
 # ---------------------------------------------------- Erstbezug (bauplan.md T6) — Attrappe
 
 # Örtliche Attrappe des HTTP-Bezugs statt eines echten Zugriffs auf download.wikdict.com
@@ -298,6 +579,7 @@ def test_fetch_dictionary_downloads_verifies_and_indexes_a_missing_file(
     finally:
         con.close()
     assert dictionary.INDEX_NAME in indexes
+    assert dictionary.INDEX_NAME_NOCASE in indexes
     # keine Nebendatei bleibt liegen, die den Erstbezug ein zweites Mal auslöste
     assert not target.with_name(target.name + ".part").exists()
 
@@ -426,6 +708,7 @@ def test_existing_file_gets_indexed_even_though_it_is_not_downloaded(
     finally:
         con.close()
     assert dictionary.INDEX_NAME in indexes
+    assert dictionary.INDEX_NAME_NOCASE in indexes
 
 
 def test_file_without_expected_table_is_a_visible_failure(tmp_path: Path) -> None:
@@ -473,21 +756,49 @@ def test_ensure_index_fails_visibly_and_in_german_on_a_read_only_file(
 
 
 def test_index_is_created_and_not_created_twice(mini_dictionary_db: Path) -> None:
-    """Auftrag T6, Tests: Der Index entsteht und wird nicht doppelt angelegt — ein zweiter
-    Aufruf auf derselben Datei bleibt folgenlos statt mit „index already exists"
+    """Auftrag T6, Tests: Beide Indizes (Befund 2, Review T7: zweiter Index für den
+    case-insensitiven Vergleich) entstehen und werden nicht doppelt angelegt — ein
+    zweiter Aufruf auf derselben Datei bleibt folgenlos statt mit „index already exists"
     abzubrechen."""
     dictionary.ensure_index(mini_dictionary_db)
     dictionary.ensure_index(mini_dictionary_db)
 
     con = sqlite3.connect(mini_dictionary_db)
     try:
-        count = con.execute(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?",
-            (dictionary.INDEX_NAME,),
-        ).fetchone()[0]
+        counts = {
+            name: con.execute(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?", (name,)
+            ).fetchone()[0]
+            for name in (dictionary.INDEX_NAME, dictionary.INDEX_NAME_NOCASE)
+        }
     finally:
         con.close()
-    assert count == 1
+    assert counts == {dictionary.INDEX_NAME: 1, dictionary.INDEX_NAME_NOCASE: 1}
+
+
+def test_index_is_created_on_a_file_that_already_carries_the_old_single_index(
+    mini_dictionary_db: Path,
+) -> None:
+    """Befund 2 (Review T7): `ensure_index` bleibt idempotent, auch wenn die Datei bereits
+    den alten, einzelnen Index aus einem früheren Aufruf trägt — der zweite Index entsteht
+    dann zusätzlich, nicht anstelle des ersten."""
+    con = sqlite3.connect(mini_dictionary_db)
+    try:
+        con.execute(f"CREATE INDEX {dictionary.INDEX_NAME} ON translation(written_rep)")
+        con.commit()
+    finally:
+        con.close()
+
+    dictionary.ensure_index(mini_dictionary_db)
+
+    con = sqlite3.connect(mini_dictionary_db)
+    try:
+        indexes = {
+            row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type = 'index'")
+        }
+    finally:
+        con.close()
+    assert indexes == {dictionary.INDEX_NAME, dictionary.INDEX_NAME_NOCASE}
 
 
 def test_index_turns_full_scan_into_indexed_search(mini_dictionary_db: Path) -> None:
@@ -514,6 +825,38 @@ def test_index_turns_full_scan_into_indexed_search(mini_dictionary_db: Path) -> 
     assert any("USING INDEX " + dictionary.INDEX_NAME in str(row) for row in plan_after)
 
 
+def test_nocase_index_turns_full_scan_into_indexed_search_for_multiword_candidates(
+    mini_dictionary_db: Path,
+) -> None:
+    """Befund 2 (Review T7): Die case-insensitive Abfrage aus `_lookup_matches` (T7)
+    braucht einen eigenen Index — der binäre `INDEX_NAME` passt nicht zu `COLLATE NOCASE`
+    und ließe die Abfrage sonst auf den vollen Scan zurückfallen (technik.md §3, „Nachtrag
+    17.08.2026": 32–44 s statt 1,1 s je Kapitel)."""
+    con = sqlite3.connect(mini_dictionary_db)
+    try:
+        plan_before = con.execute(
+            "EXPLAIN QUERY PLAN SELECT lexentry FROM translation "
+            "WHERE written_rep = ? COLLATE NOCASE",
+            ("give up",),
+        ).fetchall()
+    finally:
+        con.close()
+    assert any("SCAN" in str(row) for row in plan_before)
+
+    dictionary.ensure_index(mini_dictionary_db)
+
+    con = sqlite3.connect(mini_dictionary_db)
+    try:
+        plan_after = con.execute(
+            "EXPLAIN QUERY PLAN SELECT lexentry FROM translation "
+            "WHERE written_rep = ? COLLATE NOCASE",
+            ("give up",),
+        ).fetchall()
+    finally:
+        con.close()
+    assert any("USING INDEX " + dictionary.INDEX_NAME_NOCASE in str(row) for row in plan_after)
+
+
 def test_source_notice_names_the_dictionary_source_and_its_licence() -> None:
     """Auftrag T6: Hinweis auf Herkunft und Lizenz, den der Aufrufer beim ersten Bezug
     anzeigen kann (technik.md §2, „Warum nicht mitgeliefert")."""
@@ -534,9 +877,10 @@ def test_real_dictionary_has_no_index_on_written_rep(real_dictionary_path: Path)
         ]
     finally:
         con.close()
-    # Befund 6 (Review T6): nur „kein fremder Index" prüfen. INDEX_NAME stammt aus diesem
+    # Befund 6 (Review T6), erweitert um den zweiten Index aus Befund 2 (Review T7): nur
+    # „kein fremder Index" prüfen. INDEX_NAME und INDEX_NAME_NOCASE stammen aus diesem
     # Projekt (ensure_index, bauplan.md T6) — läuft fetch_dictionary einmal auf der echten
-    # Datei, trägt sie ihn danach dauerhaft, ohne dass das ein Widerspruch zum Nachtrag
+    # Datei, tragen sie sie danach dauerhaft, ohne dass das ein Widerspruch zum Nachtrag
     # wäre. `assert indexes == []` schiede dann unwiderruflich fehl, wiederherstellbar nur
     # durch erneutes Herunterladen der 20 MB.
-    assert indexes in ([], [dictionary.INDEX_NAME])
+    assert set(indexes) <= {dictionary.INDEX_NAME, dictionary.INDEX_NAME_NOCASE}

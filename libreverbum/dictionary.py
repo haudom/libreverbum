@@ -5,28 +5,51 @@ Aufgabe
 Schritt 5 des Kernablaufs (konzept.md §5), erste Hälfte: der einzige Zugriff auf
 `en-de.sqlite3` (technik.md §7, Modulkarte). `candidates` liefert die Kandidaten, aus
 denen `translation` — Schritt 5, zweite Hälfte — die im Kontext passende Bedeutung wählt.
+`contiguous_candidates` und `particle_verb_candidates` gleichen dazu die beiden
+Mehrwortausdruck-Kandidaten aus T4 gegen dieselbe Tabelle ab (bauplan.md T7) — getrennt,
+weil sie verschieden viel behaupten (Abschnitt „Liefert" unten, Befund 1 Review T7).
 `fetch_dictionary` liefert dazu den Erstbezug der Datei selbst (bauplan.md T6):
-Herunterladen, Prüfung, von Hand hinterlegte Datei, der Index auf
+Herunterladen, Prüfung, von Hand hinterlegte Datei, die beiden Indizes auf
 `translation(written_rep)`.
 
 Voraussetzungen
 ---------------
 `candidates` erwartet die Grundform bereits wortartbestimmt (`Lemma.pos`, spaCys
 `token.pos_`): Die Reihenfolge Wortart → Grundform → Nachschlagen ist zwingend (technik.md,
-„Warum die Reihenfolge zwingend ist"). `fetch_dictionary` erwartet nur den Zielpfad;
-welches Verzeichnis das ist, entscheidet allein der Aufrufer (technik.md §9).
+„Warum die Reihenfolge zwingend ist"). `contiguous_candidates` erwartet die gesamte Liste
+der Kandidaten aus einem Aufruf von `extraction.extract_contiguous_candidates`,
+`particle_verb_candidates` die aus `extraction.extract_particle_verb_candidates` (T4) —
+welche der beiden Funktionen aufgerufen wird, entscheidet der Aufrufer anhand der Herkunft
+der Kandidaten, nicht dieses Modul (`extraction.py`, „T7 unterscheidet die zwei Arten
+daran, welche der beiden Funktionen sie geliefert hat"). Beide nehmen eine Liste statt
+eines einzelnen Kandidaten entgegen (Befund 5, Review T7): Eine eigene Verbindung je
+Kandidat kostet ein Kapitel mit rund 23.600 Kandidaten 14,3 s, eine gemeinsame Verbindung
+für die ganze Liste 1,7 s (Bericht T7) — T4 liefert ohnehin die vollständige Liste auf
+einmal, kein Kandidat einzeln. `fetch_dictionary` erwartet nur den Zielpfad; welches
+Verzeichnis das ist, entscheidet allein der Aufrufer (technik.md §9).
 
 Liefert
 -------
 Je Grundform und Wortart eine nach `score` absteigend sortierte Liste von `Sense`
 (bauplan.md T5). Zeilen ohne `sense`-Text bleiben darin (Regel 1); `label` liefert für sie
-die vorgeschriebene Beschriftung. Wählt selbst keine Bedeutung aus und übersetzt nichts
-frei — das bleibt `translation` vorbehalten.
+die vorgeschriebene Beschriftung. `contiguous_candidates` und `particle_verb_candidates`
+liefern je Eingabe-`Lemma` eine solche Liste, in derselben Reihenfolge wie die Eingabe —
+case-insensitiv gegen `written_rep` abgeglichen, gefiltert auf `score ≥ 50` und Wortart
+nicht `Proper_noun` (technik.md, „Messung: Mehrwortausdrücke") —, behandeln einen
+Kandidaten ohne bestandenen Filter aber verschieden (Befund 1, Review T7):
+`extract_contiguous_candidates` liefert bloße Hypothesen aus einem n-Gramm-Abgleich, und
+der Filter ist genau das Mittel, das `of the` und `in the` wieder aussortiert — ohne
+Eintrag liefert `contiguous_candidates` deshalb an dieser Stelle eine **leere Liste**, der
+Kandidat verschwindet. `extract_particle_verb_candidates` liefert dagegen ein tatsächlich
+beobachtetes Phrasal Verb aus der Abhängigkeitsanalyse — ohne Eintrag liefert
+`particle_verb_candidates` deshalb an dieser Stelle einen einzelnen `Sense` mit
+`uncertain=True` (Regel 10, Regel 11): markiert, nicht verworfen. Beide wählen selbst
+keine Bedeutung aus und übersetzen nichts frei — das bleibt `translation` vorbehalten.
 
 `fetch_dictionary` lädt die Datei, falls sie fehlt, prüft Vollständigkeit und Schema und
-legt den Index an — auch für eine bereits vorhandene, von Hand hinterlegte Datei, die den
-Index ebenfalls nicht mitbringt. `SOURCE_NOTICE` ist der Text zu Herkunft und Lizenz, den
-der Aufrufer beim ersten Bezug anzeigen kann (technik.md §2, „Warum nicht mitgeliefert").
+legt die Indizes an — auch für eine bereits vorhandene, von Hand hinterlegte Datei, die sie
+ebenfalls nicht mitbringt. `SOURCE_NOTICE` ist der Text zu Herkunft und Lizenz, den der
+Aufrufer beim ersten Bezug anzeigen kann (technik.md §2, „Warum nicht mitgeliefert").
 """
 
 from __future__ import annotations
@@ -34,6 +57,7 @@ from __future__ import annotations
 import sqlite3
 import urllib.error
 import urllib.request
+from collections.abc import Sequence
 from pathlib import Path
 
 from libreverbum.entities import Lemma, Sense
@@ -60,9 +84,20 @@ _WIKDICT_POS = {
 }
 
 
+# REGEL (dokumentation.md §4 Regel 13; Befund 3, Review T7): Der Platzhalter für einen
+# Mehrwortausdruck-Kandidaten ohne Wörterbucheintrag (`uncertain=True`) trägt kein
+# `wikdict_sense` — ohne eigene Beschriftung liefe er in `NO_SENSE_LABEL` und sähe aus wie
+# eine echte Regel-1-Zeile mit Hauptbedeutung, obwohl kein `wikdict_trans_list` dahinter
+# steht. `label` muss den Unterschied vor der Anzeige (T11, T13) sichtbar machen.
+UNCERTAIN_LABEL = "kein Wörterbucheintrag — unsicher"
+
+
 def label(sense: Sense) -> str:
-    """Beschriftung für die Auswahlliste: `wikdict_sense`, oder — fehlt er — Regel 1s feste
-    Beschriftung `NO_SENSE_LABEL`."""
+    """Beschriftung für die Auswahlliste: `UNCERTAIN_LABEL` für einen Platzhalter ohne
+    Wörterbucheintrag (Befund 3, Review T7), sonst `wikdict_sense` — oder, fehlt er,
+    Regel 1s feste Beschriftung `NO_SENSE_LABEL`."""
+    if sense.uncertain:
+        return UNCERTAIN_LABEL
     return sense.wikdict_sense or NO_SENSE_LABEL
 
 
@@ -119,6 +154,117 @@ def candidates(dictionary_path: Path, lemma: Lemma) -> list[Sense]:
     ]
 
 
+# ---------------------------------------------------- Mehrwortausdrücke (bauplan.md T7)
+
+# REGEL (technik.md, „Messung: Mehrwortausdrücke"): Die Schwelle trennt grammatisches
+# Rauschen von echten Wendungen sauber — gemessen an tools/en-de.sqlite3, nicht geschätzt
+# („in the" score 2,0, „of the" score 4,0 gegen „give up" score 120,0, „of course" score
+# 128,6). Festlegung aus bauplan.md T7, keine Einstellung (Regel 14).
+_MWE_MIN_SCORE = 50
+
+# REGEL (technik.md, „Messung: Mehrwortausdrücke"; Nachtrag 18.08.2026, siehe dort): Der
+# zweite Teil des Filters. Nötig, weil Eigennamen wie „New York" (Proper_noun, score 163,6)
+# oder „Great Britain" (210,0) selbst als mehrwortiger Wörterbucheintrag mit hohem score
+# geführt werden und sonst als Lernvokabel erschienen.
+_EXCLUDED_MWE_POS = "Proper_noun"
+
+
+def _lookup_matches(dictionary_path: Path, lemmas: Sequence[Lemma]) -> list[list[Sense]]:
+    """Gemeinsamer Abgleichskern für `contiguous_candidates` und `particle_verb_candidates`
+    (Befund 1, Review T7): beide filtern gleich, unterscheiden sich nur darin, was ein
+    Kandidat ohne bestandenen Filter bedeutet — das entscheiden die beiden Funktionen
+    selbst, nicht dieser Kern, der je Eingabe-`Lemma` deshalb schlicht eine leere Liste
+    liefern kann.
+
+    Filtert `score ≥ 50` und Wortart nicht `Proper_noun` (technik.md, „Messung:
+    Mehrwortausdrücke") — anders als `candidates` nicht auf Übereinstimmung mit einer
+    einzelnen Wortart: WikDicts Wendungen verteilen sich über eigene Wortarten (`Phrase`,
+    `Prepositional_phrase`, `Proverb`, dazu gewöhnliche Nomen und Verben), während
+    `Lemma.pos` aus T4 höchstens `VERB` trägt oder leer ist.
+
+    # REGEL (Befund 2, Review T7): `COLLATE NOCASE`, weil T4 jede Grundform kleinschreibt
+    # (`extraction.py`, `token.lemma_.lower()`), WikDicts `written_rep` aber schreibungsecht
+    # ist — `new york` fände `New York` ohne diesen Vergleich nie (gemessen an
+    # tools/en-de.sqlite3: `written_rep = 'new york'` liefert 0 Zeilen, `= 'new york'
+    # COLLATE NOCASE` die echte Zeile). Der zugehörige Index (`ensure_index`,
+    # `INDEX_NAME_NOCASE`) hält die Abfrage dabei auf `SEARCH` statt `SCAN` — ohne ihn
+    # kollationiert SQLite bei jeder Zeile neu (technik.md §3, „Nachtrag 17.08.2026").
+
+    # REGEL (Befund 5, Review T7): Eine einzige Verbindung für die gesamte Liste, nicht
+    # eine je Kandidat — gemessen an einer Kopie von tools/en-de.sqlite3 mit Index, ein
+    # Kapitel mit rund 23.600 Kandidaten: 14,3 s je eigener Verbindung gegen 1,7 s geteilt
+    # (Bericht T7). Kein Zwischenspeicher (Regel 14) — es wird nichts über den Aufruf
+    # hinaus aufbewahrt, nur die Verbindung für die Dauer dieses einen Aufrufs geteilt.
+    """
+    if not dictionary_path.is_file():
+        raise FileNotFoundError(f"Wörterbuch nicht lesbar: {dictionary_path}")
+
+    results: list[list[Sense]] = []
+    con = sqlite3.connect(dictionary_path)
+    try:
+        for lemma in lemmas:
+            rows: list[tuple[str | None, str | None, str | None]] = con.execute(
+                "SELECT lexentry, sense, trans_list FROM translation "
+                "WHERE written_rep = ? COLLATE NOCASE AND score >= ? ORDER BY score DESC",
+                (lemma.text, _MWE_MIN_SCORE),
+            ).fetchall()
+            results.append(
+                [
+                    Sense(
+                        lemma=lemma,
+                        wikdict_sense=wikdict_sense,
+                        wikdict_trans_list=trans_list,
+                        wikdict_lexentry=lexentry,
+                    )
+                    for lexentry, wikdict_sense, trans_list in rows
+                    if _wikdict_pos(lexentry) != _EXCLUDED_MWE_POS
+                ]
+            )
+    finally:
+        con.close()
+
+    return results
+
+
+def contiguous_candidates(dictionary_path: Path, lemmas: Sequence[Lemma]) -> list[list[Sense]]:
+    """Auswahllisten für die Kandidaten aus einem Aufruf von
+    `extraction.extract_contiguous_candidates` (bauplan.md T7; Befund 1 und Befund 5,
+    Review T7) — eine Liste je Eingabe-`Lemma`, in derselben Reihenfolge wie `lemmas`.
+
+    Ein Kandidat aus dem n-Gramm-Weg ist bloß eine Hypothese — `of the` sieht vor dem
+    Nachschlagen genauso aus wie `give up` (technik.md, „Messung: Mehrwortausdrücke", die
+    Hälfte, die 6.202 rohe Vorkommen auf 2.958 senkt). Besteht für einen Kandidaten kein
+    Eintrag den Filter (`_lookup_matches`), liefert diese Funktion an seiner Stelle deshalb
+    eine **leere Liste** — der Kandidat verschwindet, das ist der Zweck dieses Wegs, keine
+    Markierung wie bei `particle_verb_candidates`. Eine fehlende Wörterbuchdatei bricht
+    dagegen sichtbar ab (Regel 13) — das ist ein anderer Fehlschlag als ein einzelner
+    Kandidat ohne Eintrag.
+    """
+    return _lookup_matches(dictionary_path, lemmas)
+
+
+def particle_verb_candidates(dictionary_path: Path, lemmas: Sequence[Lemma]) -> list[list[Sense]]:
+    """Auswahllisten für die Kandidaten aus einem Aufruf von
+    `extraction.extract_particle_verb_candidates` (bauplan.md T7; Befund 1 und Befund 5,
+    Review T7) — eine Liste je Eingabe-`Lemma`, in derselben Reihenfolge wie `lemmas`.
+
+    Ein Kandidat aus dem Verb-Partikel-Weg ist ein tatsächlich beobachtetes Phrasal Verb aus
+    spaCys Abhängigkeitsanalyse, kein bloßer Wortfolgentreffer (technik.md §3, „Grenze: rund
+    ein Fünftel der Phrasal Verbs steht getrennt": 394 Vorkommen ohne Eintrag). Besteht für
+    einen Kandidaten kein Eintrag den Filter (`_lookup_matches`), liefert diese Funktion an
+    seiner Stelle deshalb keine leere Liste, sondern einen einzelnen `Sense` mit
+    `uncertain=True` (Regel 10, Regel 11): Der Kandidat wird markiert, nicht verworfen. Eine
+    fehlende Wörterbuchdatei bricht dagegen sichtbar ab (Regel 13) wie bei
+    `contiguous_candidates` — das ist ein anderer Fehlschlag als ein einzelner Kandidat ohne
+    passenden Eintrag.
+    """
+    matches = _lookup_matches(dictionary_path, lemmas)
+    return [
+        matches_for_lemma or [Sense(lemma=lemma, uncertain=True)]
+        for lemma, matches_for_lemma in zip(lemmas, matches, strict=True)
+    ]
+
+
 # --------------------------------------------------------------- Erstbezug (bauplan.md T6)
 
 # REGEL (technik.md §2, „Warum nicht mitgeliefert"): Bezugsquelle laut Entscheidung 2,
@@ -139,7 +285,17 @@ SOURCE_NOTICE = (
 )
 
 # Der Index aus technik.md §3, „Nachtrag 17.08.2026" — siehe ensure_index für die Messung.
+# Trägt `candidates` (T5); dessen Abfrage vergleicht `written_rep` binär, nicht case-
+# insensitiv (Befund 2, Review T7, „nur berichtet, nicht geändert" — siehe Bericht).
 INDEX_NAME = "idx_translation_written_rep"
+
+# REGEL (Befund 2, Review T7): Zweiter Index, eigens für den case-insensitiven Vergleich in
+# `_lookup_matches` (T7). Ein `COLLATE NOCASE`-Vergleich kann den Index ohne diese eigene
+# Kollation nicht benutzen und fiele auf den vollen Scan zurück (technik.md §3, „Nachtrag
+# 17.08.2026": 32–44 s statt 1,1 s je Kapitel) — derselbe Kostenunterschied wie beim
+# unindizierten `candidates`, nur ausgelöst durch die fehlende Kollation statt durch einen
+# fehlenden Index.
+INDEX_NAME_NOCASE = "idx_translation_written_rep_nocase"
 
 _EXPECTED_TABLE = "translation"
 _EXPECTED_COLUMNS = frozenset({"lexentry", "sense", "written_rep", "trans_list", "score"})
@@ -151,13 +307,17 @@ _MIN_TRANSLATION_ROWS = 100_000
 
 
 def ensure_index(path: Path) -> None:
-    """Legt den Index auf `translation(written_rep)` an, falls er fehlt (bauplan.md T6).
+    """Legt beide Indizes auf `translation(written_rep)` an, falls sie fehlen (bauplan.md
+    T6; zweiter Index Befund 2, Review T7).
 
-    Ohne ihn scannt jede Abfrage aus `candidates` die volle Tabelle mit anschließender
-    Sortierung im Speicher; Größenordnung und Wirkung des Index: technik.md §3, „Nachtrag
-    17.08.2026". `CREATE INDEX IF NOT EXISTS` macht den Aufruf ungefährlich, wenn er ein
-    zweites Mal auf derselben Datei läuft — etwa weil die Datei schon von Hand hinterlegt
-    war.
+    Ohne den ersten Index scannt jede Abfrage aus `candidates` die volle Tabelle mit
+    anschließender Sortierung im Speicher; ohne den zweiten (`INDEX_NAME_NOCASE`) tut
+    dasselbe jede case-insensitive Abfrage aus `_lookup_matches` (T7), weil `COLLATE
+    NOCASE` den binären Index nicht benutzen kann. Größenordnung und Wirkung: technik.md
+    §3, „Nachtrag 17.08.2026". `CREATE INDEX IF NOT EXISTS` macht den Aufruf für beide
+    ungefährlich, wenn er ein zweites Mal auf derselben Datei läuft — etwa weil die Datei
+    schon von Hand hinterlegt war oder noch den alten, einzelnen Index aus einem früheren
+    Aufruf trägt: Der zweite Index entsteht dann zusätzlich, nicht anstelle des ersten.
 
     Bricht sichtbar mit einer deutschen Meldung ab (Regel 13), wenn `path` nicht existiert
     — statt über `sqlite3.connect` still eine leere Datenbankdatei anzulegen — oder wenn
@@ -175,6 +335,10 @@ def ensure_index(path: Path) -> None:
         try:
             con.execute(
                 f"CREATE INDEX IF NOT EXISTS {INDEX_NAME} ON {_EXPECTED_TABLE}(written_rep)"
+            )
+            con.execute(
+                f"CREATE INDEX IF NOT EXISTS {INDEX_NAME_NOCASE} "
+                f"ON {_EXPECTED_TABLE}(written_rep COLLATE NOCASE)"
             )
             con.commit()
         except sqlite3.DatabaseError as error:

@@ -1258,8 +1258,19 @@ auseinanderliegen:
 | `give up` | 120,0 |
 | `of course` | 128,6 |
 
-Der Eigennamen-Ausschluss ist nötig, weil `Sherlock Holmes` als `Proper_noun` im
-Wörterbuch steht und sonst 101× als Lernvokabel erschiene.
+Der Eigennamen-Ausschluss ist nötig, weil Eigennamen wie `New York` (`Proper_noun`,
+score 163,6), `Great Britain` (210,0) oder `United States` (131,1) sonst als Lernvokabel
+erschienen — gemessen an `tools/en-de.sqlite3`: 1.864 mehrwortige `Proper_noun`-Zeilen mit
+`score ≥ 50`.
+
+> **Nachtrag 18.08.2026 — falsches Beispiel `Sherlock Holmes`.** Hier stand zuvor,
+> `Sherlock Holmes` stehe als `Proper_noun` im Wörterbuch und erschiene ohne den Filter
+> 101× als Lernvokabel. Das ist falsch: `Sherlock Holmes` hat in `tools/en-de.sqlite3`
+> genau eine Zeile, ohne `lexentry` (also ohne Wortart) und mit `score = 2,0` — der
+> Eintrag fällt bereits an der Schwelle `score ≥ 50`, der `Proper_noun`-Filter kommt gar
+> nicht zum Zug (Befund 6, Review T7). Festgehalten, weil die Behauptung plausibel klingt
+> und sonst erneut als Beleg für den Filter angeführt würde; der Filter selbst bleibt
+> richtig und nötig, nur das Beispiel trug nicht.
 
 ### Grenze: rund ein Fünftel der Phrasal Verbs steht getrennt
 
