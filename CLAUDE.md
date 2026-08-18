@@ -141,19 +141,22 @@ python tools/coverage_check.py --fetch-dictionary     # Wörterbuch herunterlade
 python tools/coverage_check.py buch.txt               # Abdeckung des Wörterbuchs
 python tools/sense_check.py                           # Bedeutungsauswahl durch das Modell
 python tools/mwe_check.py buch.txt                    # Mehrwortausdrücke
+python tools/ambiguity_check.py buch.txt              # mehrdeutige Grundformen je Kapitel
 python tools/nlp_check.py buch.txt                    # spaCy gegen Stanza
 python tools/epub_check.py buch.epub                  # EPUB-Struktur und Fließtext
 python tools/epub_check.py --summary *.epub           # eine Zeile je Buch
 ```
 
-Alle bis auf eines kommen mit der Standardbibliothek aus, brauchen also keine
-Projektumgebung. **`nlp_check.py` ist die Ausnahme** und verlangt spaCy oder Stanza samt
-Modellen: Ein Vergleich der beiden lässt sich nur an den echten Modellen führen, nicht
-nachbilden. Das Skript nennt die Installationsbefehle in seinem Kopf.
+Alle bis auf zwei kommen mit der Standardbibliothek aus, brauchen also keine
+Projektumgebung. **`nlp_check.py` verlangt spaCy oder Stanza samt Modellen**: Ein Vergleich
+der beiden lässt sich nur an den echten Modellen führen, nicht nachbilden; das Skript nennt
+die Installationsbefehle in seinem Kopf. **`ambiguity_check.py` verlangt spaCy und den Kern
+selbst** (`libreverbum.extraction`, `libreverbum.dictionary`): Gemessen wird, was der Kern
+tatsächlich liefert, nicht eine nachgebaute Näherung.
 
-`sense_check.py` und `mwe_check.py` suchen einen lokalen Modellserver auf den üblichen
-Adressen ab (llama-server, LM Studio, Ollama, …) oder nehmen `--url`. Testtexte
-(`*.txt`) und `*.sqlite3` sind bewusst nicht versioniert.
+`sense_check.py` sucht einen lokalen Modellserver auf den üblichen Adressen ab
+(llama-server, LM Studio, Ollama, …) oder nimmt `--url`; `mwe_check.py` verlangt `--url`.
+Testtexte (`*.txt`) und `*.sqlite3` sind bewusst nicht versioniert.
 
 ## Aktueller Stand
 
@@ -174,7 +177,7 @@ nur E8b (Anki-Bibliothek) und E8c (Druckausgabe), beide in bauplan.md unter Tor 
 Nicht im Repository, aber zur Arbeit vorhanden: die Umgebung `.venv/` (spaCy mit
 `en_core_web_md` und `en_core_web_sm`), das Wörterbuch `tools/en-de.sqlite3`, die
 Testtexte `tools/*.txt` und die EPUBs `tools/*.epub`. Tests, die davon abhängen, tragen
-`needs_dictionary` oder `needs_model` und werden ohne sie übersprungen.
+`needs_dictionary`, `needs_model` oder `needs_epub` und werden ohne sie übersprungen.
 
 ## Arbeitsweise
 
