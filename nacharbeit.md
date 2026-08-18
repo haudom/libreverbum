@@ -1,8 +1,8 @@
 # LibreVerbum — Nacharbeit
 
-> Stand: 18.08.2026 · Befunde aus dem Bau von T3, T4, T5, T8 und T12, die **nicht** in die
-> jeweilige Teilaufgabe gehören. Zwei Arten: Änderungen an den Regeln und der Arbeitsweise
-> (Teil A), Nachträge an den Dokumenten aus gemessenen Ergebnissen (Teil B).
+> Stand: 19.08.2026 · Befunde aus dem Bau von T3, T4, T5, T8, T12 und T15, die **nicht** in
+> die jeweilige Teilaufgabe gehören. Zwei Arten: Änderungen an den Regeln und der
+> Arbeitsweise (Teil A), Nachträge an den Dokumenten aus gemessenen Ergebnissen (Teil B).
 >
 > Dieses Dokument ist eine Arbeitsliste, kein Entscheidungsdokument. Es begründet nichts
 > neu, sondern verweist. Ist ein Punkt abgearbeitet, wird er hier gestrichen; ist die Liste
@@ -104,6 +104,45 @@ im Erzähltext sind sauber: 2.529 bzw. 1.504 `<p>`, alle mit Umbruch (nachgemess
 
 **Vorschlag:** keine Codeänderung nötig. Falls doch angefasst, dann in
 `tools/epub_check.py` mitziehen, damit Vorlage und Kern nicht auseinanderlaufen.
+
+## A13 — mittel · Zusammenführen von Einzelwörtern und Wendungen ist offen (gehört zu T16/T17)
+
+**Beobachtet (Review T15, 18.08.2026).** `pipeline.run_chapter` liefert seit der Behebung
+von Befund 1 Einzelwörter (`entries`) und Mehrwortausdruck-Kandidaten (`expressions`)
+nebeneinander, nicht zu einer gemeinsamen Liste zusammengeführt: Wie eine Wendung und die
+Einzelwörter, aus denen sie besteht, bei Überschneidung zueinanderstehen sollen (`give up`
+neben `give` und `up`) — Reihenfolge, Vorrang —, ist eine inhaltliche Frage, die Regel 14
+hier nicht auf Vorrat entscheidet. Gemessen an Kapitel 13 (Sherlock, 52.801 Zeichen): 213
+verschiedene Wendungen, keine davon als Einzelwort erfasst — ein Achtel des Wortschatzes,
+das in der Triage (T16) sichtbar werden und bei der Abnahme (T17, Abnahmekriterium 3:
+„mindestens … zwei Redewendungen") auffindbar sein muss.
+
+**Vorschlag:** Bei **T16** entscheiden, wie `entries` und `expressions` in der
+Triage-Liste zueinanderstehen; **T17** braucht daraus mindestens zwei Redewendungen in der
+Handstichprobe für Abnahmekriterium 3.
+
+## A14 — leicht · Tippfehler im Profilpfad legt wortlos ein leeres Profil an (gehört zu T16)
+
+**Beobachtet (Review T15, 18.08.2026).** `profile.open_profile` legt für einen nicht
+vorhandenen Pfad wortlos eine neue, leere Profildatei mit allen sieben Tabellen an
+(geprüft). Ein Tippfehler im Profilpfad, den `pipeline.run_chapter` entgegennimmt, fiele
+deshalb nicht auf — beim zweiten Durchlauf stünde wieder alles auf `UNKNOWN`, genau das
+Bild, das Abnahmekriterium 6 als Fehlschlag beschreibt, nur ohne jede Meldung.
+
+**Zuständig ist der Aufrufer** (technik.md §9, der Kern kennt keine Vorgabe), fällig also
+erst bei **T16**: Der Pfad kommt aus `config.toml`, dort gehört die Entscheidung hin, ob
+ein noch nicht vorhandenes Profil bestätigt werden muss.
+
+## A15 — leicht · Fehlendes Profilverzeichnis meldet auf Englisch (gehört zu T8)
+
+**Beobachtet (Review T15, 18.08.2026).** Ein Profilpfad in einem nicht vorhandenen
+Verzeichnis ergibt in `profile.open_profile` `sqlite3.OperationalError: unable to open
+database file` — sichtbar (Regel 13 erfüllt), aber eine englische Fremdmeldung entgegen
+dokumentation.md §1. `dictionary.ensure_index` löst denselben Fall vorbildlich mit einer
+deutschen Meldung.
+
+**Vorschlag:** in `profile.open_profile` dieselbe Umhüllung wie in `ensure_index`. Gehört
+zu **T8**, nicht zu T15 — `profile.py` ist dessen Modul.
 
 > **A6 gestrichen am 17.08.2026** (Parallelität erzeugt Phantomfehler): als Absprache
 > erledigt, der Dokumentteil ist in A8 aufgegangen.

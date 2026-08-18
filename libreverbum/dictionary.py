@@ -4,47 +4,53 @@ Aufgabe
 -------
 Schritt 5 des Kernablaufs (konzept.md §5), erste Hälfte: der einzige Zugriff auf
 `en-de.sqlite3` (technik.md §7, Modulkarte). `candidates` liefert die Kandidaten, aus
-denen `translation` — Schritt 5, zweite Hälfte — die im Kontext passende Bedeutung wählt.
-`contiguous_candidates` und `particle_verb_candidates` gleichen dazu die beiden
-Mehrwortausdruck-Kandidaten aus T4 gegen dieselbe Tabelle ab (bauplan.md T7) — getrennt,
-weil sie verschieden viel behaupten (Abschnitt „Liefert" unten, Befund 1 Review T7).
-`fetch_dictionary` liefert dazu den Erstbezug der Datei selbst (bauplan.md T6):
+denen `translation` — Schritt 5, zweite Hälfte — die im Kontext passende Bedeutung wählt;
+`candidate_lists` dieselbe Abfrage für mehrere Grundformen über eine geteilte Verbindung
+(Befund 4, Review T15). `contiguous_candidates` und `particle_verb_candidates` gleichen
+dazu die beiden Mehrwortausdruck-Kandidaten aus T4 gegen dieselbe Tabelle ab (bauplan.md
+T7) — getrennt, weil sie verschieden viel behaupten (Abschnitt „Liefert" unten, Befund 1
+Review T7). `fetch_dictionary` liefert dazu den Erstbezug der Datei selbst (bauplan.md T6):
 Herunterladen, Prüfung, von Hand hinterlegte Datei, die beiden Indizes auf
 `translation(written_rep)`.
 
 Voraussetzungen
 ---------------
-`candidates` erwartet die Grundform bereits wortartbestimmt (`Lemma.pos`, spaCys
-`token.pos_`): Die Reihenfolge Wortart → Grundform → Nachschlagen ist zwingend (technik.md,
-„Warum die Reihenfolge zwingend ist"). `contiguous_candidates` erwartet die gesamte Liste
-der Kandidaten aus einem Aufruf von `extraction.extract_contiguous_candidates`,
-`particle_verb_candidates` die aus `extraction.extract_particle_verb_candidates` (T4) —
-welche der beiden Funktionen aufgerufen wird, entscheidet der Aufrufer anhand der Herkunft
-der Kandidaten, nicht dieses Modul (`extraction.py`, „T7 unterscheidet die zwei Arten
-daran, welche der beiden Funktionen sie geliefert hat"). Beide nehmen eine Liste statt
-eines einzelnen Kandidaten entgegen (Befund 5, Review T7): Eine eigene Verbindung je
-Kandidat kostet ein Kapitel mit rund 23.600 Kandidaten 14,3 s, eine gemeinsame Verbindung
-für die ganze Liste 1,7 s (Bericht T7) — T4 liefert ohnehin die vollständige Liste auf
-einmal, kein Kandidat einzeln. `fetch_dictionary` erwartet nur den Zielpfad; welches
-Verzeichnis das ist, entscheidet allein der Aufrufer (technik.md §9).
+`candidates` und `candidate_lists` erwarten die Grundform(en) bereits wortartbestimmt
+(`Lemma.pos`, spaCys `token.pos_`): Die Reihenfolge Wortart → Grundform → Nachschlagen ist
+zwingend (technik.md, „Warum die Reihenfolge zwingend ist"). `contiguous_candidates`
+erwartet die gesamte Liste der Kandidaten aus einem Aufruf von
+`extraction.extract_contiguous_candidates`, `particle_verb_candidates` die aus
+`extraction.extract_particle_verb_candidates` (T4) — welche der beiden Funktionen
+aufgerufen wird, entscheidet der Aufrufer anhand der Herkunft der Kandidaten, nicht dieses
+Modul (`extraction.py`, „T7 unterscheidet die zwei Arten daran, welche der beiden
+Funktionen sie geliefert hat"). Alle drei Listenformen nehmen eine Liste statt eines
+einzelnen Kandidaten entgegen und teilen sich dafür eine Verbindung (Befund 5, Review T7;
+Befund 4, Review T15): Eine eigene Verbindung je Kandidat kostet ein Kapitel mit rund
+23.600 Mehrwort-Kandidaten 14,3 s, eine gemeinsame Verbindung für die ganze Liste 1,7 s
+(Bericht T7); bei den 1.465 Einzelwort-Vorkommen aus Kapitel 13 (Sherlock) sind es 1,43 s
+gegen 0,20 s (Bericht T15) — mehr, als konzept.md §4 für das ganze Nachschlagen der
+Standardstellung veranschlagt (rund 1,1 s). `fetch_dictionary` erwartet nur den Zielpfad;
+welches Verzeichnis das ist, entscheidet allein der Aufrufer (technik.md §9).
 
 Liefert
 -------
 Je Grundform und Wortart eine nach `score` absteigend sortierte Liste von `Sense`
 (bauplan.md T5). Zeilen ohne `sense`-Text bleiben darin (Regel 1); `label` liefert für sie
-die vorgeschriebene Beschriftung. `contiguous_candidates` und `particle_verb_candidates`
-liefern je Eingabe-`Lemma` eine solche Liste, in derselben Reihenfolge wie die Eingabe —
-case-insensitiv gegen `written_rep` abgeglichen, gefiltert auf `score ≥ 50` und Wortart
-nicht `Proper_noun` (technik.md, „Messung: Mehrwortausdrücke") —, behandeln einen
-Kandidaten ohne bestandenen Filter aber verschieden (Befund 1, Review T7):
+die vorgeschriebene Beschriftung. `candidate_lists` liefert dieselbe Liste je Eingabe-
+`Lemma`, in derselben Reihenfolge wie die Eingabe (Befund 4, Review T15) — kein
+Zwischenspeicher (Regel 14), nur eine für den einen Aufruf geteilte Verbindung.
+`contiguous_candidates` und `particle_verb_candidates` liefern je Eingabe-`Lemma` ebenso
+eine solche Liste — case-insensitiv gegen `written_rep` abgeglichen, gefiltert auf
+`score ≥ 50` und Wortart nicht `Proper_noun` (technik.md, „Messung: Mehrwortausdrücke") —,
+behandeln einen Kandidaten ohne bestandenen Filter aber verschieden (Befund 1, Review T7):
 `extract_contiguous_candidates` liefert bloße Hypothesen aus einem n-Gramm-Abgleich, und
 der Filter ist genau das Mittel, das `of the` und `in the` wieder aussortiert — ohne
 Eintrag liefert `contiguous_candidates` deshalb an dieser Stelle eine **leere Liste**, der
 Kandidat verschwindet. `extract_particle_verb_candidates` liefert dagegen ein tatsächlich
 beobachtetes Phrasal Verb aus der Abhängigkeitsanalyse — ohne Eintrag liefert
 `particle_verb_candidates` deshalb an dieser Stelle einen einzelnen `Sense` mit
-`uncertain=True` (Regel 10, Regel 11): markiert, nicht verworfen. Beide wählen selbst
-keine Bedeutung aus und übersetzen nichts frei — das bleibt `translation` vorbehalten.
+`uncertain=True` (Regel 10, Regel 11): markiert, nicht verworfen. Alle wählen selbst keine
+Bedeutung aus und übersetzen nichts frei — das bleibt `translation` vorbehalten.
 
 `fetch_dictionary` lädt die Datei, falls sie fehlt, prüft Vollständigkeit und Schema und
 legt die Indizes an — auch für eine bereits vorhandene, von Hand hinterlegte Datei, die sie
@@ -108,6 +114,41 @@ def _wikdict_pos(lexentry: str | None) -> str | None:
     return lexentry.split("__")[1]
 
 
+def _single_word_matches(con: sqlite3.Connection, lemma: Lemma) -> list[Sense]:
+    """Kern der Abfrage aus `candidates` (T5) für eine bereits offene Verbindung — gemeinsam
+    mit `candidate_lists` (Befund 4, Review T15), das dieselbe Verbindung über mehrere
+    Lemmas hinweg teilt, statt sie je Lemma neu aufzubauen. Dieselbe Bauart wie
+    `_lookup_matches` für die Mehrwortausdrücke aus T7."""
+    try:
+        wikdict_pos = _WIKDICT_POS[lemma.pos]
+    except KeyError as error:
+        raise ValueError(f"Keine WikDict-Wortart für {lemma.pos!r} hinterlegt.") from error
+
+    # REGEL (technik.md, „Warum die Reihenfolge zwingend ist"): lexentry IS NOT NULL ist
+    # eine ausdrückliche Entscheidung, keine Nebenwirkung. 29,7 % der Zeilen in
+    # tools/en-de.sqlite3 haben lexentry = NULL und tragen damit keine Wortart —
+    # _wikdict_pos gäbe für sie still None zurück, das nie einer WikDict-Wortart gleicht,
+    # und die Zeile verschwände unbemerkt aus jeder Auswahlliste. Vertretbar, weil alle
+    # betroffenen Zeilen bei score <= 48 liegen, deutlich unter den Hauptbedeutungen —
+    # aber das gehört sichtbar in die Abfrage, nicht als stiller Filterausfall.
+    rows: list[tuple[str | None, str | None, str | None]] = con.execute(
+        "SELECT lexentry, sense, trans_list FROM translation "
+        "WHERE written_rep = ? AND lexentry IS NOT NULL ORDER BY score DESC",
+        (lemma.text,),
+    ).fetchall()
+
+    return [
+        Sense(
+            lemma=lemma,
+            wikdict_sense=wikdict_sense,
+            wikdict_trans_list=trans_list,
+            wikdict_lexentry=lexentry,
+        )
+        for lexentry, wikdict_sense, trans_list in rows
+        if _wikdict_pos(lexentry) == wikdict_pos
+    ]
+
+
 def candidates(dictionary_path: Path, lemma: Lemma) -> list[Sense]:
     """Auswahlliste für eine Grundform und Wortart, nach `score` absteigend.
 
@@ -120,38 +161,34 @@ def candidates(dictionary_path: Path, lemma: Lemma) -> list[Sense]:
     if not dictionary_path.is_file():
         raise FileNotFoundError(f"Wörterbuch nicht lesbar: {dictionary_path}")
 
-    try:
-        wikdict_pos = _WIKDICT_POS[lemma.pos]
-    except KeyError as error:
-        raise ValueError(f"Keine WikDict-Wortart für {lemma.pos!r} hinterlegt.") from error
-
     con = sqlite3.connect(dictionary_path)
     try:
-        # REGEL (technik.md, „Warum die Reihenfolge zwingend ist"): lexentry IS NOT NULL ist
-        # eine ausdrückliche Entscheidung, keine Nebenwirkung. 29,7 % der Zeilen in
-        # tools/en-de.sqlite3 haben lexentry = NULL und tragen damit keine Wortart —
-        # _wikdict_pos gäbe für sie still None zurück, das nie einer WikDict-Wortart gleicht,
-        # und die Zeile verschwände unbemerkt aus jeder Auswahlliste. Vertretbar, weil alle
-        # betroffenen Zeilen bei score <= 48 liegen, deutlich unter den Hauptbedeutungen —
-        # aber das gehört sichtbar in die Abfrage, nicht als stiller Filterausfall.
-        rows: list[tuple[str | None, str | None, str | None]] = con.execute(
-            "SELECT lexentry, sense, trans_list FROM translation "
-            "WHERE written_rep = ? AND lexentry IS NOT NULL ORDER BY score DESC",
-            (lemma.text,),
-        ).fetchall()
+        return _single_word_matches(con, lemma)
     finally:
         con.close()
 
-    return [
-        Sense(
-            lemma=lemma,
-            wikdict_sense=wikdict_sense,
-            wikdict_trans_list=trans_list,
-            wikdict_lexentry=lexentry,
-        )
-        for lexentry, wikdict_sense, trans_list in rows
-        if _wikdict_pos(lexentry) == wikdict_pos
-    ]
+
+def candidate_lists(dictionary_path: Path, lemmas: Sequence[Lemma]) -> list[list[Sense]]:
+    """Auswahllisten für mehrere Grundformen über eine geteilte Verbindung (Befund 4,
+    Review T15) — dieselbe Bauart wie `_lookup_matches` (T7): eine Verbindung, Schleife über
+    die Lemmas, Rückgabe in Eingabereihenfolge.
+
+    Gemessen an einer indizierten Kopie von `tools/en-de.sqlite3`, 1.465 Einzelwort-
+    Vorkommen aus Kapitel 13 (Sherlock, das längste): eine eigene Verbindung je Vorkommen
+    (wie `pipeline` vor dieser Behebung) kostet 1,43 s, eine geteilte 0,20 s — 7,2×, mehr
+    Zeit allein für den Verbindungsaufbau, als konzept.md §4 für das ganze Nachschlagen der
+    Standardstellung veranschlagt (rund 1,1 s). Kein Zwischenspeicher (Regel 14): Nichts
+    wird über diesen einen Aufruf hinaus aufbewahrt, nur die Verbindung für seine Dauer
+    geteilt. Dieselbe Regel 13 wie bei `candidates`: eine fehlende Wörterbuchdatei bricht
+    sichtbar ab, statt je Lemma eine leere Liste vorzutäuschen."""
+    if not dictionary_path.is_file():
+        raise FileNotFoundError(f"Wörterbuch nicht lesbar: {dictionary_path}")
+
+    con = sqlite3.connect(dictionary_path)
+    try:
+        return [_single_word_matches(con, lemma) for lemma in lemmas]
+    finally:
+        con.close()
 
 
 # ---------------------------------------------------- Mehrwortausdrücke (bauplan.md T7)

@@ -100,6 +100,42 @@ def test_missing_dictionary_file_is_a_visible_failure(tmp_path: Path) -> None:
         dictionary.candidates(missing, Lemma(text="watch", pos="NOUN"))
 
 
+def test_missing_dictionary_file_is_a_visible_failure_for_candidate_lists(tmp_path: Path) -> None:
+    """Befund 4 (Review T15), Regel 13 (dokumentation.md §4): `candidate_lists` bricht wie
+    `candidates` sichtbar ab, wenn die Wörterbuchdatei fehlt — nicht erst am ersten Lemma
+    der Liste."""
+    missing = tmp_path / "en-de.sqlite3"
+
+    with pytest.raises(FileNotFoundError):
+        dictionary.candidate_lists(missing, [Lemma(text="watch", pos="NOUN")])
+
+
+def test_candidate_lists_matches_candidates_for_each_lemma_with_its_own_part_of_speech(
+    mini_dictionary_db: Path,
+) -> None:
+    """Befund 4 (Review T15): `candidate_lists` teilt eine Verbindung über mehrere Lemmas
+    hinweg (gemessen: 1,43 s gegen 0,20 s bei 1.465 Vorkommen, Bericht T15) — dabei behält
+    **jedes** Lemma seine eigene Wortart. `saw` als Verb und als Substantiv bei gleichem
+    `written_rep` prüft das in einem Zug: Eine Umsetzung, die die Wortart nur einmal für
+    die ganze Liste bestimmte (etwa aus dem ersten Lemma), lieferte für „saw" (Verb) die
+    Substantiv-Bedeutungen oder umgekehrt, statt für jedes Lemma dasselbe Ergebnis wie der
+    einzelne Aufruf von `candidates`."""
+    lemmas = [
+        Lemma(text="watch", pos="NOUN"),
+        Lemma(text="saw", pos="VERB"),
+        Lemma(text="saw", pos="NOUN"),
+    ]
+
+    result = dictionary.candidate_lists(mini_dictionary_db, lemmas)
+
+    assert len(result) == 3
+    for lemma, expected in zip(lemmas, result, strict=True):
+        assert expected == dictionary.candidates(mini_dictionary_db, lemma)
+    assert [s.wikdict_trans_list for s in result[0]] == ["Uhr | Armbanduhr", "Wache"]
+    assert [s.wikdict_trans_list for s in result[1]] == ["sägen"]
+    assert [s.wikdict_trans_list for s in result[2]] == ["Säge", "Sprichwort | Spruch"]
+
+
 def test_unmapped_part_of_speech_is_a_visible_failure(mini_dictionary_db: Path) -> None:
     """Kein leiser Fehlschlag (Regel 13): Eine Wortart ohne WikDict-Entsprechung bricht
     sichtbar ab, statt eine leere Auswahlliste vorzutäuschen."""
