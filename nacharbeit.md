@@ -29,30 +29,6 @@ sich erst, wenn mehrere Berichte nebeneinander liegen — dokumentation.md §9.
 
 # Teil A — Regeln und Arbeitsweise
 
-## A11 — leicht · `_text_of` nimmt nur den ersten Treffer
-
-**Beobachtet (Review T12, 18.08.2026).** `_text_of` in `libreverbum/epub.py` liest mit
-`root.find` nur das erste `dc:title` beziehungsweise `dc:creator`. Ist das erste `dc:title`
-leer (kommt bei Konvertaten vor, die ein leeres `dc:title` voranstellen und den echten
-Titel als zweites führen), bricht `read_structure` mit „nennt keinen Titel" ab, obwohl die
-Datei einen hat. Bei mehreren `dc:creator` (Ko-Autoren, Übersetzer) fallen die weiteren
-still weg.
-
-**Vorschlag:** `findall` statt `find`, den ersten nichtleeren Text nehmen. Für
-`dc:creator` genügt dasselbe — mehrere Autoren zusammenzuführen wäre Vorratsarbeit
-(Regel 14), `entities.Book.author` ist ein einzelnes Feld.
-
-## A15 — leicht · Fehlendes Profilverzeichnis meldet auf Englisch (gehört zu T8)
-
-**Beobachtet (Review T15, 18.08.2026).** Ein Profilpfad in einem nicht vorhandenen
-Verzeichnis ergibt in `profile.open_profile` `sqlite3.OperationalError: unable to open
-database file` — sichtbar (Regel 13 erfüllt), aber eine englische Fremdmeldung entgegen
-dokumentation.md §1. `dictionary.ensure_index` löst denselben Fall vorbildlich mit einer
-deutschen Meldung.
-
-**Vorschlag:** in `profile.open_profile` dieselbe Umhüllung wie in `ensure_index`. Gehört
-zu **T8**, nicht zu T15 — `profile.py` ist dessen Modul.
-
 ## A19 — mittel · Das Review steht in keiner Hausordnung
 
 **Beobachtet (Sitzung 18./19.08.2026).** Sechs Teilaufgaben (T6, T7, T9, T12, T12b, T15)
@@ -121,7 +97,9 @@ laut.
 > entscheiden — bauplan.md, T16-Zeile) · A17 (die Rohquelle bei Regel 15 —
 > dokumentation.md §4) · A18 (die berichtigte Kurzfassung — dokumentation.md §7) ·
 > A20 (beide Indizes liegen seit dem 19.08.2026 auf `tools/en-de.sqlite3`, ein
-> Nachschlagevorgang 21,4 ms → 0,49 ms).
+> Nachschlagevorgang 21,4 ms → 0,49 ms) · A11 und A15 (gebaut, durchgesehen und
+> committet — `_text_of` nimmt den ersten nichtleeren Treffer, `open_profile` meldet
+> das fehlende Verzeichnis deutsch).
 
 > **A6 gestrichen am 17.08.2026** (Parallelität erzeugt Phantomfehler): als Absprache
 > erledigt, der Dokumentteil ist in A8 aufgegangen.

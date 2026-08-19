@@ -174,7 +174,22 @@ def open_profile(path: Path) -> sqlite3.Connection:
     Wörterbuch mischen"). Bei passender Version wird ebenso geprüft, dass alle sieben
     Tabellen tatsächlich vorhanden sind — sonst bricht erst die nächste Abfrage darauf mit
     einer nichtssagenden Meldung ab.
+
+    Bricht sichtbar mit einer deutschen Meldung ab (Regel 13), wenn das Verzeichnis von
+    `path` nicht existiert — statt `sqlite3`s englische Fremdmeldung „unable to open
+    database file" unverändert durchzureichen (dasselbe Muster wie
+    `dictionary.ensure_index` für die fehlende Wörterbuchdatei). Existiert das
+    Verzeichnis, die Profildatei selbst aber noch nicht, legt der Aufruf weiterhin
+    wortlos eine neue, leere Profildatei an — das ist gewolltes Verhalten. Ob ein
+    noch nicht vorhandenes Profil bestätigt werden muss, entscheidet der Aufrufer
+    (technik.md §9, der Kern kennt keine Vorgabe; bauplan.md, T16).
     """
+    if not path.parent.is_dir():
+        raise ValueError(
+            f"Profilverzeichnis {path.parent} existiert nicht — Verzeichnis anlegen, "
+            "bevor die Profildatei geöffnet wird."
+        )
+
     con = sqlite3.connect(path)
     con.execute("PRAGMA foreign_keys = ON")
     version = con.execute("PRAGMA user_version").fetchone()[0]

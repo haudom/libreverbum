@@ -49,6 +49,19 @@ def test_rule_5_schema_version_is_set_on_a_fresh_profile(tmp_path: Path) -> None
     assert version != 0
 
 
+def test_missing_profile_directory_is_a_visible_failure_with_a_german_message(
+    tmp_path: Path,
+) -> None:
+    """A15 (nacharbeit.md): Liegt der Profilpfad in einem nicht vorhandenen Verzeichnis,
+    bricht `open_profile` mit einer deutschen Meldung ab, die den Pfad nennt — statt
+    sqlite3s englische Fremdmeldung `unable to open database file` unverändert
+    durchzureichen (Regel 13, dokumentation.md §1)."""
+    missing = tmp_path / "does_not_exist" / "profil.sqlite3"
+
+    with pytest.raises(ValueError, match=r"does_not_exist.*existiert nicht"):
+        profile.open_profile(missing)
+
+
 def test_reopening_a_profile_does_not_recreate_or_erase_its_schema(tmp_path: Path) -> None:
     """bauplan.md T8: Ein zweiter `open_profile`-Aufruf auf derselbe Datei legt das Schema
     nicht erneut an und verwirft keine vorhandenen Daten."""

@@ -181,6 +181,75 @@ def test_read_structure_orders_chapters_by_spine_position_not_navigation_order(
     assert [chapter.number for chapter in result.chapters] == [1, 2]
 
 
+# ------------------------------------------- Lokale Vorrichtung: leeres erstes dc:title
+
+_EMPTY_FIRST_METADATA_CONTAINER_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>
+"""
+
+# Manche Konvertate stellen ein leeres dc:title voran und führen den echten Titel erst als
+# zweites — genau der Fall aus A11 (nacharbeit.md). Das erste dc:title trägt reinen
+# Leerraum statt gar keines Textes: Nur so deckt der Test beide Hälften von `if
+# found.text and found.text.strip():` ab, nicht nur die erste (found.text is None wäre
+# von `if found.text:` allein schon abgefangen). dc:creator trägt zusätzlich zwei
+# nichtleere Einträge, um zu belegen, dass sie nicht zusammengeführt werden.
+_EMPTY_FIRST_METADATA_OPF = """<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="bookid">urn:uuid:empty-first-metadata-test</dc:identifier>
+    <dc:title>   </dc:title>
+    <dc:title>Titel nach leerem Titel</dc:title>
+    <dc:creator></dc:creator>
+    <dc:creator>Erste Autorin</dc:creator>
+    <dc:creator>Zweite Autorin</dc:creator>
+  </metadata>
+  <manifest>
+    <item id="chap1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="chap1"/>
+  </spine>
+</package>
+"""
+
+_EMPTY_FIRST_METADATA_CHAPTER_XHTML = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>Chapter One</title></head>
+<body><p>Chapter One</p></body>
+</html>
+"""
+
+
+def _write_empty_first_metadata_epub(path: Path) -> None:
+    """Baut ein Mini-EPUB ohne Navigation, dessen `dc:title` erst im zweiten, nichtleeren
+    Element den echten Titel trägt (A11, nacharbeit.md)."""
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        archive.writestr("META-INF/container.xml", _EMPTY_FIRST_METADATA_CONTAINER_XML)
+        archive.writestr("OEBPS/content.opf", _EMPTY_FIRST_METADATA_OPF)
+        archive.writestr("OEBPS/chapter1.xhtml", _EMPTY_FIRST_METADATA_CHAPTER_XHTML)
+
+
+def test_read_structure_uses_the_first_nonempty_title_when_an_earlier_one_is_empty(
+    tmp_path: Path,
+) -> None:
+    """A11 (nacharbeit.md): Ist das erste `dc:title` leer, wird das zweite, nichtleere
+    Element gelesen, statt die Datei fälschlich als titellos abzulehnen. Mehrere
+    `dc:creator` werden dabei nicht zusammengeführt — `book.author` bleibt der erste
+    nichtleere Wert."""
+    path = tmp_path / "empty_first_metadata.epub"
+    _write_empty_first_metadata_epub(path)
+
+    result = epub.read_structure(path)
+
+    assert result.book.title == "Titel nach leerem Titel"
+    assert result.book.author == "Erste Autorin"
+
+
 # ------------------- Lokale Vorrichtung: verschachtelte Verzeichnisse, prozentkodiertes Ziel
 
 _NESTED_NAV_CONTAINER_XML = """<?xml version="1.0" encoding="UTF-8"?>

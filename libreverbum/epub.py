@@ -147,12 +147,18 @@ def _find_opf(archive: zipfile.ZipFile, path: Path) -> str:
 
 
 def _text_of(root: ElementTree.Element, tag: str) -> str | None:
-    """Getrimmter Text eines Metadaten-Elements, `None` bei fehlendem oder leerem
-    Element."""
-    found = root.find(f"opf:metadata/{tag}", _NS)
-    if found is None or not found.text or not found.text.strip():
-        return None
-    return found.text.strip()
+    """Getrimmter Text des ersten **nichtleeren** Metadaten-Elements mit diesem Tag,
+    `None`, wenn keins einen Text trägt.
+
+    Manche Konvertate stellen ein leeres Element voran und führen den eigentlichen Wert
+    erst im zweiten (etwa ein leeres `dc:title` vor dem echten Buchtitel). `root.find`
+    läse nur das erste und meldete die Datei fälschlich als titellos. Mehrere `dc:creator`
+    mit eigenem Text werden dagegen **nicht** zusammengeführt — `entities.Book.author` ist
+    ein einzelnes Feld, und ein zweites `dc:creator` bleibt deshalb ungenutzt (Regel 14)."""
+    for found in root.findall(f"opf:metadata/{tag}", _NS):
+        if found.text and found.text.strip():
+            return found.text.strip()
+    return None
 
 
 def _read_package(archive: zipfile.ZipFile, opf_path: str, path: Path) -> _Package:
