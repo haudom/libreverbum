@@ -114,6 +114,13 @@ Zwei Prüfregeln sind abgeschaltet, weil sie gegen die Sprachregel arbeiten (`RU
 melden Gedankenstrich und typografische Anführungszeichen). Wer sie wieder anschaltet,
 liest erst technik.md §6, „Zwei Prüfregeln arbeiten gegen die Hausordnung".
 
+**Das Tor ist auf den Bauenden geschrieben.** Wer *prüft*, während ein zweiter Bearbeiter im
+Arbeitsbaum steht, nimmt stattdessen `ruff format --check .` und lässt `pytest` nur auf den
+betroffenen Dateien laufen: `ruff format .` formatiert fremde Arbeit mit, und ein
+vollständiger Lauf zeigt Rot, das dem anderen gehört — „grün" ist bei zwei Bearbeitern nur
+je Datei eine Aussage. Den vollständigen Lauf macht die verkettende Stelle zwischen den
+Runden.
+
 ## Daten
 
 | Datei | Inhalt |

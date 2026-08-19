@@ -31,6 +31,11 @@ vollständig in die Dokumente, Vorschläge zur Hausordnung nach Stufe: `schwer` 
 werden entschieden, `leicht` bleibt liegen. **Bei T18** wird jeder verbliebene Punkt
 eingefaltet oder gestrichen. Solange die Liste nicht leer ist, steht sie in `nacharbeit.md`.
 
+**Verlangt eine Teilaufgabe zwei Wege, nennt die Prüfspalte beide.** Die Prüfspalte wird als
+Auftragsumfang gelesen — das ist die naheliegende Lesart und keine Nachlässigkeit. Nennt sie
+nur einen der beiden Wege, entsteht folgerichtig die Hälfte, ohne Fehler und ohne Meldung.
+Bei T4 ist genau das passiert.
+
 ## Festlegung dieses Plans: die Triage läuft zuerst über die Kommandozeile
 
 Phase 1 wird über den Kommandozeilenzugang abgenommen, die Qt-Oberfläche kommt danach
@@ -102,7 +107,7 @@ weil dieselbe Datei betroffen ist.
 | # | Teilaufgabe | Prüfung |
 |---|---|---|
 | **T3** | Tokenisierung, Wortart, Lemmatisierung, Eigennamenfilter **je Vorkommen** (Regel 12), Hilfsverbformen aussteuern (technik.md §5, offener Punkt `could`/`having`), Häufigkeit je Kapitel, Belegsatz | Regel 2 (`He saw her…` ergibt *see*), Regel 12 (`red` bleibt Lernvokabel), Abnahmekriterium 2 |
-| **T4** | Mehrwortausdrücke: zusammenhängende Kandidatenfolgen **und** getrennte Verb-Partikel-Paare aus der Abhängigkeitsanalyse — die gemessenen 21 %. Liefert Kandidaten und schlägt nicht nach | getrennter Fall (`gave the idea up`) wird gefunden |
+| **T4** | Mehrwortausdrücke auf **zwei** Wegen: zusammenhängende Kandidatenfolgen (n-Gramme gegen das Wörterbuch, dann Filter) **und** getrennte Verb-Partikel-Paare (spaCys Abhängigkeitsanalyse) — die gemessenen 21 %. Liefert Kandidaten und schlägt nicht nach | **beide** Wege: zusammenhängender Fall (`out of the way`) wird gefunden **und** getrennter Fall (`gave the idea up`) wird gefunden |
 
 ### Strang B — `dictionary`
 
@@ -156,7 +161,7 @@ Brauchen E8b und E8c. Bei T14 fällt der offene Punkt aus technik.md §7 an, woh
 | # | Teilaufgabe |
 |---|---|
 | **T15** | `pipeline`: ein Durchlauf für ein Kapitel. Sinnvollerweise als Durchstich angelegt, sobald T3, T5 und T8 stehen — dann zeigt sich früh, ob `entities` trägt |
-| **T16** | Kommandozeilenzugang, Triage über die Tastatur. Hier liegen die Vorgaben aus technik.md §9: Verzeichnis bestimmen, `config.toml` mit `tomllib` lesen, fehlende Datei einmalig aus einer Vorlage anlegen — der Kern bekommt nur fertige Pfade und Adressen |
+| **T16** | Kommandozeilenzugang, Triage über die Tastatur. Hier liegen die Vorgaben aus technik.md §9: Verzeichnis bestimmen, `config.toml` mit `tomllib` lesen, fehlende Datei einmalig aus einer Vorlage anlegen — der Kern bekommt nur fertige Pfade und Adressen. Zwei Entscheidungen fallen hier mit: wie `entries` und `expressions` aus `pipeline.run_chapter` in der Triage-Liste zueinanderstehen — 213 Wendungen je Kapitel, keine davon als Einzelwort erfasst, und T17 braucht daraus zwei Redewendungen für Abnahmekriterium 3 —, und ob ein noch nicht vorhandenes Profil bestätigt werden muss, statt wortlos leer angelegt zu werden |
 
 ---
 

@@ -1257,6 +1257,13 @@ leeres Ergebnis (Regel 13):
 
 ### Offene Punkte
 
+- **Der EPUB-3-Zweig läuft gegen keine Fremdquelle.** In `tools/` liegen nur
+  `sherlock.epub` und `dorian_gray.epub` — beide EPUB 2.0 mit `toc.ncx` und ohne
+  `nav.xhtml` (nachgeprüft). `_read_nav`, `properties="nav"` und `epub:type` in
+  `libreverbum/epub.py` prüft deshalb allein die selbstgebaute Vorrichtung, und genau davor
+  warnt dokumentation.md §5: Die Vorrichtung zeigt, dass der Code läuft, die Fremdquelle
+  zeigt, ob er stimmt. Geschlossen wäre der Punkt, sobald eine EPUB-3-Datei in `tools/`
+  liegt (die beiden hier gemessenen Manga-Bände sind 3.0) und `needs_epub` sie einschließt
 - **Anker innerhalb eines Dokuments.** Bei allen zwölf Dateien gilt ein Kapitel gleich ein
   Dokument. Ob Navigationsziele mit `#anker` als eigene Kapitel zu behandeln sind, ist
   offen — der Fall kam nicht vor

@@ -190,6 +190,17 @@ stimmig, und ein nachgereichtes Teilstück heißt Migration; es entsteht deshalb
 sobald es überhaupt entsteht. Verhalten dagegen entsteht erst, wenn es gebraucht wird: alle
 sieben Tabellen anlegen, aber nur die Zugriffsfunktionen schreiben, die die Phase verlangt.
 
+**Zu Regel 15: die Rohquelle entscheidet.** Für Lizenz-, Fassungs- und Pflegeangaben ist die
+**maschinenlesbare Rohquelle** verbindlich — das JSON eines Paketverzeichnisses, die
+Lizenzdatei im Ursprungsbestand —, nicht die Zusammenfassung einer abgerufenen Seite. Was
+davon in die Dokumente wandert, nennt die Quelle mit. Anlass ist ein Fall vom 18.08.2026:
+Beim Abrufen von Webseiten wurden fehlende Angaben **erfunden** — ein Freigabedatum und eine
+Fehlermeldung zu einer Bibliothek, die das fragliche Paket gar nicht verwendet; aufgefallen
+ist es allein durch eine Gegenprüfung per `curl`. Eine erfundene Lizenzangabe ist nicht
+auffällig, sie sieht aus wie jede andere — und Regel 15 entscheidet über Aufnahme oder
+Ausschluss einer Bibliothek. Beim offiziellen `anki`-Paket führte die tatsächliche Angabe
+(AGPL-3.0) zum Ausschluss.
+
 ---
 
 ## 5. Tests als ausführbare Dokumentation
@@ -273,6 +284,26 @@ entfernen, Filter weglassen. Welcher Test bei welcher Verfälschung gefallen ist
 den Bericht (§9). Das kostet Minuten und ersetzt einen Teil der Durchsicht durch Mechanik —
 wo es getan wurde, hat der Bauende die Falle selbst gefunden, um die es ging.
 
+**Bleibt der Test bei der Verfälschung grün, ist die Zusicherung zu schwach** — nicht die
+Verfälschung falsch gewählt. Dann wird die Behauptung geschärft: Meldungstext statt
+Fehlertyp, eine Vorrichtung, die den Mechanismus überhaupt erzwingt. Wer stattdessen eine
+andere Verfälschung sucht, bis endlich eine rot wird, dreht die Probe um und lässt genau
+den Test stehen, um den es geht — einen, der aussieht wie eine Zusicherung und keine ist.
+Das ist kein Randfall: In einer einzigen Sitzung (18./19.08.2026) trat er viermal ein — eine
+Sortierung, die SQLite bei Gleichstand ohnehin richtig herum lieferte; ein
+`FileNotFoundError`, den `zipfile` selbst wirft; zwei `<p>`, die schon im Quelltext durch
+einen Zeilenumbruch getrennt waren; ein Test, den ein neuer Aufrufpfad wirkungslos machte.
+
+**Womit zu verfälschen sei, ist eine Vermutung und kein Auftrag** — auch dann nicht, wenn
+der Vorschlag aus einer Durchsicht kommt. Wer verfälscht, prüft zuerst, ob die
+vorgeschlagene Änderung überhaupt etwas bewirkt; sonst prüft er den Vorschlag und nicht den
+Code.
+
+**An einer noch unversionierten Datei gibt es kein Netz.** Git holt den Ausgangsstand dort
+nicht zurück. Sie wird deshalb vorher **binär** gesichert und die Wiederherstellung per
+**Hash** verglichen — der Augenschein genügt nicht: Unter Windows verwandelte
+`Path.write_text` beim Zurückschreiben LF in CRLF, und die Datei sah unverändert aus.
+
 ---
 
 ## 6. Nicht dokumentiert wird
@@ -308,6 +339,13 @@ falsch war. Sonst liest man zuerst die überholte Fassung — und wer die Datei 
 oder per `grep` liest, erreicht den Nachtrag womöglich nie. Das ist derselbe Mechanismus
 wie in Abschnitt 1: Was im Bestand steht, gilt faktisch, auch wenn weiter unten etwas
 anderes gefordert wird.
+
+**Eine berichtigte Kurzfassung wird als Ganzes gegen die Quelle geprüft, nicht an der
+gemeldeten Stelle.** Eine Kurzfassung fasst mehrere Festlegungen in einem Satz; wer nur die
+gemeldete Hälfte richtet, lässt die andere als Falle stehen. Der Kernablauf-Satz in
+CLAUDE.md war nach Entscheidung 10 an **zwei** Stellen falsch. Der erste Korrekturlauf
+richtete nur die gemeldete — die zweite führte danach noch zwei Bearbeiter in die Irre und
+wurde erst im zweiten Anlauf gerichtet.
 
 **Am Phasenende einfalten.** Ist eine Phase abgeschlossen, wandern die noch nützlichen
 Nachträge in den Fließtext, der Rest fällt weg. Sonst wird aus einzelnen Nachträgen über
