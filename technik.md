@@ -187,6 +187,13 @@ entscheidend ist:
 | `give up` | aufgeben / kapitulieren / ergeben |
 | `run into` | jemandem über den Weg laufen |
 
+**Die Wortart steckt allein im `lexentry`** (`eng/bank__Noun__1`) — die Tabelle
+`translation` führt dafür keine eigene Spalte. Wer nach Wortart filtern will, zerlegt also
+den `lexentry`, und **29,7 % der Zeilen tragen gar keinen**: 46.933 von 157.801 haben
+`lexentry = NULL` (nachgemessen am 19.08.2026 an `tools/en-de.sqlite3`). Was daraus folgt,
+steht in Abschnitt 3, „Zweite Datenfalle: Zeilen ohne `lexentry`". Der Satz steht hier, weil
+hier die Quelle beschrieben wird — er spart jedem Prüfer den ersten Fehlversuch.
+
 ### Abdeckung — empirisch geprüft
 
 Geprüft am 11.08.2026 an zwei gemeinfreien Romanen (*The Picture of Dorian Gray*,
@@ -537,6 +544,26 @@ Ergebnissen, die fälschlich dem Modell angelastet wurden.
 > Beschriftung wie „Hauptbedeutung, ohne nähere Angabe". Nach `score` absteigend
 > sortieren, damit das Gebräuchliche oben steht.
 
+### Zweite Datenfalle: Zeilen ohne `lexentry`
+
+Die erste Datenfalle betrifft den fehlenden Bedeutungstext, diese die fehlende **Wortart**.
+Nachgemessen am 19.08.2026 an `tools/en-de.sqlite3`: **46.933 von 157.801 Zeilen (29,7 %)**
+haben `lexentry = NULL` und tragen damit keine Wortart (Abschnitt 2, „Warum diese Quelle").
+Eine Zuordnung nach Wortart können sie nicht passieren — über alle betroffenen Zeilen
+geprüft: **keine einzige** hätte es getan.
+
+Anders als bei der ersten Datenfalle ist der Wegfall hier vertretbar: Der höchste `score`
+unter diesen Zeilen ist **48**. Sie fallen also ohnehin sämtlich an der Schwelle
+`score ≥ 50`, mit der T7 die Wendungen filtert. Seit T5 steht der Ausschluss ausdrücklich in
+der Abfrage statt als Nebenwirkung eines Filters — wer ihn dort liest, sieht sofort, dass er
+gewollt ist.
+
+Zum Umfang, nicht als Fehler: **45.260 von 124.751 Stichwörtern (36,3 %)** haben überhaupt
+keine Zeile mit `lexentry` und liefern damit eine leere Auswahlliste. Das ist ein anderer
+Fall als der Wortartunterschied unter „Offene Punkte" (3,3 %): Hier fehlt die Wortart in der
+Quelle, dort weicht sie von spaCys Bestimmung ab. Ob eine leere Auswahlliste `uncertain`
+werden muss, entscheidet **T11**.
+
 ### Empirischer Beleg für die Lemmatisierungspflicht
 
 Ein Testfall ist bewusst als Falle gebaut und zeigt das erwartete Verhalten:
@@ -697,6 +724,13 @@ Die Namen sind englisch, die Prosa bleibt deutsch — Zuordnung und Begründung 
 > Präfix `wikdict_` markiert alle Momentaufnahmen aus der Fremdquelle und hält damit die
 > Regel „keine Fremdschlüssel ins Wörterbuch" beim Abfragen sichtbar.
 
+> **Eine `sense`-Zeile ohne `wikdict_`-Felder bedeutet *kein Wörterbucheintrag*, nicht
+> *noch nicht nachgeschlagen*.** Das ist die einzige erlaubte Lesart — und sie muss
+> ausgesprochen werden, weil beide Fälle sonst ununterscheidbar wären: Ein Platzhalter
+> „wird später nachgeschlagen" trüge dieselben leeren Felder wie eine Wendung ohne
+> Wörterbucheintrag nach Regel 10 und bekäme dieselbe Kennung. Wo eine Bedeutung noch
+> fehlt, entsteht deshalb **keine** Zeile (Befund aus Review T10).
+
 Der aktuelle Kenntnisstand ist eine **Sicht** auf die Ereignistabelle (jeweils
 jüngstes Ereignis je Bedeutung), keine eigene Tabelle. Bei der zu erwartenden Größe —
 Zehntausende Ereignisse — ist das für SQLite unproblematisch. Eine
@@ -845,11 +879,31 @@ Wer pro Grundform filtert, verliert `red` und `orange` vollständig aus der Tria
 passt zur Datenablage aus Abschnitt 4: Kenntnis hängt an der Bedeutung, und `occurrence`
 ist ohnehin die Ebene, auf der Belegsatz und Häufigkeit geführt werden.
 
+### Nachtrag 17.08.2026: nur fünf Wortarten kommen in die Wortliste
+
+Vorher wurde allein `AUX` ausgesteuert, und damit standen `the`, `his` und `by` in der
+Triage. Seit dem 17.08.2026 gilt eine **erlaubte Liste**: In die Wortliste kommen nur
+`NOUN`, `VERB`, `ADJ`, `ADV` und `INTJ` (`extraction._CONTENT_POS`). `PROPN` bleibt davon
+unberührt und wird weiterhin gesondert **je Vorkommen** behandelt (Regel 12).
+
+**Nachgemessen am 19.08.2026** über ganz `tools/sherlock.txt` (108.922 Wörter, spaCy
+`en_core_web_md`): Von 6.229 Grundformen fallen **114** weg, das sind **50.767 von 99.457**
+Token — gut die Hälfte des Textes, aber nur 1,8 % der Grundformen. Nach Wortart: `PRON`
+17.042 · `ADP` 12.196 · `DET` 10.566 · `CCONJ` 4.092 · `SCONJ` 3.822 · `PART` 2.202 · `NUM`
+832 · `X` 15.
+
+Die 114 weggefallenen Grundformen einzeln durchgesehen: **85 reine Funktionswörter**, **20
+Zahlwörter** (`two`, `three`, `fifty`) und **9 fremdsprachige Einsprengsel**, die spaCy als
+`X` führt (`bijou`, `cœur`, `métier`, `fait accompli`, `incognito`). Nur die letzte Gruppe
+ist überhaupt ein Verlust — neun Wörter in einem ganzen Buch, sämtlich französisch und im
+englisch-deutschen Wörterbuch ohnehin unsicher.
+
+Der Filter ist zugleich der Grund, warum **T4 auf der Abhängigkeitsanalyse arbeiten muss**
+und nicht auf der Wortliste: Die Partikel der getrennten Verb-Partikel-Paare sind `ADP` und
+`PART` — aus der Wortliste sind sie damit verschwunden.
+
 ### Offene Punkte
 
-- **`could`, `would`, `having`** und die übrigen Hilfsverbformen sollten vor dem
-  Nachschlagen ausgesteuert werden, statt als Wörterbuchlücke zu erscheinen. Wortart
-  `AUX` genügt dafür vermutlich
 - Über-Lemmatisierung von Eigennamen (`Holmes` → `holme`) — harmlos, solange der Filter
   aus dem vorigen Abschnitt greift, aber beim Anlegen der Liste „Figuren & Orte" zu
   beachten
@@ -1438,6 +1492,11 @@ Abhängigkeitsanalyse nicht: Sie findet `„work it out"`, `„shut the business
 > Wortfolgenabgleich. Mit Entscheidung 5 (Abschnitt 5) steht sie zur Verfügung, der
 > Punkt ist damit erledigt.
 
+> **Nachtrag 19.08.2026 — mit dem gebauten Code gegengemessen.** Die Anteile oben stammen
+> aus `tools/nlp_check.py`. Der Code aus T4 zählt an denselben zwei Romanen **24 %**
+> (Sherlock) und **22 %** (Dorian Gray) statt 21 % und 19 %. Die Überschrift trägt also
+> weiterhin — der getrennte Anteil ist eher größer als kleiner geworden.
+
 Offen bleibt ein anderer: **394 Vorkommen mit Partikel haben keinen
 Wörterbucheintrag** — `take up`, `throw down`, `bring in`, `start off`. Sie gehören
 nach Regel 10 als `uncertain` markiert, nicht verworfen.
@@ -1493,6 +1552,42 @@ Konzept bereits ein Verfahren vor, nämlich die **Triage durch den Nutzer**.
 > gefiltert aus dem Wörterbuch, die Auswahl trifft der Nutzer in der Triage —
 > unterstützt durch Häufigkeitssortierung und Sammelaktion, die das Konzept ohnehin
 > vorsieht.
+
+### Nachtrag 19.08.2026: die Maße beider Wege
+
+Die Arbeitsteilung unten ist inzwischen mit Zahlen unterlegt. Gemessen beim Bau von T4 am
+17.08.2026, die Wörterbuchzahlen am 19.08.2026 gegen `tools/en-de.sqlite3` nachgeprüft;
+„mehrwortig" heißt dabei: `written_rep` enthält ein Leerzeichen.
+
+**Wie lang eine Wendung höchstens wird.** 21.145 mehrwortige Stichwörter erreichen
+`score ≥ 50`, und davon sind **99,07 % höchstens sechs Wörter lang** — 2 Wörter: 16.754 ·
+3: 2.788 · 4: 960 · 5: 281 · 6: 165. Darüber stehen fast nur noch vollständige
+`Proverb`-Zeilen bis 26 Wörter, die als Zitat im Fließtext praktisch nicht vorkommen. Daraus
+die **Obergrenze sechs**, die im n-Gramm-Weg steht.
+
+**Wie klein der `prt`-Weg gegen den n-Gramm-Weg ist.** Nach dem vollen Filter (`score ≥ 50`
+und nicht `Proper_noun`) bleiben 19.325 mehrwortige Stichwörter. Die zweiwortigen
+Verb-Stichwörter darunter — die Obergrenze dessen, was ein Verb-Partikel-Weg überhaupt
+treffen kann — sind 1.026, also **rund 5 %**; mit einer echten Partikelliste blieben beim
+Bau von T4 davon 652 übrig, **3,4 %**. Das ist die Zahl, die die Arbeitsteilung belegt: Ohne
+den n-Gramm-Weg fehlen nicht Randfälle, sondern der Bestand. An `tools/sherlock.txt` (ein
+Kapitel, 60.000 Zeichen) sind es 232 zusammenhängende Wörterbuch-Wendungen, davon 40 aus den
+eigenen Wendungs-Wortarten `Phrase` (691 Zeilen), `Prepositional_phrase` (638) und `Proverb`
+(309) — `as a rule`, `at all`, `after all`, `out of the way`, `all right`.
+
+**Wie viele Kandidaten je Kapitel anfallen** (echter Lauf über 60.000 Zeichen aus
+`tools/sherlock.txt`): zusammenhängend **23.437 verschiedene** Kandidaten (26.984
+Vorkommen), getrennt **77 verschiedene** (93 Vorkommen). Die n-Gramm-Seite bringt also rund
+**300-mal so viele** Nachschlagevorgänge wie die `prt`-Seite. Wie T7 damit umgeht, ist dort
+entschieden und gemessen: Einzelabfragen über **eine geteilte Verbindung**, 14,3 s je
+eigener Verbindung gegen 1,7 s geteilt (`dictionary._lookup_matches`, Befund 5 Review T7).
+Ein Bündelmechanismus war dafür nicht nötig.
+
+Ein Nebenbefund derselben Messung ist in T7 eingegangen: Der Filter `score ≥ 50` löscht 86
+der 232 Sherlock-Treffer, darunter `bring back` (10 Vorkommen), `take up`, `keep out` und
+`light up` — also genau die Einträge, die unten als „394 Vorkommen mit Partikel" nach
+Regel 10 `uncertain` bleiben sollen. Der Filter gehört deshalb zum n-Gramm-Weg, nicht zum
+`prt`-Weg; T7 behandelt die beiden Kandidatenarten seither getrennt.
 
 ### Arbeitsteilung nach der Messung
 

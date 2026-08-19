@@ -265,89 +265,12 @@ und beide Indexnamen stehen seit T7 im Code.
 
 # Teil B — Nachträge an den Dokumenten
 
-Unstrittig, nur noch nicht getan. Jeweils mit der Messung, auf die sie sich stützen. Ohne
-Stufe: Diese Liste wird bei jedem Einfalten auf null gebracht.
+**Leer.** B4 bis B9 sind am 19.08.2026 eingefaltet — nachzulesen in technik.md §2 („Warum
+diese Quelle"), §3 („Zweite Datenfalle: Zeilen ohne `lexentry`"), §4 („Tabellen im
+Überblick"), §5 („Nachtrag 17.08.2026: nur fünf Wortarten kommen in die Wortliste") und
+„Messung: Mehrwortausdrücke" („Nachtrag 19.08.2026: die Maße beider Wege").
 
-## B4 — technik.md §3: Zeilen ohne `lexentry`
-
-**Gemessen:** **46.933 von 157.801 Zeilen (29,7 %)** haben `lexentry = NULL`. Sie können die
-Wortart-Zuordnung nicht passieren — über alle betroffenen Zeilen geprüft: **0** hätten es
-getan. Das Verhalten ist vertretbar (alle diese Zeilen haben `score ≤ 48`, T7 verwirft sie
-ohnehin) und steht seit T5 ausdrücklich in der Abfrage statt als Nebenwirkung.
-
-Zum Umfang, nicht als Fehler: **45.260 von 124.751 Stichwörtern (36,3 %)** haben überhaupt
-keine `lexentry`-Zeile und liefern eine leere Liste. Ob eine leere Liste `uncertain` werden
-muss, entscheidet **T11**.
-
-## B5 — technik.md §5: der Inhaltswortfilter ist neu
-
-Seit dem 17.08.2026 kommen nur noch `NOUN`, `VERB`, `ADJ`, `ADV`, `INTJ` in die Wortliste;
-`PROPN` wird weiterhin gesondert **je Vorkommen** behandelt (Regel 12). Vorher wurde nur
-`AUX` ausgesteuert, wodurch `the`, `his` und `by` in der Triage standen.
-
-**Gemessen an `tools/sherlock.txt`:** 111 Grundformen fallen weg, angeführt von `the` (178),
-`of` (125), `and` (102), `a` (96), `to` (91). Betroffene Wortarten: `PRON` 548, `ADP` 407,
-`DET` 340, `CCONJ` 134, `SCONJ` 99, `PART` 80, `NUM` 31, `X` 1. Stichprobe der seltensten
-Wegfälle (`nothing`, `anything`, `herself`, `another`, `fifty`, `outside`): nur Funktions-
-und Zahlwörter, nichts Lernbares.
-
-Der Filter ist zugleich der Grund, warum **T4 auf der Abhängigkeitsanalyse arbeiten muss**
-und nicht auf der Wortliste: Die Partikel der getrennten Verb-Partikel-Paare sind `ADP` und
-`PART` und damit aus der Liste verschwunden.
-
-## B6 — technik.md §2: `translation` hat keine Wortartspalte
-
-**Gemessen (Review T4, 17.08.2026):** Die Wortart steckt allein im `lexentry`
-(`eng/give_up__Verb__1`); die Tabelle `translation` führt keine eigene Spalte dafür, und
-**29,7 %** der Zeilen haben `lexentry = NULL` — dieselbe Messung wie B4. Das steht im
-Docstring von `dictionary.py`, aber nicht dort, wo technik.md §2 die Quelle beschreibt. Ein
-Satz dort spart jedem Prüfer den ersten Fehlversuch.
-
-## B7 — technik.md §3: der `prt`-Weg erreicht 3 % des Mehrwortbestands
-
-**Gemessen (Review T4, 17.08.2026)** gegen `tools/en-de.sqlite3`: 956 verschiedene
-Verb-Partikel-Stichwörter gegen 54.085 übrige Mehrwort-Stichwörter, mit `score ≥ 50` 652
-gegen 18.709. An `tools/sherlock.txt` (ein Kapitel, 60.000 Zeichen): 232 zusammenhängende
-Wörterbuch-Wendungen, davon 40 der Wortarten `Phrase` (691 Zeilen), `Prepositional_phrase`
-(638) und `Proverb` (309) — `as a rule`, `at all`, `after all`, `out of the way`, `all right`.
-
-Das ist die Zahl, die die Arbeitsteilung aus §3 belegt: Ohne den n-Gramm-Weg fehlen nicht
-Randfälle, sondern der Bestand. Gegengemessen mit dem neuen Code hält der getrennte Anteil
-dagegen: Sherlock 24 %, Dorian Gray 22 % — gegen die dokumentierten 21 % und 19 %.
-
-## B9 — `entities.Sense`: was eine Bedeutung ohne `wikdict_`-Felder bedeutet
-
-**Beobachtet (Review T10, 17.08.2026).** Der Docstring sagt, bei einer Wendung ohne
-Wörterbucheintrag fehlten alle `wikdict_`-Werte und `uncertain` sei gesetzt. Nirgends steht,
-dass das die **einzige** erlaubte Form einer Bedeutung ohne `wikdict_`-Werte ist — und genau
-diese Lücke hat der T10-Bau gefüllt, mit einem Platzhalter, der von einer echten
-Regel-10-Wendung nicht zu unterscheiden war (`uncertain` ist `compare=False` und hat keine
-Schemaspalte, beide bekommen dieselbe `sense`-id).
-
-**Nachzutragen** in technik.md §4 oder im `Sense`-Docstring, ein Satz: Eine `Sense` ohne
-`wikdict_`-Felder bedeutet *kein Wörterbucheintrag*, nicht *noch nicht nachgeschlagen*.
-
-## B8 — technik.md §3: die Maße des n-Gramm-Wegs
-
-**Gemessen beim Bau von T4 (17.08.2026)** gegen `tools/en-de.sqlite3`: 22.840 mehrwortige
-`written_rep` mit `score ≥ 50`, davon **99,12 % höchstens sechs Wörter** lang — 2 Wörter
-18.196 · 3: 2.977 · 4: 1.011 · 5: 289 · 6: 167. Darüber fast nur noch vollständige
-`Proverb`-Zeilen bis 26 Wörter, die als Zitat im Fließtext praktisch nicht vorkommen. Daraus
-die Obergrenze sechs, die jetzt im Code steht.
-
-**Kandidatenzahl je Kapitel** (60.000 Zeichen aus `tools/sherlock.txt`, echter Lauf):
-zusammenhängend **23.437 verschiedene** Kandidaten (26.984 Vorkommen), getrennt 77
-verschiedene (93 Vorkommen). Die n-Gramm-Seite bringt also rund **300-mal so viele**
-Nachschlagevorgänge wie die `prt`-Seite.
-
-**Folge für T7, offen:** Mit dem Index aus T6 (0,71 ms je Aufruf, technik.md §3, „Nachtrag
-17.08.2026") wären 23.437 Einzelabfragen rund **17 s reine Wörterbuchzeit je Kapitel** — gegen
-die 1,1 s, mit denen §3 heute rechnet. Einzelabfragen sind für diese Menge die falsche Form;
-ob T7 stattdessen mengenweise abfragt, ist bei T7 zu entscheiden und **vorher zu messen**,
-nicht zu vermuten.
-
-Dazu ein Nebenbefund für **T7**: Sein Filter `score ≥ 50` löscht 86 der 232 Treffer in
-Sherlock, darunter `bring back` (10 Vorkommen), `take up`, `keep out`, `light up` — also genau
-die Einträge, die §3 („394 Vorkommen mit Partikel") als `uncertain` behalten will. Der Filter
-gehört zum n-Gramm-Weg, nicht zum `prt`-Weg; die zwei Kandidatenarten sind in T7 getrennt zu
-behandeln.
+Drei der dort genannten Zahlen ließen sich beim Einfalten **nicht reproduzieren** und
+wurden gegen `tools/en-de.sqlite3` und `tools/sherlock.txt` neu gemessen; die Schlüsse
+haben sich dadurch nicht geändert. Die eingefaltete Fassung nennt jeweils Messdatum und
+Abgrenzung mit, damit derselbe Fall nicht wiederkehrt.
