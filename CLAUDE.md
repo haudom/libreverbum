@@ -142,6 +142,7 @@ python tools/coverage_check.py buch.txt               # Abdeckung des Wörterbuc
 python tools/sense_check.py                           # Bedeutungsauswahl durch das Modell
 python tools/mwe_check.py buch.txt                    # Mehrwortausdrücke
 python tools/ambiguity_check.py buch.txt              # mehrdeutige Grundformen je Kapitel
+python tools/bundle_check.py buch.txt                 # Bündelgrößen gegen Einzelanfragen
 python tools/nlp_check.py buch.txt                    # spaCy gegen Stanza
 python tools/epub_check.py buch.epub                  # EPUB-Struktur und Fließtext
 python tools/epub_check.py --summary *.epub           # eine Zeile je Buch

@@ -68,15 +68,15 @@ liegt seit dem 18.08.2026 die erste vor:**
   Triage-Entscheidung je Wort genügt** — je Bedeutung wäre der Faktor 3,0, rund 4.000
   Einträge je Kapitel, und Abnahmekriterium 7 nicht mehr erreichbar. Die gewählte Bedeutung
   gehört aber in die **Anzeige** der Triage, nicht bloß das Wort
-- **Skaliert das Bündeln beim Modell? — offen.** technik.md §3 hat „12 Sekunden für alle 16 in
-  einer einzigen Anfrage" gemessen. Gilt das auch für 64, ist die teure Stellung der
-  Einstellung bezahlbar; wächst die Zeit überproportional oder bricht die Antwortform, ist
-  sie es nicht. Am 18.08.2026 nicht messbar, weil kein Modellserver erreichbar war
-  (technik.md §3, „Offene Punkte")
+- **Skaliert das Bündeln beim Modell? — gemessen** (technik.md §3, „Nachtrag 19.08.2026:
+  Bündeln lohnt nicht", `tools/bundle_check.py`): Bündeln ist je nach Modell bis zu
+  2,4-fach schneller, wählt aber bei **23 bis 37 %** der Wörter eine andere Bedeutung als
+  der Einzellauf. Antwort: **T11 fragt je Wort einzeln**, ein Bündelmechanismus entfällt
+  ersatzlos. Nebenbefund mit Betriebswirkung: Der Server kürzt Prompts über 4.096 Token
+  still und meldet die gekürzte Größe
 
-Damit ist **T15 frei**: Die Reihenfolge steht seit Entscheidung 10, und die Einheit der
-Triage ist das Wort. **T11 bleibt gesperrt**, bis die zweite Zahl vorliegt — es müsste sonst
-raten, ob es einzeln oder gebündelt fragt.
+Damit sind **T15 und T11 frei**: Die Reihenfolge steht seit Entscheidung 10, die Einheit
+der Triage ist das Wort, und T11 weiß nun, dass es je Wort einzeln fragt.
 
 ---
 

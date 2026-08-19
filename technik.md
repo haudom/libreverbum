@@ -313,8 +313,11 @@ den Buch-Schwierigkeitscheck in Phase 2 gebraucht. Zwei Punkte dazu:
 
 ## 3. Lokales Modell und Betriebsart — entschieden
 
-**Qwen 3.5 9B über Ollama, angesprochen über die OpenAI-kompatible Schnittstelle.
-Denkschritt abgeschaltet. Antwortform per JSON-Schema erzwungen.**
+**Granite 4.1 8B über Ollama, angesprochen über die OpenAI-kompatible Schnittstelle.
+Denkschritt abgeschaltet. Antwortform per JSON-Schema erzwungen. Eine Anfrage je Wort.**
+
+Bis zum 19.08.2026 stand hier Qwen 3.5 9B; der Wechsel ist im Nachtrag vom 19.08.2026
+begründet. Betriebsart und Einstellungen bleiben unverändert.
 
 ### Hardware
 
@@ -427,6 +430,68 @@ Dauerhaft verloren geht dabei nichts: Das Profil führt Kenntnis je Bedeutung (A
 die zweite Bedeutung erscheint im nächsten Kapitel als „neue Bedeutung eines bekannten
 Wortes" (Abnahmekriterium 6).
 
+### Nachtrag 19.08.2026: Bündeln lohnt nicht — T11 fragt je Wort einzeln
+
+Die zweite der beiden Zahlen, die bauplan.md unter E10 offen hielt, und damit die Sperre
+auf T11. Gemessen mit [`tools/bundle_check.py`](tools/bundle_check.py) an
+`tools/sherlock.txt`: 64 mehrdeutige Grundformen über `extraction.extract_vocabulary` und
+`dictionary.candidates`, dieselbe Stichprobe für jedes Modell und jede Bündelgröße,
+Bündelgröße 1 als Grundlinie.
+
+| Sekunden je Wort | einzeln | Bündel 8 | Bündel 16 |
+|---|---|---|---|
+| `granite4.1:8b` | 1,63 | 1,40 | 1,75 |
+| `gemma4:e4b` | 1,82 | **0,96** | **0,77** |
+| `qwen3.5:9b` | 6,29 | 4,45 | 4,33 |
+| **Übereinstimmung mit dem Einzellauf** | Grundlinie | 70 / 77 / 70 % | 63 / 72 / 63 % |
+
+> **Antwort auf die zweite Frage aus E10: T11 fragt je Wort einzeln.**
+
+Nicht, weil Bündeln langsamer wäre — für `gemma4:e4b` ist es bis zu 2,4-fach schneller,
+für `qwen3.5:9b` 1,4-fach, für `granite4.1:8b` gar nicht. Sondern weil es **bei 23 bis
+37 % der Wörter eine andere Bedeutung wählt**. Was die Messung dabei *nicht* sagt: ob die
+abweichende Wahl schlechter ist. Sie ist nur anders — ein Goldstandard fehlt. Genau
+deshalb fällt die Entscheidung auf die Bedingung, unter der die 11 von 11 oben zustande
+kamen: eine Anfrage je Wort. Ein Bündelmechanismus entfällt damit ersatzlos (Regel 14).
+
+#### Datenfalle: der Server kürzt zu lange Prompts still
+
+Ollama fährt die Modelle mit `context_length` **4096**, obwohl alle drei 131k oder mehr
+könnten. Überschreitet ein Prompt das Fenster, kürzt der Server ihn auf rund **2.050
+Token — und meldet in `usage.prompt_tokens` den gekürzten Wert.**
+
+| gesendet | gemeldete `prompt_tokens` |
+|---|---|
+| 1.000 / 2.000 / 3.000 Token | 1.015 / 2.015 / 3.015 — korrekt |
+| 5.000 und 9.000 Token | **2.050** — gekürzt |
+
+Eine Prüfung, die sich auf diese Zahl verlässt, kann die Kürzung deshalb **nie sehen**;
+die Promptgröße ist **vor** dem Senden zu schätzen. Bündelgröße 32 und 64 (4.278 und
+8.088 geschätzte Token) sind dadurch gar nicht messbar — ihre Zeilen sind `UNBRAUCHBAR`
+und tragen zur Antwort oben nichts bei. **Das gilt auch im Betrieb**, weil T11 denselben
+Endpunkt anspricht; bei Einzelanfragen (rund 550 Token) ist der Abstand groß.
+
+#### Warum die Festlegung von Qwen 3.5 auf Granite 4.1 wechselt
+
+In der gewählten Betriebsart liegen `granite4.1:8b` (1,63 s/Wort) und `gemma4:e4b` (1,82)
+gleichauf, `qwen3.5:9b` (6,29) ist rund viermal langsamer — ohne dafür etwas zu leisten:
+In `sense_check.py` erreichen alle drei 11 von 11, und in der Übereinstimmung liegt Qwen
+nicht vorn. Gewählt ist `granite4.1:8b`: schnellste Antwort bei Einzelanfragen,
+ausdrücklich auf strukturierte JSON-Ausgabe hin gebaut, kleinste Datei.
+**`gemma4:e4b` ist der dokumentierte Zweitplatzierte** — gleichauf einzeln, deutlich
+besser, sobald gebündelt würde. Der Wechsel ist billig: Der Modellname steht in
+`config.toml` (Abschnitt 9), nicht im Code.
+
+Zwei weitere Kandidaten sind ausgeschieden: `gemma4:e2b` erreicht in `sense_check.py` nur
+9 von 11, und `ornith:9b` ist ein agentisches Coding-Modell auf Qwen-3.5-Unterbau — das
+langsamste im Feld und in der Redewendungsprobe unbrauchbar, weil es den
+Gutenberg-Lizenzkopf als Wendungen ausgibt.
+
+> **`sense_check.py` trennt nicht mehr.** Vier von fünf geprüften Modellen erreichen dort
+> 11/11 — der Test ist zum Rauchtest geworden. Eine Aussage über die Trefferqualität
+> zwischen Granite und Gemma braucht eine größere Stichprobe, sinnvollerweise **nach T11
+> und über dessen echten Prompt**, nicht über einen nachgebauten.
+
 ### Zwingende Einstellung: Denkschritt abschalten
 
 Qwen 3.5 denkt in Ollama standardmäßig mit. Ohne Gegenmaßnahme verbraucht das Modell
@@ -445,6 +510,11 @@ vorgegebenen Liste — Nachdenken bringt hier nichts und kostet das Achtundzwanz
 > **Merksatz:** Bei jedem Modellwechsel ist zuerst zu prüfen, ob es einen Denkschritt
 > mitbringt und wie er sich abschalten lässt. Das ist die erste Fehlerquelle, nicht die
 > letzte.
+
+Am 18.08.2026 an fünf Modellen nachgeprüft: `granite4.1:8b`, `gemma4:e2b`, `gemma4:e4b`,
+`ornith:9b` und `qwen3.5:9b` denken alle standardmäßig mit (6 bis 42 s je Antwort) und
+gehorchen alle `reasoning_effort: "none"` (0,2 bis 1,2 s). Die Einstellung überlebt einen
+Modellwechsel also — nachzuprüfen ist sie trotzdem.
 
 ### Datenfalle: Einträge ohne Bedeutungstext
 
@@ -487,12 +557,6 @@ Siehe Abschnitt „Warum die Reihenfolge zwingend ist".
 
 ### Offene Punkte
 
-- **Skaliert das Bündeln beim Modell?** Die zweite Zahl zu E10 (bauplan.md, Tor 0) und die
-  Fortschreibung der Messung unten in „Beurteilen statt erzeugen": 12 Sekunden für 16
-  Urteile in einer einzigen Anfrage — gilt das auch für 32 und 64? Am 18.08.2026 nicht
-  messbar: Der Modellserver unter `192.168.2.129:11434` war nicht erreichbar (weder TCP
-  noch Ping, der Rechner stand nicht im Netz), und keine der üblichen örtlichen Adressen
-  aus `tools/sense_check.py` antwortete. Die Messung bleibt offen und mit ihr **T11**
 - **`candidates()` vergleicht Groß- und Kleinschreibung binär — ob das bleiben soll, ist
   nicht entschieden.** Gemessen beim Review zu T7 an `tools/en-de.sqlite3`: `'polish'`
   findet 6 Zeilen, case-insensitiv 8; `'german'` 3 gegen 12. **11,3 % der 84.167
