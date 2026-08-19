@@ -1,6 +1,6 @@
 # LibreVerbum — Nacharbeit
 
-> Stand: 19.08.2026 · Befunde aus dem Bau von T3, T4, T5, T8, T12 und T15, die **nicht** in
+> Stand: 19.08.2026 · Befunde aus dem Bau von T3 bis T15, die **nicht** in
 > die jeweilige Teilaufgabe gehören. Zwei Arten: Änderungen an den Regeln und der
 > Arbeitsweise (Teil A), Nachträge an den Dokumenten aus gemessenen Ergebnissen (Teil B).
 >
@@ -143,6 +143,120 @@ deutschen Meldung.
 
 **Vorschlag:** in `profile.open_profile` dieselbe Umhüllung wie in `ensure_index`. Gehört
 zu **T8**, nicht zu T15 — `profile.py` ist dessen Modul.
+
+## A16 — mittel · Eine grün gebliebene Verfälschungsprobe heißt: die Zusicherung ist zu schwach
+
+**Beobachtet (Sitzung 18./19.08.2026, vier Fälle in vier Teilaufgaben).** Die Regel aus
+dokumentation.md §5 verlangt, dass ein Test einmal gegen eine absichtlich falsche Umsetzung
+rot war. Sie sagt nicht, was zu tun ist, wenn er dabei **grün bleibt** — und das ist keine
+Ausnahme, sondern trat in dieser Sitzung viermal ein:
+
+- **T9:** Das Streichen von `, e.id` aus `ORDER BY` blieb wirkungslos, weil SQLite bei
+  Gleichstand faktisch in Einfügereihenfolge sortiert. Rot wurde der Test erst, als die
+  Tie-Break-Richtung umgekehrt wurde
+- **T12:** „fehlende Datei ergibt `FileNotFoundError`“ bestand auch ohne den eigenen Check,
+  weil `zipfile.ZipFile` denselben Fehlertyp wirft — geschärft auf den Meldungstext
+- **T12b:** Die Vorrichtung für die Absatzgrenzen trennte die beiden `<p>` bereits durch
+  einen Zeilenumbruch im Quelltext und prüfte den Mechanismus damit gar nicht
+- **T15:** Die Behebung des einen Befunds machte den Test eines anderen wirkungslos, weil
+  der neue Aufrufpfad denselben Fehler vorher abfing
+
+Dreimal wäre ein Test entstanden, der aussieht wie eine Zusicherung und keine ist.
+
+**Kosten:** je Fall fünf bis fünfzehn Minuten. Ein falsches Ergebnis wäre **nicht** sofort
+durchgegangen, aber die Prüfung wäre dauerhaft wirkungslos im Repository gelandet — und
+genau das entdeckt später niemand mehr, weil ein grüner Test nicht auffällt.
+
+**Vorschlag:** Ein Satz in dokumentation.md §5: Bleibt der Test bei der Verfälschung grün,
+ist die **Zusicherung zu schwach**, nicht die Verfälschung falsch gewählt — dann wird die
+Behauptung geschärft (Meldungstext statt Fehlertyp, unterscheidende Vorrichtung), nicht eine
+andere Verfälschung gesucht. Zweiter Satz: Der Vorschlag eines Prüfenden, *womit* zu
+verfälschen sei, ist eine Vermutung und kein Auftrag — der T9-Fall kam aus einem Review.
+
+## A17 — schwer · Lizenzangaben nach Regel 15 nur aus der Rohabfrage
+
+**Beobachtet (Vorbereitung E8b/E8c, 18.08.2026).** Beim Abrufen von Webseiten wurden Angaben
+**erfunden**, wo sie im Auszug fehlten: ein Freigabedatum für eine Paketfassung und eine
+angebliche Fehlermeldung zu einer Bibliothek, die das fragliche Paket gar nicht verwendet.
+Aufgefallen ist es nur, weil der Bearbeiter beides per Rohabfrage (`curl` auf die
+JSON-Schnittstelle) gegengeprüft hat.
+
+**Kosten:** zwei Gegenprüfungen. Ein falsches Ergebnis hätte durchgehen können — und hier
+wiegt das schwerer als anderswo: **Regel 15 ist eine harte Regel**, die Lizenzprüfung
+entscheidet über Aufnahme oder Ausschluss einer Bibliothek. Eine erfundene Lizenzangabe ist
+nicht auffällig, sie sieht aus wie jede andere. Der Prüffall dieser Sitzung war das
+offizielle `anki`-Paket, dessen tatsächliche AGPL-3.0-Angabe zum Ausschluss führt.
+
+**Vorschlag:** In dokumentation.md §5 oder bei Regel 15 festhalten: Für Lizenz-, Fassungs-
+und Pflegeangaben ist die **maschinenlesbare Rohquelle** verbindlich (Paketverzeichnis-JSON,
+Lizenzdatei im Ursprungsbestand), nicht die Zusammenfassung einer abgerufenen Seite. Was in
+die Dokumente wandert, nennt die Quelle mit.
+
+## A18 — mittel · Eine berichtigte Kurzfassung ist ganz zu prüfen, nicht nur an der gemeldeten Stelle
+
+**Beobachtet (18./19.08.2026, zwei Anläufe).** Der Kernablauf-Satz in CLAUDE.md war nach
+Entscheidung 10 an **zwei** Stellen falsch: die Triage stand vor dem Beschaffen der
+Bedeutungen, und der Profilabgleich stand davor statt danach. Der erste Korrekturlauf
+(`4cbeb40`) richtete nur die erste Stelle, weil nur sie gemeldet worden war. Die zweite
+führte danach noch **zwei** Bearbeiter in die Irre — den T15-Bau und den Auftrag an ihn —
+und wurde erst mit `95ca04b` gerichtet.
+
+**Kosten:** rund zwanzig Minuten Dokumentenabgleich beim T15-Bau, dazu ein zweiter
+Korrekturlauf. Ein falsches Ergebnis war nahe: Der Bearbeiter hätte die Reihenfolge aus dem
+Auftrag übernehmen können statt aus konzept.md — sie wäre technisch nicht ausführbar gewesen,
+der Fehler also aufgefallen, aber erst beim Programmieren.
+
+**Vorschlag:** Zu dokumentation.md §7 („Korrigieren: Nachtrag oder überschreiben“) ein Satz:
+Wird eine **Kurzfassung** berichtigt, die eine Entscheidung zusammenfasst, ist sie als Ganzes
+gegen die Quelle zu prüfen — eine Kurzfassung fasst mehrere Festlegungen in einem Satz, und
+wer nur die gemeldete Hälfte richtet, lässt die andere als Falle stehen.
+
+## A19 — mittel · Das Review steht in keiner Hausordnung
+
+**Beobachtet (Sitzung 18./19.08.2026).** Sechs Teilaufgaben (T6, T7, T9, T12, T12b, T15)
+wurden gebaut, jede mit **grünem Tor** — und jede Durchsicht danach fand Befunde, vier davon
+`schwer`:
+
+- **T6:** Fehlt der `Content-Length`-Kopf, entfiel die Längenprüfung ersatzlos; eine halb
+  geladene Datei bestand die Schemaprüfung und wäre als gültiges Wörterbuch liegen geblieben
+- **T7:** Nichttreffer wurden für beide Kandidatenwege als `uncertain` markiert — rund 23.500
+  unsichere Einträge je Kapitel; zugleich war der Eigennamenfilter durch den binären
+  Schreibungsvergleich toter Code
+- **T12b:** Ein Kapitel kam nach dem Aussteuern **still leer** zurück, ohne Fehler
+- **T15:** 213 Wendungen je Kapitel fehlten im Ergebnis; T4 und T7 hatten außerhalb der Tests
+  keinen Aufrufer
+
+Alle vier sind **stille** Fehler — genau die Art, gegen die Regel 13 geschrieben ist, und
+genau die Art, die vier grüne Befehle nicht sehen. Das Tor prüft **Form** (Format, Regeln,
+Typen, Tests laufen); ob das Gebaute das Richtige tut, prüft es nicht. In CLAUDE.md und
+dokumentation.md kommt die Durchsicht als Arbeitsschritt gleichwohl **nicht vor** — sie fand
+in dieser Sitzung nur statt, weil der Auftraggeber sie angeordnet hat.
+
+**Kosten:** keine, solange jemand daran denkt. Ein falsches Ergebnis wäre in vier Fällen
+durchgegangen — jedes davon in einem committeten, grünen Stand.
+
+**Vorschlag:** Zu entscheiden, ob „Prüfen vor »fertig«“ um die Durchsicht ergänzt wird — mit
+dem Zusatz, dass sie **nicht derselbe Bearbeiter** macht, denn drei der vier Befunde lagen
+in Annahmen, die der Bauende selbst getroffen und in seinen Tests wiederholt hatte. Das
+berührt A8, das dasselbe von der Werkzeugseite her beschreibt.
+
+## A20 — leicht · `tools/en-de.sqlite3` trägt keinen Index
+
+**Beobachtet (18.08.2026, an fünf Stellen aufgelaufen).** Die Wörterbuchdatei im
+Arbeitsverzeichnis hat **null** Indizes; eine Abfrage gegen `translation(written_rep)` kostet
+dort einen vollen Scan (gemessen: 490 s für einen Kapitellauf, gegen 1,1 s mit Index —
+technik.md §3, „Nachtrag 17.08.2026“). `dictionary.ensure_index` aus T6 legt ihn an, ist auf
+dieser Datei aber nie gelaufen: Sie wurde von Hand hinterlegt, nicht über `fetch_dictionary`
+bezogen.
+
+**Kosten:** Jeder Bearbeiter, der gegen die echte Datei misst oder `needs_dictionary`-Tests
+schreibt, musste sich eine indizierte **Kopie** anlegen — in dieser Sitzung fünfmal
+unabhängig voneinander.
+
+**Vorschlag:** Keine Regeländerung. Einmalig `dictionary.ensure_index` auf
+`tools/en-de.sqlite3` laufen lassen; danach entfällt der Umweg. Die Entscheidung liegt beim
+Auftraggeber, weil es seine Datei ist — der Index verändert sie (er wächst um einige MB),
+und beide Indexnamen stehen seit T7 im Code.
 
 > **A6 gestrichen am 17.08.2026** (Parallelität erzeugt Phantomfehler): als Absprache
 > erledigt, der Dokumentteil ist in A8 aufgegangen.
