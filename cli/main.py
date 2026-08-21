@@ -39,20 +39,20 @@ from libreverbum.entities import CardDirection
 def _build_parser() -> argparse.ArgumentParser:
     # (Befund mittel 3, Durchsicht T16): argparse.print_help()/format_help() schreiben
     # direkt auf sys.stdout beziehungsweise sys.stderr, an cli.display.safe_print vorbei
-    # (dokumentation.md §4 Regel 13) — description und jeder help-Text unten bleiben
-    # deshalb reines ASCII, statt sich auf eine bestimmte eingeschränkte Konsolenkodierung
-    # zu verlassen. Die frühere Fassung dieses Kommentars entfernte nur den Pfeil "→" aus
-    # dem help-Text von --card-direction und hielt die Stelle fälschlich für erledigt: Der
-    # Gedankenstrich "—" blieb dort **und** in description stehen und brach auf cp850 —
-    # der klassischen DOS-/conhost-Codepage, die tests/test_cli_display.py als die
-    # gefährliche nennt, nicht bloß cp1252 — mit demselben UnicodeEncodeError ab
+    # (dokumentation.md §4 Regel 13) — description und jeder help-Text unten meiden
+    # deshalb Gedankenstrich und typografische Anführungszeichen, die einzigen Zeichen,
+    # die cp850 (die klassische DOS-/conhost-Codepage, tests/test_cli_display.py nennt
+    # sie als die gefährliche, nicht bloß cp1252) nicht darstellen kann
     # (test_help_text_survives_a_restricted_console_codepage in tests/test_cli_main.py
-    # kodiert format_help() jetzt gegen genau diese Codepage). Umlaute wären auf cp850
-    # selbst unschädlich, aber ASCII macht die Zusicherung unabhängig davon, welche
-    # eingeschränkte Codepage als Nächstes zuschlägt.
+    # kodiert format_help() gegen genau diese Codepage). Umlaute und ß bleiben stehen —
+    # cp850 stellt sie dar, und die Sprachregel (dokumentation.md §1) gilt für Hilfetexte
+    # wie für jeden anderen Oberflächentext. Eine frühere Fassung dieser Behebung zwang
+    # die Texte fälschlich auf reines ASCII und schrieb dabei Umlaute in
+    # Ersatzschreibung ("ueber", "fuer") — unnötig und selbst ein Verstoß gegen die
+    # Sprachregel, am 21.08.2026 korrigiert.
     parser = argparse.ArgumentParser(
         prog="python -m cli",
-        description="LibreVerbum - Kapiteldurchlauf mit Triage ueber die Tastatur (T16).",
+        description="LibreVerbum: Kapiteldurchlauf mit Triage über die Tastatur (bauplan.md T16).",
     )
     parser.add_argument("epub_path", type=Path, help="Pfad zur EPUB-Datei")
     parser.add_argument(
@@ -62,19 +62,19 @@ def _build_parser() -> argparse.ArgumentParser:
         "--card-direction",
         choices=[direction.value for direction in CardDirection],
         default=CardDirection.EN_DE.value,
-        help="Kartenrichtung des Exports (konzept.md Paragraf 6), Vorgabe: Englisch nach Deutsch",
+        help="Kartenrichtung des Exports (konzept.md §6), Vorgabe: Englisch nach Deutsch",
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
         default=None,
-        help="Zielverzeichnis fuer Anki-Deck und Druckseite (Vorgabe: aktuelles Verzeichnis)",
+        help="Zielverzeichnis für Anki-Deck und Druckseite (Vorgabe: aktuelles Verzeichnis)",
     )
     parser.add_argument(
         "--data-dir",
         type=Path,
         default=None,
-        help="Abweichendes Datenverzeichnis statt des plattformueblichen (technik.md Paragraf 9)",
+        help="Abweichendes Datenverzeichnis statt des plattformüblichen (technik.md §9)",
     )
     return parser
 
@@ -204,24 +204,29 @@ def _run(args: argparse.Namespace, *, read_line: ReadLine, write_line: WriteLine
             read_line=read_line,
             write_line=write_line,
         )
+
+        cards = word_cards + expression_cards
+        if not cards:
+            write_line("Keine Wörter zum Lernen ausgewählt — kein Export.")
+            return 0
+
+        # (Befund mittel, Durchsicht T16): profile.record_card schreibt die Anki-GUID
+        # jeder Karte ins Profil (Regel 6) und braucht dafür dieselbe, noch offene
+        # Profilverbindung wie die Triage — der Export bleibt deshalb innerhalb dieses
+        # try-Blocks, statt `con` vorher zu schließen.
+        output_dir = args.output_dir or Path.cwd()
+        paths = export.write_exports(
+            con,
+            output_dir,
+            cards,
+            book_title=result.chapter.book.title,
+            chapter_number=result.chapter.number,
+        )
+        write_line(f"Anki-Deck: {paths.anki_path}")
+        write_line(f"Druckseite: {paths.printout_path}")
+        return 0
     finally:
         con.close()
-
-    cards = word_cards + expression_cards
-    if not cards:
-        write_line("Keine Wörter zum Lernen ausgewählt — kein Export.")
-        return 0
-
-    output_dir = args.output_dir or Path.cwd()
-    paths = export.write_exports(
-        output_dir,
-        cards,
-        book_title=result.chapter.book.title,
-        chapter_number=result.chapter.number,
-    )
-    write_line(f"Anki-Deck: {paths.anki_path}")
-    write_line(f"Druckseite: {paths.printout_path}")
-    return 0
 
 
 def main(

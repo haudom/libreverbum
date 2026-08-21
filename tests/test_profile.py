@@ -10,8 +10,18 @@ from typing import Any, cast
 
 import pytest
 
-from libreverbum import profile
-from libreverbum.entities import Book, Event, KnowledgeState, Lemma, Origin, Sense
+from libreverbum import anki, profile
+from libreverbum.entities import (
+    Book,
+    Card,
+    CardDirection,
+    Event,
+    KnowledgeState,
+    Lemma,
+    Occurrence,
+    Origin,
+    Sense,
+)
 
 _BOOK = Book(title="Testbuch", author="Autorin")
 
@@ -36,6 +46,31 @@ def _add_chapter(con: sqlite3.Connection, book_id: int, chapter_number: int = 1)
         (book_id, chapter_number, "Testkapitel"),
     )
     con.commit()
+
+
+def _occurrence(chapter_number: int = 1) -> Occurrence:
+    return Occurrence(
+        book=_BOOK,
+        chapter_number=chapter_number,
+        lemma=Lemma(text="watch", pos="NOUN"),
+        word_form="watch",
+        example_sentence="He checked his watch before leaving.",
+        frequency=2,
+        proper_noun_frequency=0,
+    )
+
+
+def _card_for(occurrence: Occurrence) -> Card:
+    sense = Sense(
+        lemma=occurrence.lemma,
+        translation="Uhr",
+        wikdict_sense=None,
+        wikdict_trans_list="Uhr | Armbanduhr",
+        wikdict_lexentry="eng/watch__Noun__1",
+    )
+    direction = CardDirection.EN_DE
+    guid = anki.new_card_guid(occurrence, sense, direction)
+    return Card(sense=sense, occurrence=occurrence, card_direction=direction, guid=guid)
 
 
 def test_rule_5_schema_version_is_set_on_a_fresh_profile(tmp_path: Path) -> None:
@@ -693,3 +728,92 @@ def test_compare_chapter_vocabulary_does_not_create_a_row_for_an_unseen_sense(
     profile.compare_chapter_vocabulary(con, [sense])
 
     assert con.execute("SELECT count(*) FROM sense").fetchone()[0] == 0
+
+
+def test_ensure_occurrence_is_idempotent(tmp_path: Path) -> None:
+    """Wie `ensure_sense`: Zweimaliges `ensure_occurrence` mit demselben Inhalt liefert
+    dieselbe id und legt keine zweite Zeile an — dieselbe Bemessung wie das
+    UNIQUE-Constraint auf `occurrence` (`book_id`, `chapter_number`, `lemma_id`)."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    book_id = profile.ensure_book(con, _BOOK)
+    _add_chapter(con, book_id)
+    occurrence = _occurrence()
+
+    first_id = profile.ensure_occurrence(con, occurrence)
+    second_id = profile.ensure_occurrence(con, occurrence)
+
+    assert first_id == second_id
+    assert con.execute("SELECT count(*) FROM occurrence").fetchone()[0] == 1
+
+
+def test_ensure_occurrence_without_a_chapter_row_is_rejected(tmp_path: Path) -> None:
+    """`occurrence` trägt denselben Fremdschlüssel auf `chapter(book_id, number)` wie
+    `event` (Befund 6, Review T8) — ein Vorkommen zu einem nie angelegten Kapitel wird
+    von SQLite zurückgewiesen, nicht stillschweigend übernommen."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+
+    with pytest.raises(sqlite3.IntegrityError):
+        profile.ensure_occurrence(con, _occurrence())
+
+
+def test_record_card_writes_the_same_guid_that_the_card_carries(tmp_path: Path) -> None:
+    """Regel 6 (dokumentation.md §4, „Anki-GUID beim Export in card mitschreiben"):
+    Nach `record_card` steht zu der Karte eine Zeile in `card`, deren GUID mit
+    `card.guid` übereinstimmt — genau die GUID, die auch im exportierten Anki-Deck
+    steht (Befund mittel, Durchsicht T16: bislang landete sie nirgends im Profil)."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    book_id = profile.ensure_book(con, _BOOK)
+    _add_chapter(con, book_id)
+    card = _card_for(_occurrence())
+
+    card_id = profile.record_card(con, card)
+
+    row = con.execute("SELECT guid FROM card WHERE id = ?", (card_id,)).fetchone()
+    assert row is not None
+    assert row[0] == card.guid
+
+
+def test_record_card_links_the_occurrence_and_sense_rows(tmp_path: Path) -> None:
+    """`record_card` legt Vorkommen und Bedeutung an, falls sie fehlen, und verknüpft
+    genau diese Zeilen mit der Kartenzeile — kein verwaistes `card` ohne passendes
+    `occurrence`/`sense`."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    book_id = profile.ensure_book(con, _BOOK)
+    _add_chapter(con, book_id)
+    card = _card_for(_occurrence())
+
+    card_id = profile.record_card(con, card)
+
+    occurrence_id, sense_id = con.execute(
+        "SELECT occurrence_id, sense_id FROM card WHERE id = ?", (card_id,)
+    ).fetchone()
+    assert occurrence_id == profile.ensure_occurrence(con, card.occurrence)
+    assert sense_id == profile.ensure_sense(con, card.sense)
+
+
+def test_record_card_is_idempotent_for_a_second_export_of_the_same_meaning(tmp_path: Path) -> None:
+    """Der Nutzen von Regel 6 ist erst eingelöst, wenn ein zweiter Export derselben
+    Bedeutung sich darauf stützen kann: `anki.new_card_guid` liefert dafür stets
+    dieselbe GUID (dokumentation.md, Bericht zu T16-Nachbesserung) — ein zweiter
+    `record_card`-Aufruf mit derselben Karte legt keine zweite `card`-Zeile an."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    book_id = profile.ensure_book(con, _BOOK)
+    _add_chapter(con, book_id)
+    card = _card_for(_occurrence())
+
+    first_id = profile.record_card(con, card)
+    second_id = profile.record_card(con, card)
+
+    assert first_id == second_id
+    assert con.execute("SELECT count(*) FROM card").fetchone()[0] == 1
+
+
+def test_record_card_without_a_chapter_row_is_rejected(tmp_path: Path) -> None:
+    """Dasselbe Fremdschlüsselverhalten wie `record_event`: Ein Kapitel, das nie über
+    `chapter` angelegt wurde, lässt `record_card` nicht stillschweigend eine Karte dazu
+    anlegen."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    card = _card_for(_occurrence())
+
+    with pytest.raises(sqlite3.IntegrityError):
+        profile.record_card(con, card)

@@ -5,7 +5,11 @@ Aufgabe
 Schritt 3 des Kernablaufs (konzept.md): das Schema anlegen und Kenntnis als Ereignisfolge
 festhalten — pro Bedeutung, nicht pro Wort (technik.md §4, „Kernentscheidung: Kenntnis pro
 Bedeutung, nicht pro Wort", bauplan.md T8) —, daraus den Kenntnisstand ableiten und den
-Kapitelwortschatz dagegen abgleichen (bauplan.md T9).
+Kapitelwortschatz dagegen abgleichen (bauplan.md T9). Dazu, für Schritt 6 (Export),
+`record_card`: die Anki-GUID beim Export in `card` mitschreiben (Regel 6) — ohne dieses
+Gegenstück weiß das Profil nach einem Export nicht, für welche Bedeutung schon eine Karte
+besteht, und ein zweiter Lauf erzeugte in Anki stumm eine Doppelnotiz (Befund mittel,
+Durchsicht T16).
 
 Voraussetzungen
 ---------------
@@ -23,16 +27,19 @@ erkennen (technik.md §4, „Kernentscheidung: Kenntnis pro Bedeutung, nicht pro
 Liefert
 -------
 `open_profile` legt beim ersten Aufruf das vollständige Schema an und setzt `PRAGMA
-user_version` (Regel 5). `ensure_book`, `ensure_lemma` und `ensure_sense` liefern die
-bestehende oder neu angelegte Zeile anhand ihrer Identität. `record_event` hängt ein
-Ereignis an, ohne ein vorheriges zu ersetzen (technik.md §4, „Kernentscheidung:
-Ereignisfolge statt überschreibbarem Zustand"); `events_for_sense` liest die volle Folge zu
-einer Bedeutung zurück. `current_knowledge_state` ist die Sicht darauf: das jüngste
-Ereignis je Bedeutung, `None` ohne jedes Ereignis. `compare_chapter_vocabulary` hält einen
-Kapitelwortschatz gegen diese Sicht: je Bedeutung `VocabularyStatus.UNKNOWN`, `.KNOWN` oder
-`.NEW_MEANING_OF_KNOWN_WORD` — Letzteres, wenn eine andere Bedeutung derselben Grundform
-bereits bekannt ist (konzept.md §5, „Mehrdeutigkeit"). Ein reiner Lesezugriff: Bedeutungen
-ohne bisheriges Ereignis werden dabei nicht angelegt.
+user_version` (Regel 5). `ensure_book`, `ensure_lemma`, `ensure_sense` und
+`ensure_occurrence` liefern die bestehende oder neu angelegte Zeile anhand ihrer
+Identität. `record_event` hängt ein Ereignis an, ohne ein vorheriges zu ersetzen
+(technik.md §4, „Kernentscheidung: Ereignisfolge statt überschreibbarem Zustand");
+`events_for_sense` liest die volle Folge zu einer Bedeutung zurück.
+`current_knowledge_state` ist die Sicht darauf: das jüngste Ereignis je Bedeutung, `None`
+ohne jedes Ereignis. `compare_chapter_vocabulary` hält einen Kapitelwortschatz gegen diese
+Sicht: je Bedeutung `VocabularyStatus.UNKNOWN`, `.KNOWN` oder `.NEW_MEANING_OF_KNOWN_WORD`
+— Letzteres, wenn eine andere Bedeutung derselben Grundform bereits bekannt ist
+(konzept.md §5, „Mehrdeutigkeit"). Ein reiner Lesezugriff: Bedeutungen ohne bisheriges
+Ereignis werden dabei nicht angelegt. `record_card` schreibt Vorkommen und Karte einer
+exportierten `Card` fest, mit derselben GUID, die im Anki-Deck steht (Regel 6) — über die
+GUID idempotent: ein zweiter Export derselben Bedeutung legt keine zweite Zeile an.
 """
 
 from __future__ import annotations
@@ -43,7 +50,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 
-from libreverbum.entities import Book, Event, KnowledgeState, Lemma, Origin, Sense
+from libreverbum.entities import Book, Card, Event, KnowledgeState, Lemma, Occurrence, Origin, Sense
 
 
 class VocabularyStatus(StrEnum):
@@ -279,6 +286,44 @@ def ensure_sense(con: sqlite3.Connection, sense: Sense) -> int:
     return int(row[0])
 
 
+def ensure_occurrence(con: sqlite3.Connection, occurrence: Occurrence) -> int:
+    """Liefert die id eines Vorkommens, legt die Zeile an, falls sie fehlt. Identität
+    über `book_id`, `chapter_number` und `lemma_id` — dieselbe Bemessung wie das
+    UNIQUE-Constraint auf `occurrence` (technik.md §4, „Ein Eintrag je Kapitel und
+    Grundform — dasselbe Wort hat in Kapitel 2 einen anderen Belegsatz als in Kapitel
+    9").
+
+    Setzt voraus, dass die Kapitelzeile bereits besteht (`chapter(book_id, number)`,
+    Fremdschlüssel auf `occurrence`) — dieses Modul bietet dafür bewusst keine eigene
+    Schreibfunktion (Regel 14, `cli.interaction.ensure_chapter_row` übernimmt das); ein
+    Aufruf ohne bestehende Kapitelzeile bricht mit `sqlite3.IntegrityError` ab, dasselbe
+    Verhalten wie `record_event`.
+    """
+    book_id = ensure_book(con, occurrence.book)
+    lemma_id = ensure_lemma(con, occurrence.lemma)
+    con.execute(
+        "INSERT OR IGNORE INTO occurrence "
+        "(book_id, chapter_number, lemma_id, word_form, example_sentence, frequency, "
+        "proper_noun_frequency) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            book_id,
+            occurrence.chapter_number,
+            lemma_id,
+            occurrence.word_form,
+            occurrence.example_sentence,
+            occurrence.frequency,
+            occurrence.proper_noun_frequency,
+        ),
+    )
+    con.commit()
+    row = con.execute(
+        "SELECT id FROM occurrence WHERE book_id = ? AND chapter_number = ? AND lemma_id = ?",
+        (book_id, occurrence.chapter_number, lemma_id),
+    ).fetchone()
+    assert row is not None  # INSERT OR IGNORE + UNIQUE(book_id, chapter_number, lemma_id)
+    return int(row[0])
+
+
 def record_event(con: sqlite3.Connection, event: Event) -> int:
     """Hängt ein Ereignis an — der Kenntnisstand wird nie überschrieben, nur ergänzt
     (technik.md §4, „Kernentscheidung: Ereignisfolge statt überschreibbarem Zustand").
@@ -456,3 +501,33 @@ def compare_chapter_vocabulary(
             else VocabularyStatus.UNKNOWN
         )
     return result
+
+
+# REGEL (dokumentation.md §4 Regel 6, „Anki-GUID beim Export in card mitschreiben"):
+# Ohne diese Funktion wusste das Profil nach einem Export nicht, für welche Bedeutung
+# schon eine Karte besteht — ein zweiter Lauf erzeugte in Anki stumm eine Doppelnotiz,
+# und `anki.new_card_guid`s ganze Begründung (`anki.py:58-97`) hätte kein Gegenstück in
+# der Datenbank (Befund mittel, Durchsicht T16).
+def record_card(con: sqlite3.Connection, card: Card) -> int:
+    """Schreibt Vorkommen und Karte einer exportierten `Card` fest — aufgerufen **nach**
+    einem erfolgreichen `anki.export_deck` (`cli.export.write_exports`), mit derselben
+    `card.guid`, die im Anki-Deck steht.
+
+    Legt Vorkommen und Bedeutung an, falls sie noch fehlen (`ensure_occurrence`,
+    `ensure_sense`), und trägt darüber die Kartenzeile ein — über die GUID idempotent
+    (`INSERT OR IGNORE`): `anki.new_card_guid` liefert für dasselbe Vorkommen, dieselbe
+    Bedeutung und dieselbe Kartenrichtung stets dieselbe GUID, ein zweiter Export
+    derselben Bedeutung legt also keine zweite Zeile an, sondern liefert die bestehende
+    id zurück.
+    """
+    occurrence_id = ensure_occurrence(con, card.occurrence)
+    sense_id = ensure_sense(con, card.sense)
+    con.execute(
+        "INSERT OR IGNORE INTO card (sense_id, occurrence_id, card_direction, guid) "
+        "VALUES (?, ?, ?, ?)",
+        (sense_id, occurrence_id, card.card_direction, card.guid),
+    )
+    con.commit()
+    row = con.execute("SELECT id FROM card WHERE guid = ?", (card.guid,)).fetchone()
+    assert row is not None  # INSERT OR IGNORE + UNIQUE(guid) garantieren die Zeile
+    return int(row[0])

@@ -7,26 +7,34 @@ zu Aufrufen von `libreverbum.anki.export_deck` und `libreverbum.printout.write_p
 Beide Kernfunktionen bekommen dabei nur, was sie laut ihren eigenen Voraussetzungen
 verlangen — dieses Modul wählt nur die Zielpfade und leitet `Card.sense`/`Card.occurrence`
 für die Druckseite in das dort erwartete Tupelpaar um (`printout.py`, „Voraussetzungen").
+Nach einem erfolgreichen `anki.export_deck` schreibt es außerdem je Karte
+`libreverbum.profile.record_card` — die Nachbesserung zum Befund mittel aus der
+T16-Durchsicht: Ohne diesen Schritt landete `card.guid` nie im Profil, obwohl
+`anki.new_card_guid` sie längst erzeugt (Regel 6, dokumentation.md §4).
 
 Voraussetzungen
 ---------------
 `cards` stammt aus **einem** Kapitel (dieselbe Annahme wie in `anki.export_deck` und
 `printout.write_printout` selbst, die beide sichtbar abbrechen, wenn das verletzt ist).
+`con` ist eine bereits geöffnete Profilverbindung (`libreverbum.profile.open_profile`) mit
+bereits angelegter Kapitelzeile (`cli.interaction.ensure_chapter_row`) — dieselbe
+Voraussetzung wie bei `profile.record_card`.
 
 Liefert
 -------
 `export_paths` legt aus Buchtitel und Kapitelnummer einen dateisystemtauglichen
-Namensstamm an, `write_exports` ruft beide Kernexporte auf und liefert die beiden
-geschriebenen Pfade zurück.
+Namensstamm an, `write_exports` ruft beide Kernexporte auf, schreibt danach je Karte die
+Anki-GUID ins Profil und liefert die beiden geschriebenen Pfade zurück.
 """
 
 from __future__ import annotations
 
 import re
+import sqlite3
 from pathlib import Path
 from typing import NamedTuple
 
-from libreverbum import anki, printout
+from libreverbum import anki, printout, profile
 from libreverbum.entities import Card
 
 # Alles außer Buchstaben, Ziffern, Bindestrich und Unterstrich wird zu „_" — ein Buchtitel
@@ -58,9 +66,15 @@ def export_paths(output_dir: Path, book_title: str, chapter_number: int) -> Expo
 
 
 def write_exports(
-    output_dir: Path, cards: list[Card], *, book_title: str, chapter_number: int
+    con: sqlite3.Connection,
+    output_dir: Path,
+    cards: list[Card],
+    *,
+    book_title: str,
+    chapter_number: int,
 ) -> ExportPaths:
-    """Schreibt `cards` als Anki-Deck und als Druckseite (bauplan.md T16).
+    """Schreibt `cards` als Anki-Deck und als Druckseite (bauplan.md T16), danach je
+    Karte die Anki-GUID ins Profil (Regel 6, Befund mittel Durchsicht T16).
 
     Erwartet `cards` nichtleer — eine leere Triage-Ausbeute ist kein Fehlschlag
     (Regel 13 gilt für Fehler, nicht für eine gültige Nutzerentscheidung „nichts
@@ -68,9 +82,15 @@ def write_exports(
     (`cli.main`), bevor diese Funktion aufgerufen wird — `anki.export_deck` und
     `printout.write_printout` brächen sonst mit derselben Meldung ab wie bei einem
     echten Fehler.
+
+    `profile.record_card` läuft erst **nach** einem erfolgreichen `anki.export_deck`:
+    Bricht der Export ab (unaufgelöste Übersetzung, doppelte GUID im selben Export, siehe
+    `anki.export_deck`), steht im Profil nichts, was im Deck nicht ebenso fehlt.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     paths = export_paths(output_dir, book_title, chapter_number)
     anki.export_deck(paths.anki_path, cards, deck_name=f"{book_title} - Kapitel {chapter_number}")
+    for card in cards:
+        profile.record_card(con, card)
     printout.write_printout(paths.printout_path, [(card.occurrence, card.sense) for card in cards])
     return paths
