@@ -80,6 +80,7 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | Auswahlliste, Kandidat | `candidate` |
 | Übersetzung | `translation` |
 | Karte, Deck, Kartenrichtung, Lückentext | `card`, `deck`, `card_direction`, `cloze` |
+| Kartenvorlage (genankis `Model` — „Modell" bleibt dem Sprachmodell vorbehalten, technik.md §3) | `note_model` |
 | Druckausgabe | `printout` |
 | unsicher (markierter Eintrag) | `uncertain` |
 | Gegenstand des Kernablaufs | `entity` |

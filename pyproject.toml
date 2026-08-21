@@ -11,6 +11,11 @@ dependencies = [
     # Das Modell liegt nicht auf PyPI. Die Prüfsumme hängt an der Adresse, damit
     # Entscheidung 5 an genau diesem Artefakt reproduzierbar bleibt.
     "en_core_web_md @ https://github.com/explosion/spacy-models/releases/download/en_core_web_md-3.8.0/en_core_web_md-3.8.0-py3-none-any.whl#sha256=5e6329fe3fecedb1d1a02c3ea2172ee0fede6cea6e4aefb6a02d832dba78a310",
+    # E8b, entschieden 21.08.2026: MIT-lizenziert, dreifach belegt (PyPI-Metadaten,
+    # LICENSE.txt im Quellbaum, GitHubs Lizenz-API). Note.guid ist Property mit Getter
+    # und Setter samt Konstruktorparameter — das Ausschlusskriterium aus bauplan.md
+    # Tor 0 (E8b) ist damit erfüllt.
+    "genanki>=0.13,<0.14",
 ]
 
 # REGEL (technik.md §1, „Architekturregel"): Der Kern kennt die Oberfläche nicht.
@@ -66,6 +71,14 @@ split-on-trailing-comma = false
 python_version = "3.12"
 strict = true
 files = ["libreverbum", "tests"]
+
+# REGEL (technik.md §6, Tor „Prüfen vor »fertig«"): genanki bringt weder Typangaben noch
+# einen py.typed-Marker mit (geprüft am installierten Paket, 21.08.2026) — eng auf dieses
+# eine Modul begrenzt, damit ein fehlendes Stub-Paket bei einer künftigen Abhängigkeit
+# nicht versehentlich mit durchrutscht.
+[[tool.mypy.overrides]]
+module = "genanki.*"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

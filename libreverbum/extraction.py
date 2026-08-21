@@ -251,12 +251,16 @@ def extract_particle_verb_candidates(chapter: Chapter, nlp: Language) -> list[Oc
     (Regel 14). Die Grundform trägt Leerzeichen (`give up`) und taugt so unmittelbar
     zum Nachschlagen gegen WikDicts `written_rep`.
 
-    Offener Punkt (Befund 3, Review T4, für T13): Bei einem langen Einschub
-    („chat this little matter over") umfasst `word_form` den ganzen Bereich zwischen
-    Verb und Partikel, nicht nur die beiden Wörter selbst — auf der Karte stünde dann ein
-    ganzer Satzteil als „Beugungsform". Das ist hier bewusst nicht entschieden: Ob T13
-    den vollen Bereich oder nur Verb und Partikel braucht, hängt vom Kartenlayout ab, das
-    diese Teilaufgabe nicht kennt.
+    Befund 3, Review T4 (entschieden in Review T13, Befund 8): Bei einem langen Einschub
+    („chat this little matter over") umfasst `word_form` den ganzen Bereich zwischen Verb
+    und Partikel, nicht nur die beiden Wörter selbst — auf der Karte steht dann ein ganzer
+    Satzteil als „Beugungsform". Das bleibt so: `libreverbum.anki` behandelt `word_form`
+    als beliebig lange Zeichenkette, das Wort-Feld zeigt sie unverändert, und der
+    Lückentext findet sie über Wortgrenzen hinweg an ihrer Stelle im Belegsatz (Befund 4,
+    Review T13) — unabhängig davon, ob sie ein Wort oder mehrere umfasst. Das Kartenlayout
+    erzwingt also keine engere Wortform; eine Eingrenzung auf Verb und Partikel bliebe eine
+    eigene, hier nicht getroffene Entscheidung über den *Inhalt* der Karte, keine
+    technische Notwendigkeit.
     """
     _require_lemmatizer(nlp)
 
