@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from cli import export
-from cli.main import main
+from cli.main import _build_parser, main
 
 if TYPE_CHECKING:
     from conftest import ModelServerDouble
@@ -138,6 +138,100 @@ class _ScriptedConsole:
         return "l" if word in self._learn_words else "s"
 
 
+class _MarkOneWordKnownConsole:
+    """Wie `_ScriptedConsole`, aber ohne Modellserver: markiert genau `known_word` als
+    „kenne ich" ([k]) und alles andere als „skip" — für Abnahmekriterium 6, wo im ersten
+    Durchlauf nichts gelernt werden muss, nur ein Wort als bekannt gebucht wird."""
+
+    def __init__(self, known_word: str) -> None:
+        self._known_word = known_word
+        self._pending: list[str] = []
+        self.log: list[str] = []
+
+    def write(self, text: str) -> None:
+        self.log.append(text)
+        self._pending.append(text)
+
+    def read(self, prompt: str) -> str:
+        if "Neu anlegen" in prompt:
+            self._pending.clear()
+            return "j"
+        if "Sammelaktion" in prompt:
+            self._pending.clear()
+            return ""
+        first_line = self._pending[0] if self._pending else ""
+        self._pending.clear()
+        word = first_line.split(" (", 1)[0]
+        return "k" if word == self._known_word else "s"
+
+
+class _RejectWordConsole:
+    """Bricht sofort ab, sobald `forbidden_word` in der Bildschirmausgabe auftaucht —
+    Abnahmekriterium 6 verlangt, dass ein als bekannt gebuchtes Wort im zweiten
+    Durchlauf weder in der Sammelaktionsliste noch in der Einzelabfrage erscheint."""
+
+    def __init__(self, forbidden_word: str) -> None:
+        self._forbidden_word = forbidden_word
+        self._pending: list[str] = []
+        self.log: list[str] = []
+
+    def write(self, text: str) -> None:
+        self.log.append(text)
+        if f"{self._forbidden_word} (" in text:
+            raise AssertionError(
+                f"{self._forbidden_word!r} wurde im zweiten Durchlauf erneut angezeigt — "
+                "das Profil greift nicht (Abnahmekriterium 6)."
+            )
+        self._pending.append(text)
+
+    def read(self, prompt: str) -> str:
+        if "Neu anlegen" in prompt:
+            self._pending.clear()
+            return "j"
+        if "Sammelaktion" in prompt:
+            self._pending.clear()
+            return ""
+        self._pending.clear()
+        return "s"
+
+
+def test_acceptance_6_a_second_run_does_not_ask_about_words_marked_known(
+    tmp_path: Path, book_epub: Path, mini_dictionary_db: Path
+) -> None:
+    """Abnahmekriterium 6 (konzept.md, „Abnahmekriterien"): „Beim zweiten Durchlauf
+    desselben Kapitels werden die als *bekannt* markierten Wörter **nicht erneut**
+    abgefragt — das Profil greift." Hier über den vollen Einstiegspunkt `cli.main.main`,
+    zweimal auf demselben Datenverzeichnis (Befund schwer 1, Durchsicht T16):
+    `entry.status` aus `pipeline.run_chapter` wurde bis dahin von keinem `cli`-Modul
+    gelesen, und der zweite Durchlauf fragte dieselben Wörter erneut ab."""
+    data_dir = tmp_path / "data"
+    _write_config(
+        data_dir,
+        model_url="http://unerreichbar.invalid",
+        model_name="",
+        dictionary_path=mini_dictionary_db,
+    )
+
+    first_console = _MarkOneWordKnownConsole(known_word="watch")
+    first_exit = main(
+        [str(book_epub), "--chapter", "1", "--data-dir", str(data_dir)],
+        read_line=first_console.read,
+        write_line=first_console.write,
+    )
+    assert first_exit == 0, "\n".join(first_console.log)
+    assert any(line.startswith("watch (") for line in first_console.log), (
+        "Testvoraussetzung verletzt: 'watch' wurde im ersten Durchlauf gar nicht gefragt."
+    )
+
+    second_console = _RejectWordConsole(forbidden_word="watch")
+    second_exit = main(
+        [str(book_epub), "--chapter", "1", "--data-dir", str(data_dir)],
+        read_line=second_console.read,
+        write_line=second_console.write,
+    )
+    assert second_exit == 0, "\n".join(second_console.log)
+
+
 def test_main_creates_config_on_the_first_run_and_stops(tmp_path: Path) -> None:
     """bauplan.md T16: „fehlende config.toml wird einmalig angelegt und gemeldet" —
     hier über den vollen Einstiegspunkt, nicht nur über `cli.config.load_config`."""
@@ -248,3 +342,17 @@ def test_full_run_learns_a_word_and_an_expression_and_exports_them(
     html = paths.printout_path.read_text(encoding="utf-8")
     assert "watch" in html
     assert "gave up" in html
+
+
+def test_help_text_survives_a_restricted_console_codepage() -> None:
+    """Mittel 3 (Durchsicht T16): `argparse.print_help()`/`format_help()` schreiben
+    direkt auf `sys.stdout`, an `cli.display.safe_print` vorbei (dokumentation.md §4
+    Regel 13) — `python -m cli --help` durfte deshalb nicht mit `UnicodeEncodeError`
+    abbrechen, wenn die Konsole nur `cp850` beherrscht, die klassische
+    DOS-/conhost-Codepage älterer Windows-Konsolen (`tests/test_cli_display.py` nennt
+    sie als die gefährliche — cp1252 stellt Gedankenstrich und typografische
+    Anführungszeichen bereits dar, cp850 nicht). Bauart wie
+    `test_safe_print_does_not_crash_on_a_restricted_console_codepage`."""
+    help_text = _build_parser().format_help()
+
+    help_text.encode("cp850", errors="strict")

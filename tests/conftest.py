@@ -455,10 +455,19 @@ class _ModelServerHTTPServer(http.server.ThreadingHTTPServer):
 @pytest.fixture
 def model_server_double() -> Iterator[ModelServerDouble]:
     """Attrappe für den lokalen Modellserver — läuft ohne Netz und ohne echten Server
-    (bauplan.md, T2). Das Gegenstück, gegen das T11 geprüft wird."""
+    (bauplan.md, T2). Das Gegenstück, gegen das T11 geprüft wird.
+
+    `url` trägt `/v1` (Befund schwer 2, Durchsicht T16): technik.md §9 dokumentiert
+    `model.url` als `http://localhost:11434/v1`, die `base_url`-Form OpenAI-kompatibler
+    Server — vorher lieferte diese Attrappe ein blankes `http://127.0.0.1:{port}` ohne
+    `/v1`, und `cli/model.py` sowie `libreverbum/translation.py` hängten selbst noch
+    einmal `/v1` an. Beide Fehler hoben sich in den Tests auf (`…/v1/models` traf zufällig
+    genau den Pfad, den `_ModelServerHandler.do_GET` erwartet), und das doppelte `/v1`
+    gegen einen echten Server (HTTP 404) fiel deshalb nie auf (dokumentation.md §5,
+    „Woran geprüft wird: die Vorrichtung zeigt Laufen, die Fremdquelle Stimmen")."""
     double = ModelServerDouble(url="", model_name="mini-model")
     server = _ModelServerHTTPServer(("127.0.0.1", 0), _ModelServerHandler, double)
-    double.url = f"http://127.0.0.1:{server.server_port}"
+    double.url = f"http://127.0.0.1:{server.server_port}/v1"
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:

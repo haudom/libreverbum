@@ -13,6 +13,19 @@ und die daraus folgenden Schreibzugriffe aufs Profil (`libreverbum.profile.recor
 und, bei „will ich lernen", der Modellaufruf (`libreverbum.translation.choose_sense`) samt
 Kartenerzeugung (`libreverbum.anki.new_card_guid`).
 
+Schritt 4 des Kernablaufs, „gegen das Profil filtern" (konzept.md §4): `run_chapter`
+liefert je Kandidat bereits den fertigen Abgleich in `VocabularyEntry.status`
+(`libreverbum.profile.compare_chapter_vocabulary`) — `run_triage_pass` nimmt davon jeden
+Eintrag heraus, dessen sämtliche Kandidaten `VocabularyStatus.KNOWN` tragen (`_split_known`
+unten), **bevor** `sort_by_frequency` und die Wortobergrenze greifen (Befund schwer 1,
+Durchsicht T16). Vor dieser Behebung griff das Profil nicht: Abnahmekriterium 6 „beim
+zweiten Durchlauf … nicht erneut abgefragt" fiel, und bereits bekannte Wörter verbrauchten
+Plätze aus `WORD_LIMIT`, die den tatsächlich neuen Wörtern gefehlt hätten. Eine zweite,
+bereits bekannte Bedeutung derselben Grundform (`VocabularyStatus.
+NEW_MEANING_OF_KNOWN_WORD`, konzept.md §5 „Mehrdeutigkeit") bleibt dagegen in der Triage
+und wird in `_entry_lines` als „neue Bedeutung eines bekannten Wortes" gekennzeichnet
+(Befund mittel 6, Durchsicht T16) — sie ist gerade **nicht** bereits bekannt.
+
 Festlegung: getrennte Decksel für Wörter und Wendungen
 -------------------------------------------------------
 Entschieden am 21.08.2026 (Auftrag zu T16), von hier aus übernommen: Einzelwörter und
@@ -81,6 +94,7 @@ from libreverbum.entities import (
     Origin,
     Sense,
 )
+from libreverbum.profile import VocabularyStatus
 
 ReadLine = Callable[[str], str]
 WriteLine = Callable[[str], None]
@@ -135,6 +149,34 @@ def _representative_sense(occurrence: Occurrence, candidates: Sequence[Sense]) -
     return candidates[0]
 
 
+def _is_known(entry: pipeline.VocabularyEntry) -> bool:
+    """Ein Eintrag gilt als bereits bekannt, wenn er mindestens einen Kandidaten hat und
+    jeder davon `VocabularyStatus.KNOWN` trägt (Befund schwer 1, Durchsicht T16).
+
+    Ein Eintrag ohne Wörterbucheintrag (leere `candidates`) ist nie „bekannt" — geprüft
+    über `bool(entry.candidates)`, weil `all()` über eine leere Menge stillschweigend
+    wahr wäre und ein unsicherer Kandidat ohne jede Bedeutung sonst spurlos aus der
+    Triage verschwände (dokumentation.md §4 Regel 13). Aus demselben Grund wird über
+    `entry.candidates` iteriert und je Kandidat in `entry.status` nachgeschlagen, nicht
+    über `entry.status.values()`: Ein Kandidat ohne Eintrag in `status` — etwa in einer
+    Testvorrichtung, die `status={}` gar nicht füllt — zählte über `.values()` sonst
+    ebenfalls als stillschweigend „bekannt", statt als „kein Befund" zu gelten."""
+    return bool(entry.candidates) and all(
+        entry.status.get(sense) is VocabularyStatus.KNOWN for sense in entry.candidates
+    )
+
+
+def _split_known(
+    entries: Sequence[pipeline.VocabularyEntry],
+) -> tuple[list[pipeline.VocabularyEntry], list[pipeline.VocabularyEntry]]:
+    """Teilt `entries` in `(bekannt, Rest)` — die Grundlage des Profilabgleichs in
+    `run_triage_pass` (Befund schwer 1, Durchsicht T16). Reihenfolge bleibt je Teilliste
+    erhalten, `sort_by_frequency` läuft erst danach auf dem Rest."""
+    known = [entry for entry in entries if _is_known(entry)]
+    unknown = [entry for entry in entries if not _is_known(entry)]
+    return known, unknown
+
+
 def _record(
     con: sqlite3.Connection,
     sense: Sense,
@@ -162,7 +204,13 @@ def _entry_lines(entry: pipeline.VocabularyEntry) -> list[str]:
     Anzeige der Triage, nicht bloß das Wort") — hier, in der Standardstellung
     „Wörterbuch" (konzept.md §4), die volle Liste der möglichen Bedeutungen ohne
     Modell-Markierung; die endgültige, kontextgetreue Bedeutung entsteht erst bei „will
-    ich lernen" (`translation.choose_sense`)."""
+    ich lernen" (`translation.choose_sense`).
+
+    Ein Kandidat mit `VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD` trägt zusätzlich die
+    Kennzeichnung „neue Bedeutung eines bekannten Wortes" (konzept.md §5,
+    „Mehrdeutigkeit"; Befund mittel 6, Durchsicht T16) — ohne sie sähe der zweite Eintrag
+    einer mehrdeutigen Grundform wie ein bereits bekanntes Wort aus, das grundlos erneut
+    auftaucht."""
     occurrence = entry.occurrence
     pos_display = occurrence.lemma.pos or "MWE"
     lines = [f"{occurrence.word_form} ({pos_display}), {occurrence.frequency}x im Kapitel"]
@@ -170,7 +218,10 @@ def _entry_lines(entry: pipeline.VocabularyEntry) -> list[str]:
     if entry.candidates:
         for number, sense in enumerate(entry.candidates, start=1):
             translation_text = sense.wikdict_trans_list or "?"
-            lines.append(f"  {number}. {dictionary.label(sense)} -> {translation_text}")
+            line = f"  {number}. {dictionary.label(sense)} -> {translation_text}"
+            if entry.status.get(sense) is VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD:
+                line += " [neue Bedeutung eines bekannten Wortes]"
+            lines.append(line)
     else:
         lines.append("  (kein Wörterbucheintrag)")
     return lines
@@ -327,11 +378,23 @@ def run_triage_pass(
     read_line: ReadLine,
     write_line: WriteLine,
 ) -> list[Card]:
-    """Ein vollständiger Triage-Deckel: Häufigkeitssortierung, Wortobergrenze,
-    Sammelaktion, Einzelabfrage — für **eine** der beiden Listen aus
+    """Ein vollständiger Triage-Deckel: Profilabgleich, Häufigkeitssortierung,
+    Wortobergrenze, Sammelaktion, Einzelabfrage — für **eine** der beiden Listen aus
     `pipeline.ChapterVocabulary` (siehe Moduldocstring, „Festlegung: getrennte
     Decksel"). `limit` ist `WORD_LIMIT` für `entries` beziehungsweise
-    `EXPRESSION_LIMIT` für `expressions` (`cli.main`)."""
+    `EXPRESSION_LIMIT` für `expressions` (`cli.main`).
+
+    Abnahmekriterium 6: „Beim zweiten Durchlauf desselben Kapitels werden die als
+    *bekannt* markierten Wörter **nicht erneut** abgefragt — das Profil greift"
+    (konzept.md, „Abnahmekriterien"). `_split_known` nimmt die laut `entry.status`
+    bereits bekannten Einträge **vor** `sort_by_frequency` und der Wortobergrenze heraus
+    (Befund schwer 1, Durchsicht T16) — sonst verbrauchten sie Plätze aus `limit`, die
+    den tatsächlich neuen Wörtern gefehlt hätten. Die Anzahl der übersprungenen Einträge
+    wird gemeldet, nicht verschwiegen (Regel 13)."""
+    known, entries = _split_known(entries)
+    if known:
+        write_line(f"{len(known)} {label} laut Profil bereits bekannt — nicht erneut abgefragt.")
+
     occurrences = [entry.occurrence for entry in entries]
     entries_by_occurrence = {entry.occurrence: entry for entry in entries}
 

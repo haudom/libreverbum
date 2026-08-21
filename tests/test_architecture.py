@@ -11,7 +11,10 @@ CORE = Path(__file__).resolve().parent.parent / "libreverbum"
 
 # PySide6 ist die Oberflächenbibliothek des Projekts (technik.md §1). PyQt steht daneben,
 # weil es dieselbe Schnittstelle bedient und beim Übernehmen fremder Beispiele hereingerät.
-GUI_PACKAGES = frozenset({"PySide6", "PyQt5", "PyQt6"})
+# "cli" (Befund mittel 5, Durchsicht T16): Mit bauplan.md T16 gibt es eine zweite
+# Oberfläche neben der künftigen Qt-Oberfläche — ohne diesen Eintrag prüfte dieser Test
+# nur PySide6/PyQt und ein `from cli import ...` im Kern bliebe grün.
+GUI_PACKAGES = frozenset({"PySide6", "PyQt5", "PyQt6", "cli"})
 
 
 def imported_packages(source: str) -> set[str]:

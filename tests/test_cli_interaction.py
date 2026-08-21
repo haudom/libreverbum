@@ -271,6 +271,119 @@ def test_word_limit_plus_expression_limit_fits_the_printout() -> None:
     assert interaction.WORD_LIMIT + interaction.EXPRESSION_LIMIT == printout.MAX_ENTRIES
 
 
+def test_acceptance_6_known_words_are_not_asked_again(profile_con: sqlite3.Connection) -> None:
+    """Abnahmekriterium 6 (konzept.md, „Abnahmekriterien"): „Beim zweiten Durchlauf
+    desselben Kapitels werden die als *bekannt* markierten Wörter **nicht erneut**
+    abgefragt — das Profil greift." Geprüft direkt an `run_triage_pass` mit
+    `entry.status`, wie `pipeline.run_chapter` es aus `profile.
+    compare_chapter_vocabulary` liefert (Befund schwer 1, Durchsicht T16)."""
+    known_sense = _sense("known_word", "NOUN", "Bekannt")
+    known_entry = pipeline.VocabularyEntry(
+        occurrence=_occurrence("known_word", "NOUN", frequency=5),
+        candidates=[known_sense],
+        status={known_sense: profile.VocabularyStatus.KNOWN},
+    )
+    new_entry = _entries(1)[0]  # word0, ohne Profileintrag
+    written: list[str] = []
+    answers = iter(["", "s"])  # keine Sammelaktion, dann "skip" für word0
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        entries=[known_entry, new_entry],
+        limit=10,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        get_model_name=_never_needed,
+        model_url="http://unerreichbar.invalid",
+        read_line=lambda _prompt: next(answers),
+        write_line=written.append,
+    )
+
+    assert not any(line.startswith("known_word (") for line in written)
+    events = _events(profile_con)
+    assert {lemma for lemma, _, _ in events} == {"word0"}
+    assert any("bereits bekannt" in line for line in written)
+
+
+def test_a_candidate_with_one_known_and_one_new_sense_is_not_skipped(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """Ein Eintrag mit **gemischtem** Kenntnisstand — eine Bedeutung bekannt, eine noch
+    nicht — bleibt in der Triage: Nur ein Eintrag, dessen *sämtliche* Kandidaten bekannt
+    sind, gilt als bekannt (Befund schwer 1, Durchsicht T16, `_is_known`). Ohne dieses
+    Wort wäre die neue Bedeutung eines mehrdeutigen Worts nie abgefragt worden."""
+    known_sense = _sense("bank", "NOUN", "Geldinstitut")
+    new_sense = _sense("bank", "NOUN", "Flussufer")
+    entry = pipeline.VocabularyEntry(
+        occurrence=_occurrence("bank", "NOUN", frequency=2),
+        candidates=[known_sense, new_sense],
+        status={
+            known_sense: profile.VocabularyStatus.KNOWN,
+            new_sense: profile.VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD,
+        },
+    )
+    written: list[str] = []
+    answers = iter(["", "s"])
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        entries=[entry],
+        limit=10,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        get_model_name=_never_needed,
+        model_url="http://unerreichbar.invalid",
+        read_line=lambda _prompt: next(answers),
+        write_line=written.append,
+    )
+
+    assert any(line.startswith("bank (") for line in written)
+
+
+def test_new_meaning_of_a_known_word_is_marked_in_the_display(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """konzept.md §5, „Mehrdeutigkeit": Der zweite Eintrag einer mehrdeutigen Grundform
+    wird in der Triage als „neue Bedeutung eines bekannten Wortes" gekennzeichnet, damit
+    der Nutzer versteht, warum ein scheinbar bekanntes Wort erneut auftaucht (Befund
+    mittel 6, Durchsicht T16)."""
+    known_sense = _sense("bank", "NOUN", "Geldinstitut")
+    new_sense = _sense("bank", "NOUN", "Flussufer")
+    entry = pipeline.VocabularyEntry(
+        occurrence=_occurrence("bank", "NOUN", frequency=2),
+        candidates=[known_sense, new_sense],
+        status={
+            known_sense: profile.VocabularyStatus.KNOWN,
+            new_sense: profile.VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD,
+        },
+    )
+    written: list[str] = []
+    answers = iter(["", "s"])
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        entries=[entry],
+        limit=10,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        get_model_name=_never_needed,
+        model_url="http://unerreichbar.invalid",
+        read_line=lambda _prompt: next(answers),
+        write_line=written.append,
+    )
+
+    marked = [line for line in written if "neue Bedeutung eines bekannten Wortes" in line]
+    assert len(marked) == 1
+    assert "Flussufer" in marked[0]
+    assert not any("Geldinstitut" in line and "neue Bedeutung" in line for line in written)
+
+
 def test_a_candidate_without_a_dictionary_entry_becomes_uncertain_when_learned(
     profile_con: sqlite3.Connection,
 ) -> None:

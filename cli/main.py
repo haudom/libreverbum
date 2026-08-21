@@ -36,10 +36,23 @@ from libreverbum import epub, extraction, pipeline, profile
 from libreverbum.entities import CardDirection
 
 
-def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
+def _build_parser() -> argparse.ArgumentParser:
+    # (Befund mittel 3, Durchsicht T16): argparse.print_help()/format_help() schreiben
+    # direkt auf sys.stdout beziehungsweise sys.stderr, an cli.display.safe_print vorbei
+    # (dokumentation.md §4 Regel 13) — description und jeder help-Text unten bleiben
+    # deshalb reines ASCII, statt sich auf eine bestimmte eingeschränkte Konsolenkodierung
+    # zu verlassen. Die frühere Fassung dieses Kommentars entfernte nur den Pfeil "→" aus
+    # dem help-Text von --card-direction und hielt die Stelle fälschlich für erledigt: Der
+    # Gedankenstrich "—" blieb dort **und** in description stehen und brach auf cp850 —
+    # der klassischen DOS-/conhost-Codepage, die tests/test_cli_display.py als die
+    # gefährliche nennt, nicht bloß cp1252 — mit demselben UnicodeEncodeError ab
+    # (test_help_text_survives_a_restricted_console_codepage in tests/test_cli_main.py
+    # kodiert format_help() jetzt gegen genau diese Codepage). Umlaute wären auf cp850
+    # selbst unschädlich, aber ASCII macht die Zusicherung unabhängig davon, welche
+    # eingeschränkte Codepage als Nächstes zuschlägt.
     parser = argparse.ArgumentParser(
         prog="python -m cli",
-        description="LibreVerbum — Kapiteldurchlauf mit Triage über die Tastatur (bauplan.md T16).",
+        description="LibreVerbum - Kapiteldurchlauf mit Triage ueber die Tastatur (T16).",
     )
     parser.add_argument("epub_path", type=Path, help="Pfad zur EPUB-Datei")
     parser.add_argument(
@@ -49,25 +62,25 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--card-direction",
         choices=[direction.value for direction in CardDirection],
         default=CardDirection.EN_DE.value,
-        # (Befund beim Testen, T16): kein "→" in Hilfetexten — argparse.print_help()
-        # schreibt direkt auf sys.stdout, an cli.display.safe_print vorbei, und stürzt
-        # auf einer echten cp1252-Konsole an genau diesem Zeichen mit
-        # UnicodeEncodeError ab (auf dieser Maschine reproduziert, nicht nur vermutet).
-        help="Kartenrichtung des Exports (konzept.md §6) — Vorgabe: Englisch nach Deutsch",
+        help="Kartenrichtung des Exports (konzept.md Paragraf 6), Vorgabe: Englisch nach Deutsch",
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
         default=None,
-        help="Zielverzeichnis für Anki-Deck und Druckseite (Vorgabe: aktuelles Verzeichnis)",
+        help="Zielverzeichnis fuer Anki-Deck und Druckseite (Vorgabe: aktuelles Verzeichnis)",
     )
     parser.add_argument(
         "--data-dir",
         type=Path,
         default=None,
-        help="Abweichendes Datenverzeichnis statt des plattformüblichen (technik.md §9)",
+        help="Abweichendes Datenverzeichnis statt des plattformueblichen (technik.md Paragraf 9)",
     )
-    return parser.parse_args(argv)
+    return parser
+
+
+def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
+    return _build_parser().parse_args(argv)
 
 
 def _confirm_new_profile(profile_path: Path, read_line: ReadLine, write_line: WriteLine) -> bool:

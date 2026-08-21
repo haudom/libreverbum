@@ -27,7 +27,10 @@ beschrieben — durchgereicht, nicht stillschweigend zur sicheren Bedeutung gema
 hinterlegt, ist das Bestimmen des ersten vom Server genannten Modells Sache des Aufrufers,
 nicht dieses Moduls — bauplan.md T11 verlangt nur den Aufruf über die Schnittstelle, keine
 Serversuche, und die Autosuche aus `tools/` ist ausdrücklich nicht das Vorbild
-(technik.md §9).
+(technik.md §9). `url` trägt das `/v1` der OpenAI-kompatiblen Schnittstelle bereits selbst
+(technik.md §9, `http://localhost:11434/v1`) — `_ask_model` hängt deshalb nur noch
+`/chat/completions` an (Befund schwer 2, Durchsicht T16: ein zusätzliches `/v1` ergab beim
+echten Server `…/v1/v1/chat/completions` und HTTP 404).
 
 Liefert
 -------
@@ -193,8 +196,12 @@ def _ask_model(*, url: str, model_name: str, prompt: str, option_count: int, tim
     überschreitung, ein HTTP-200-Körper ohne JSON und ein Abbruch mitten in der Antwort —,
     die ohne eigene Behandlung als englische, nicht als `ValueError` eingeordnete
     Ausnahmen durchgereicht worden wären."""
+    # REGEL (technik.md §9, „Einstellungen: config.toml"; Befund schwer 2, Durchsicht
+    # T16): url trägt /v1 bereits selbst (base_url-Form OpenAI-kompatibler Server,
+    # http://localhost:11434/v1) — ein zusätzliches /v1 hier ergab .../v1/v1/... und beim
+    # echten Server HTTP 404.
     request = urllib.request.Request(
-        f"{url.rstrip('/')}/v1/chat/completions",
+        f"{url.rstrip('/')}/chat/completions",
         data=json.dumps(_request_body(model_name, prompt, option_count)).encode("utf-8"),
         headers={"Content-Type": "application/json"},
     )

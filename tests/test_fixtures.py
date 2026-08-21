@@ -237,8 +237,11 @@ def test_model_server_double_answers_models_endpoint(
     model_server_double: ModelServerDouble,
 ) -> None:
     """Bauplan.md T2: die Attrappe beantwortet /v1/models wie ein echter,
-    OpenAI-kompatibler Server (vgl. tools/sense_check.py, `find_server`)."""
-    with urllib.request.urlopen(f"{model_server_double.url}/v1/models", timeout=5) as response:
+    OpenAI-kompatibler Server (vgl. tools/sense_check.py, `find_server`).
+
+    `model_server_double.url` trägt `/v1` bereits selbst (Befund schwer 2, Durchsicht
+    T16, technik.md §9) — hier wird deshalb nur noch `/models` angehängt."""
+    with urllib.request.urlopen(f"{model_server_double.url}/models", timeout=5) as response:
         payload = json.load(response)
     assert payload["data"][0]["id"] == model_server_double.model_name
 
@@ -260,7 +263,7 @@ def test_model_server_double_answers_chat_completions_with_well_formed_json(
         },
     }
     request = urllib.request.Request(
-        f"{model_server_double.url}/v1/chat/completions",
+        f"{model_server_double.url}/chat/completions",
         data=json.dumps(body).encode("utf-8"),
         headers={"Content-Type": "application/json"},
     )
@@ -272,9 +275,10 @@ def test_model_server_double_answers_chat_completions_with_well_formed_json(
 
 
 def _post_chat_completions(model_server_double: ModelServerDouble) -> urllib.request.Request:
+    # model_server_double.url trägt /v1 bereits selbst (Befund schwer 2, Durchsicht T16).
     body = {"model": model_server_double.model_name, "messages": [{"role": "user", "content": "?"}]}
     return urllib.request.Request(
-        f"{model_server_double.url}/v1/chat/completions",
+        f"{model_server_double.url}/chat/completions",
         data=json.dumps(body).encode("utf-8"),
         headers={"Content-Type": "application/json"},
     )

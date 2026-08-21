@@ -15,12 +15,22 @@ Kandidatenadressen durchprobiert. Das ist keine Autosuche im Sinn von technik.md
 „Die Autosuche aus tools/ ist ausdrücklich nicht das Vorbild": Dort werden mehrere
 Adressen erraten, hier steht die Adresse bereits fest.
 
+`url` trägt das `/v1` bereits selbst (technik.md §9, Tabelle „Einstellungen: config.toml":
+`http://localhost:11434/v1`, die übliche `base_url`-Form OpenAI-kompatibler Server) —
+dieses Modul hängt deshalb nur noch `/models` an, nicht erneut `/v1/models` (Befund schwer
+2, Durchsicht T16: `…/v1/v1/models` beim echten Server ergab HTTP 404, das hier als
+`URLError` gefangen wurde und fälschlich „nicht erreichbar“ statt eines Konfigurationsfehlers
+meldete).
+
 Liefert
 -------
 `resolve_model_name` den konfigurierten Namen unverändert, wenn er nicht leer ist —
-sonst den ersten von `{url}/v1/models` genannten. Bricht sichtbar ab (Regel 13), wenn der
+sonst den ersten von `{url}/models` genannten. Bricht sichtbar ab (Regel 13), wenn der
 Server unter `url` nicht antwortet oder keine Modelle nennt, statt eines leeren
-Modellnamens, an dem der nachfolgende Aufruf erst unverständlich scheitern würde.
+Modellnamens, an dem der nachfolgende Aufruf erst unverständlich scheitern würde. Ein
+HTTP-Fehlschlag (`HTTPError`) wird dabei **getrennt** von einem Netzwerkfehlschlag
+(`URLError`) gemeldet — eine HTTP-Antwort beweist, dass der Server erreichbar ist, und die
+Meldung muss auf Adresse oder Modellname zeigen, nicht auf das Netzwerk.
 """
 
 from __future__ import annotations
@@ -35,32 +45,40 @@ _TIMEOUT = 10.0
 
 def resolve_model_name(url: str, configured_name: str) -> str:
     """Liefert `configured_name`, wenn er nicht leer ist — sonst das erste Modell, das
-    `{url}/v1/models` nennt (technik.md §9, Tabelle „Einstellungen: config.toml",
-    Spalte `model.name`)."""
+    `{url}/models` nennt (technik.md §9, Tabelle „Einstellungen: config.toml",
+    Spalte `model.name`; `url` trägt `/v1` bereits selbst, siehe Moduldocstring)."""
     if configured_name:
         return configured_name
 
-    request = urllib.request.Request(f"{url.rstrip('/')}/v1/models")
+    request = urllib.request.Request(f"{url.rstrip('/')}/models")
     try:
         with urllib.request.urlopen(request, timeout=_TIMEOUT) as response:
             payload = json.load(response)
+    except urllib.error.HTTPError as error:
+        # REGEL (dokumentation.md §4 Regel 13; Befund schwer 2, Durchsicht T16):
+        # HTTPError ist eine Unterklasse von URLError — dieser Zweig muss deshalb vor dem
+        # allgemeinen URLError-Fang stehen. Eine HTTP-Antwort beweist, dass der Server
+        # erreichbar ist; die Meldung zeigt auf Adresse/Modellname, nicht aufs Netzwerk.
+        raise ValueError(
+            f"Modellserver unter {url} antwortet auf /models mit Fehler {error.code} — "
+            "model.url in config.toml prüfen (technik.md §9)."
+        ) from error
     except urllib.error.URLError as error:
         raise ValueError(
             f"Modellserver unter {url} nicht erreichbar, um den Modellnamen zu bestimmen: {error}"
         ) from error
     except (TimeoutError, json.JSONDecodeError) as error:
         raise ValueError(
-            f"Modellserver unter {url} hat auf /v1/models nicht mit gültigem JSON "
-            f"geantwortet: {error}"
+            f"Modellserver unter {url} hat auf /models nicht mit gültigem JSON geantwortet: {error}"
         ) from error
 
     models = payload.get("data") or []
     if not models:
-        raise ValueError(f"Modellserver unter {url} nennt kein Modell (/v1/models ist leer).")
+        raise ValueError(f"Modellserver unter {url} nennt kein Modell (/models ist leer).")
 
     model_id = models[0].get("id")
     if not model_id:
-        raise ValueError(f'Modellserver unter {url}: erstes Modell in /v1/models ohne „id".')
+        raise ValueError(f'Modellserver unter {url}: erstes Modell in /models ohne „id".')
     return str(model_id)
 
 
