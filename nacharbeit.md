@@ -1,6 +1,6 @@
 # LibreVerbum — Nacharbeit
 
-> Stand: 19.08.2026 · Befunde aus dem Bau von T3 bis T15, die **nicht** in
+> Stand: 21.08.2026 · Befunde aus dem Bau von T3 bis T15, die **nicht** in
 > die jeweilige Teilaufgabe gehören. Zwei Arten: Änderungen an den Regeln und der
 > Arbeitsweise (Teil A), Nachträge an den Dokumenten aus gemessenen Ergebnissen (Teil B).
 >
@@ -53,6 +53,11 @@ in dieser Sitzung nur statt, weil der Auftraggeber sie angeordnet hat.
 **Kosten:** keine, solange jemand daran denkt. Ein falsches Ergebnis wäre in vier Fällen
 durchgegangen — jedes davon in einem committeten, grünen Stand.
 
+**Zweiter Beleg (Sitzung 21.08.2026).** T11, T13 und T14 gebaut, jede mit grünem Tor, und
+**jede Durchsicht danach fand wieder Befunde** — bei T11 und T13 je einen `schwer`, bei T14
+zwei `mittel`, davon einer, der bei jedem echten Lauf zugeschlagen hätte (A25). Damit stützt
+sich A19 auf doppelt so viele Fälle wie am 19.08.2026.
+
 **Vorschlag:** Zu entscheiden, ob „Prüfen vor »fertig«“ um die Durchsicht ergänzt wird — mit
 dem Zusatz, dass sie **nicht derselbe Bearbeiter** macht, denn drei der vier Befunde lagen
 in Annahmen, die der Bauende selbst getroffen und in seinen Tests wiederholt hatte. Das
@@ -87,6 +92,93 @@ laut.
 
 **Vorschlag:** Entweder ein Satz in CLAUDE.md unter „`tools/` — die Messskripte", oder
 `pip install -e .` in die Umgebung. Zweiteres berührt `pyproject.toml` und die Sperrdatei.
+
+## A23 — mittel · Die Prüfspalte verlangt eine Schnittstelle, die es so nicht geben kann
+
+**Beobachtet (Bau T13, 21.08.2026).** Die Prüfspalte nennt für T13 „GUID **zurückgeben**",
+`entities.Card.guid` ist zugleich Pflichtfeld — eine Karte ohne GUID gibt es also nie, und
+„zurückgeben" kann sich nicht auf eine fertige Karte beziehen. Die Auflösung — die GUID
+entsteht **vor** dem `Card`-Bau, `anki` bietet dafür eine eigene öffentliche Funktion —
+steht in keinem Dokument und musste aus der Importregel (technik.md §7) rückwärts abgeleitet
+werden.
+
+**Kosten:** eine Ableitung, die im Auftrag hätte stehen können. Ein falsches Ergebnis hätte
+durchgehen können: Eine andere Auflösung — etwa die Vergabe innerhalb des Exports — hätte
+die Schnittstelle zu T15/T16 anders geprägt, ohne dass ein Test der Teilaufgabe das als
+falsch markiert hätte.
+
+**Vorschlag:** Zu entscheiden, ob die Prüfspalte dort, wo sie eine Schnittstelle zwischen
+zwei Teilaufgaben berührt, deren Form mitnennt — oder ausdrücklich sagt, dass die bauende
+Teilaufgabe sie bestimmt. Dieselbe Wurzel wie A24, und dieselbe Lesart der Prüfspalte wie
+A7 (eingefaltet am 19.08.2026).
+
+## A24 — mittel · Zwei Teilaufgaben mussten die Datenform ihrer eigenen Eingabe erfinden
+
+**Beobachtet (Bau T13 und T14, 21.08.2026).** Kein Dokument legt fest, was `anki` und
+`printout` als Eingabe bekommen. T14 hat sich für `Sequence[tuple[Occurrence, Sense]]` statt
+`Sequence[Card]` entschieden — eine Schnittstellenentscheidung, die sich aus keiner Regel
+und keinem Test ableiten lässt.
+
+**Kosten:** je Teilaufgabe eine eigene Festlegung. Ein falsches Ergebnis ginge in beide
+Richtungen unbemerkt durch: T15 verkettet die Schritte (technik.md §7, „Die Importregel")
+und findet dort zwei Module mit unvereinbaren Eingaben vor, ohne dass eine der beiden
+Teilaufgaben je rot gewesen wäre.
+
+**Vorschlag:** Zu entscheiden, wo die Form der Schrittgrenzen festgehalten wird. Die
+Modulkarte nennt Zuständigkeiten und ausdrücklich keine Entwürfe (technik.md §7, „Warum eine
+Karte und nicht mehr"), Regel 14 verbietet Vorratsarbeit — die Lücke ist also gewollt, ihre
+Wirkung aber erst jetzt sichtbar.
+
+## A25 — schwer · Welche Felder auf der Druckseite stehen, legt kein Dokument fest
+
+**Beobachtet (Bau und Durchsicht T14, 21.08.2026).** Für den Anki-Export nennt konzept.md
+sieben Felder ausdrücklich (Schritt 6, „Export"), für die Druckseite keines. T14 hat die
+schmalste Zeile gewählt, die die Abnahmekriterien erfüllt; die Durchsicht meldete daraufhin
+die fehlende **Wortart** als Befund — zwei Drittel der Grundformen eines Kapitels sind
+mehrdeutig (technik.md §3, „Nachtrag 18.08.2026: zwei Drittel der Grundformen eines Kapitels
+sind mehrdeutig").
+
+**Kosten:** ein Befund und eine Nacharbeit. Ein falsches Ergebnis wäre durchgegangen, und
+zwar das teuerste: Wer auf dem Blatt eine Grundform ohne Wortart liest, hängt die
+Übersetzung an die falsche Lesart — der stille Fehler, gegen den der ganze Hybrid-Ansatz
+gebaut ist (konzept.md, Schritt 5). Bemerken kann der Nutzer ihn nicht, er kennt das Wort ja
+gerade nicht.
+
+**Vorschlag:** Zu entscheiden, ob konzept.md die Felder der Druckseite ebenso benennt wie
+die der Karte. Das ist eine Konzeptaussage und keine Berichtigung — deshalb Teil A.
+
+## A26 — leicht · schnell · Eine Verfälschungsprobe erwies sich erst beim Ausführen als untauglich
+
+**Beobachtet (Bau T13, 21.08.2026, Befund 4).** Für den Lückentext war als Verfälschung ein
+naiver `\b`-Regex vorgesehen, die naheliegendste falsche Umsetzung. Ausgeführt trifft sie
+`don't` **korrekt**, weil Python die Wortgrenze nur an den äußeren Rändern des Treffers
+prüft; der Test wäre gegen sie nie rot geworden. Gefunden allein durch tatsächliches
+Ausprobieren.
+
+**Kosten:** ein Durchgang. Ein falsches Ergebnis hätte durchgehen können, wenn die Probe für
+plausibel gehalten statt ausgeführt worden wäre — dann gälte ein Test als geprüft, der nie
+rot war.
+
+**Vorschlag:** Der Fall belegt die bestehende Regel, statt sie zu ändern — „Womit zu
+verfälschen sei, ist eine Vermutung und kein Auftrag" (dokumentation.md §5, „Ein Test gilt
+erst als Test, wenn er einmal rot war"). Zu entscheiden ist nur, ob er dort als Beispiel
+danebentritt.
+
+## A27 — mittel · Für die Blattkapazität gab es kein Werkzeug in der Umgebung
+
+**Beobachtet (Durchsicht T14, 21.08.2026).** Die Messung zu Abnahmekriterium 5 brauchte
+echte Schriftmetrik; in `.venv/` liegt weder PIL noch `fontTools`. Die Arial-Metrik musste
+ein Wegwerfskript liefern.
+
+**Kosten:** rund ein Drittel der Prüfzeit, und dasselbe noch einmal für jeden, der die Zahl
+nachrechnet. Ein falsches Ergebnis hätte durchgehen können, weil die Werte in technik.md
+§8c, „Gemessene Ergebnisse: »passt auf ein Blatt« ist gedeckt" als einzige nicht aus
+`tools/` reproduzierbar sind — wogegen CLAUDE.md von den Messskripten ausdrücklich sagt, sie
+reproduzierten die Messungen, auf die sich technik.md stützt.
+
+**Vorschlag:** `tools/print_check.py` neben die anderen Messskripte. Für einen einzelnen
+Befund war es nach Regel 14 nicht gerechtfertigt; zu entscheiden ist, ob die
+Reproduzierbarkeit eines Messwerts der zweite Anwendungsfall ist.
 
 > **Am 19.08.2026 eingefaltet und gestrichen:** A7 (die Prüfspalte nennt beide Wege —
 > bauplan.md, „Was die Reihenfolge bestimmt", dazu die berichtigte T4-Zeile; nicht in zwei

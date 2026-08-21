@@ -179,8 +179,9 @@ Er steht in drei Quellen, die sich selbst nachführen — nicht hier:
   Bearbeiter gleichzeitig — fremde Änderungen im Arbeitsbaum sind kein Fehler und werden
   weder repariert noch mitcommittet
 
-Die technischen Entscheidungen 1 bis 9 sind gefallen und stehen in technik.md; offen sind
-nur E8b (Anki-Bibliothek) und E8c (Druckausgabe), beide in bauplan.md unter Tor 0.
+Die technischen Entscheidungen stehen sämtlich in technik.md — auch die zuletzt gefallenen
+E8b (Anki-Erzeugung, §8b) und E8c (Druckausgabe, §8c). Tor 0 in bauplan.md ist damit
+vollständig; es blockiert keine Teilaufgabe mehr.
 
 Nicht im Repository, aber zur Arbeit vorhanden: die Umgebung `.venv/` (spaCy mit
 `en_core_web_md` und `en_core_web_sm`), das Wörterbuch `tools/en-de.sqlite3`, die

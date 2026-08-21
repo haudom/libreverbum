@@ -228,7 +228,9 @@ importierbar ist.
   im ganzen Konzept
 - **Buch-Schwierigkeitscheck**: ganzes Buch gegen das Profil halten → „ca. 14 unbekannte Wörter
   pro Seite, zu schwer für dich". Eigenständig nützlich, auch als Entscheidungshilfe vor dem Kauf
-- **Lesezeichen-Druck** und weitere Druckvarianten
+- **Lesezeichen-Druck** und weitere Druckvarianten, dazu die **PDF-Ausgabe ohne den Umweg
+  über den Browser**, mit der Druckseite aus Phase 1 als Quelle — siehe
+  [technik.md](technik.md) §8c, „Eine direkte PDF-Ausgabe ist Phase 2"
 - Bootstrapping der Bekannt-Liste: adaptiver Vokabeltest, Import bestehender Anki-Decks,
   Niveau-Angabe
 

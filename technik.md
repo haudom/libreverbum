@@ -19,6 +19,8 @@ am saubersten auf:
 | 6 | Projektgerüst und Werkzeuge | **entschieden** (12.08.2026) |
 | 7 | Modulaufteilung des Kerns und Importregel | **entschieden** (12.08.2026) |
 | 8 | EPUB-Leser | **entschieden** (12.08.2026) |
+| 8b | Anki-Erzeugung | **entschieden** (21.08.2026) |
+| 8c | Druckausgabe | **entschieden** (21.08.2026) |
 | 9 | Ablage und Konfiguration zur Laufzeit | **entschieden** (12.08.2026) |
 
 Frage 5 stand anfangs nicht auf der Liste. Sie ist aus Frage 2 entstanden, deren Messung
@@ -29,6 +31,11 @@ Frage 6 ist von anderer Art als 1 bis 5: keine inhaltliche Vorfrage, sondern das
 in dem gebaut wird. Sie kommt zuletzt, weil sie erst beantwortbar war, als die
 Abhängigkeiten feststanden — und sie kommt überhaupt, weil der Code zum großen Teil
 maschinell entsteht. Siehe Abschnitt 6.
+
+Die Fragen 8b und 8c sind aus Frage 8 hervorgegangen — dieselbe Lizenzprüfung, aber für die
+Ausgabe statt für die Eingabe. Sie sind zuletzt gefallen, weil erst mit T13 und T14
+feststand, welche Felder eine Karte und eine Druckseite wirklich tragen. bauplan.md führt
+die drei als E8a, E8b und E8c.
 
 Frage 7 gehört zu 6 und steht unmittelbar vor der ersten Zeile Anwendungscode: nicht
 womit gebaut wird, sondern wohin das Gebaute kommt. Sie wird vorab entschieden, weil eine
@@ -140,7 +147,8 @@ Innerhalb dieser Festlegung bleibt bewusst offen und wird später bestimmt:
 - ~~**spaCy oder Stanza**, und in welcher Modellgröße~~ — **entschieden am 12.08.2026**,
   siehe Abschnitt 5
 - ~~Bibliothek für EPUB~~ — **entschieden am 12.08.2026**, siehe Abschnitt 8: keine
-- Konkrete Bibliotheken für Anki-Export und Druckausgabe, jeweils **samt Lizenzprüfung**
+- ~~Konkrete Bibliotheken für Anki-Export und Druckausgabe~~ — **entschieden am
+  21.08.2026**, siehe Abschnitte 8b und 8c: `genanki` für Anki, für den Druck keine
 - Aufteilung zwischen Qt Quick und klassischen Qt-Widgets, falls einzelne Ansichten
   damit schneller fertig werden
 
@@ -751,6 +759,9 @@ später nicht anschließen, ohne alle bereits exportierten Decks neu zu erzeugen
 beim Nutzer den Lernfortschritt in Anki zurücksetzen würde. Ein Fall, in dem eine
 Fünf-Minuten-Entscheidung jetzt einen unreparierbaren Zustand später verhindert.
 
+Woraus die Kennung gebildet wird, steht in Abschnitt 8b, „Befund: die vorgegebene GUID
+bindet den Feldinhalt" — die Vorgabe der Bibliothek erfüllt Regel 6 nur dem Anschein nach.
+
 ### Sichern und Ausleiten
 
 Zwei getrennte Dinge:
@@ -1269,6 +1280,125 @@ leeres Ergebnis (Regel 13):
   offen — der Fall kam nicht vor
 - **Bindestrich- und Sonderzeichen der Verlagsdateien** gegenüber Gutenberg sind nicht
   gesondert geprüft; die Abweichung von 0,08 % ist an einer Gutenberg-Datei gemessen
+
+---
+
+## 8b. Anki-Erzeugung — entschieden
+
+**`genanki`. Die GUID vergibt LibreVerbum selbst, nicht die Bibliothek.**
+
+### Zuerst die Lizenzfrage
+
+Geprüft am 21.08.2026 an den maschinenlesbaren Rohquellen, wie Regel 15 es **vor** der
+Aufnahme verlangt (dokumentation.md §4, „Zu Regel 15: die Rohquelle entscheidet"):
+
+| Paket | Lizenz |
+|---|---|
+| **genanki 0.13.1** | **MIT** — dreifach belegt: PyPI-Metadaten, `LICENSE.txt` im Quellbaum, GitHubs Lizenz-API |
+| `cached-property` | BSD |
+| `chevron` | MIT |
+| `pyyaml` | MIT |
+| `frozendict` | **LGPL-3.0** — schwaches Copyleft |
+
+LGPL ist kein Ausschluss: Regel 15 zielt auf **starkes** Copyleft, und der Präzedenzfall im
+Projekt ist PySide6 (Abschnitt 1, „Bekannte Kosten dieser Entscheidung").
+
+**Ankis eigene AGPL schlägt nicht durch.** `genanki` hängt nicht vom Paket `anki` ab und
+übernimmt allein dessen Dateiformat, keinen Quelltext. Das Paket `anki` selbst bleibt
+ausgeschlossen (dokumentation.md §4, „Zu Regel 15: die Rohquelle entscheidet").
+
+### Das Ausschlusskriterium ist erfüllt
+
+bauplan.md verlangt unter E8b eine zugängliche GUID, sonst ist Regel 6 nicht erfüllbar. Am
+Quelltext geprüft: `Note.guid` ist eine Property mit Getter **und** Setter, dazu ein
+Konstruktorparameter.
+
+### Warum die Handvariante hier verliert — anders als bei E8a
+
+Die abhängigkeitsfreie Gegenkandidatin wäre, die `.apkg`-Datei über SQLite und ZIP selbst zu
+schreiben. Bei E8a (Abschnitt 8) hat genau diese Variante gewonnen. Der Unterschied ist
+nicht Geschmack:
+
+- E8a ist ein **Lesefall** in einem offen beschriebenen Format — was falsch gelesen wird,
+  zeigt der Text
+- E8b ist ein **Schreibfall** in eine fremde interne Datenbank, deren einziger Prüfer Ankis
+  Importer ist
+
+Dafür müsste die Handvariante 350 bis 450 Zeilen Konstanten übernehmen — entweder aus
+`genanki` (MIT) oder aus Anki selbst (AGPL, nach Regel 15 ausgeschlossen). Die Lizenzlage
+kehrt sich damit gegen sie: Der abhängigkeitsfreie Weg führt zur schlechteren Lizenz.
+
+### Gegenrede: genanki wird kaum noch gepflegt
+
+Letzte Freigabe 12.11.2023, letzter Commit 30.12.2024. Dagegen steht das Format selbst:
+Ankis heutiger Importer nimmt `collection.anki2` weiterhin als `Legacy1` an — die
+geschriebene Datei ist also nicht veraltet, nur die Bibliothek ruht.
+
+### Befund: die vorgegebene GUID bindet den Feldinhalt
+
+`genanki` bildet die GUID vorgabemäßig aus einem Hash **aller Feldwerte** der Notiz. Eine
+korrigierte Übersetzung erzeugte damit eine neue GUID; Anki legte beim nächsten Import eine
+zweite Notiz an, statt die bestehende zu aktualisieren. **Regel 6 wäre formal erfüllt** —
+eine Spalte `guid` stünde in `card` — **und faktisch verletzt**, unbemerkt bis zum
+Anki-Rückkanal in Phase 3.
+
+> **Deshalb vergibt LibreVerbum die GUID selbst.** Schlüssel sind Buch, Kapitel, Grundform
+> samt Wortart, Kartenrichtung sowie `wikdict_lexentry` und `wikdict_sense`. `translation`,
+> `wikdict_trans_list` und `uncertain` bleiben draußen.
+
+Der Preis ist bewusst in Kauf genommen: Ein neu bezogenes Wörterbuch mit geändertem
+`sense`-Text erzeugt für dieselbe Bedeutung eine zweite Notiz. Die Doppelkarte ist sichtbar
+und korrigierbar — der still überschriebene Lernfortschritt der Gegenseite wäre es nicht
+(Abschnitt 4, „Jetzt billig, später teuer: die Anki-Kennung").
+
+---
+
+## 8c. Druckausgabe — entschieden
+
+**Keine Bibliothek. Erzeugtes HTML mit eingebettetem Druck-CSS; gedruckt wird im Browser,
+und wer ein PDF will, speichert es dort.**
+
+Damit bleibt es bei der Standardbibliothek: keine Lizenzfrage, keine Systemabhängigkeit —
+und kein Browser im Prüftor, weil das erzeugte HTML geprüft wird und nicht sein Ausdruck.
+
+### Geprüft und verworfen
+
+Am 21.08.2026 an den Rohquellen geprüft (Regel 15):
+
+| Kandidat | Fassung | Lizenz | Warum nicht |
+|---|---|---|---|
+| weasyprint | 69.0 | BSD | verlangt unter Windows Pango über MSYS2 — eine Systembibliothek außerhalb von `uv.lock` und damit außerhalb der Messgrundlage aus Abschnitt 6; harte Abhängigkeit `Pyphen` tri-lizenziert |
+| fpdf2 | 2.8.8 | LGPL-3.0-only | Kernschriften nur Latin-1 — die Schriftfalle greift genau bei den typografischen Zeichen aus dem Buchtext (dokumentation.md §8, „Kleinigkeiten") |
+| reportlab | 5.0.1 | BSD | eine Werkbank für ein Blatt |
+| Qts Druckweg | | | `printout` liegt im Kern, und der Kern kennt die Oberfläche nicht (Abschnitt 1, „Architekturregel — hält alle Türen offen") |
+
+### Gemessene Ergebnisse: „passt auf ein Blatt" ist gedeckt
+
+Gemessen am 21.08.2026 mit echter Arial-Metrik gegen alle 157.801 `trans_list`-Werte aus
+`tools/en-de.sqlite3`, gerechnet gegen das Druck-CSS von `printout`:
+
+| | |
+|---|---|
+| Satzspiegel | 180 × 267 mm, Spalte 85 mm |
+| nutzbare Gesamtspaltenlänge | **491 mm** |
+| je Eintrag | Zeilenhöhe 4,66 mm, dazu 4 mm Abstand |
+| **zweites Blatt** | **ab durchschnittlich vier Zeilen je Eintrag** |
+| 25 Einträge mit den jeweils längsten real vorkommenden Übersetzungen | **56 %** des Blattes |
+| dieselben auf p99-Länge | **68 %** |
+
+`trans_list`-Längen über den ganzen Bestand: Median 12 Zeichen, p90 32, p95 45, p99 76,
+Maximum 199.
+
+> **Damit trägt Abnahmekriterium 5 eine Messung.** Bis hierher war „passt auf ein Blatt"
+> eine Ableitung aus der Wortobergrenze von 25 Wörtern (konzept.md, Schritt 4). Die Grenze
+> trägt das Kriterium weiterhin — beurteilt wird sie bei T17 (bauplan.md, Tor 4).
+
+### Eine direkte PDF-Ausgabe ist Phase 2
+
+Ein PDF ohne den Handgriff im Browser verlangte eine der oben verworfenen Bibliotheken oder
+einen mitgelieferten Browser. Gebaut wird, was die Phase verlangt (Regel 14); der Bedarf
+selbst ist als Phase-2-Punkt festgehalten (konzept.md, „Phase 2 — Ausbau der Kernidee"),
+mit dem HTML aus Phase 1 als Quelle.
 
 ---
 

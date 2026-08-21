@@ -56,15 +56,15 @@ Kein Code. Regel 15 verlangt die Lizenzprüfung **vor** der Aufnahme.
 |---|---|---|---|
 | **E8a** | EPUB-Leser | T12 | **entschieden am 12.08.2026** (technik.md §8): keine Bibliothek, Standardbibliothek genügt — gemessen an zwölf Dateien |
 | **E9** | Ablage und Konfiguration | T5, T8, T11 | **entschieden am 12.08.2026** (technik.md §9): plattformübliches Verzeichnis, Pfade als Argument, `config.toml` |
-| **E8b** | Anki-Erzeugung | T13 | offen. Ausschlusskriterium: Die Bibliothek muss die **GUID zugänglich** machen, sonst ist Regel 6 nicht erfüllbar |
-| **E8c** | Druckausgabe | T14 | offen. Erzeugtes HTML im Browser drucken wäre die abhängigkeitsfreie Möglichkeit |
-| **E10** | Reihenfolge und Anreicherungstiefe | T11, T15, T16 | **entschieden am 17.08.2026** (konzept.md, Nachtrag beim Kernablauf): Bedeutungen **vor** der Triage, die Tiefe als Einstellung. Von den zwei Messungen liegt die erste vor (18.08.2026), siehe unten |
+| **E8b** | Anki-Erzeugung | T13 | **entschieden am 21.08.2026** (technik.md §8b): `genanki`, MIT. Ausschlusskriterium erfüllt — `Note.guid` ist les- und setzbar; die GUID vergibt LibreVerbum trotzdem selbst |
+| **E8c** | Druckausgabe | T14 | **entschieden am 21.08.2026** (technik.md §8c): keine Bibliothek — erzeugtes HTML mit Druck-CSS, gedruckt im Browser |
+| **E10** | Reihenfolge und Anreicherungstiefe | T11, T15, T16 | **entschieden am 17.08.2026** (konzept.md, Nachtrag beim Kernablauf): Bedeutungen **vor** der Triage, die Tiefe als Einstellung. Beide Messungen liegen vor (18. und 19.08.2026), siehe unten |
 
-**Damit ist Tor 0 für Tor 1 und Tor 2 offen.** E8b und E8c bleiben liegen bis kurz vor T13
-und T14 — dann ist bekannt, welche Felder eine Karte wirklich trägt.
+**Tor 0 ist damit vollständig.** E8b und E8c sind wie vorgesehen erst kurz vor T13 und T14
+gefallen — da stand fest, welche Felder eine Karte wirklich trägt.
 
-**E10 ist entschieden. Von den zwei Zahlen, die ändern, *was* gebaut wird — nicht nur wie —,
-liegt seit dem 18.08.2026 die erste vor:**
+**E10 ist entschieden. Die zwei Zahlen, die ändern, *was* gebaut wird — nicht nur wie —,
+liegen seit dem 18. und 19.08.2026 vor:**
 
 - **Wie viele Grundformen eines Kapitels sind überhaupt mehrdeutig? — gemessen**
   (technik.md §3, „Nachtrag 18.08.2026: zwei Drittel der Grundformen eines Kapitels sind
@@ -151,7 +151,8 @@ nicht der Kern: Es misst, T12 baut.
 | **T13** | Deck mit Wort, Grundform, Übersetzung, Wortart, Belegsatz, Buch und Kapitel; Verschlagwortung; Kartenrichtung je Export wählbar; GUID **zurückgeben** — geschrieben wird sie in `profile`, sonst kennt `anki` zwei Schritte | Regel 6, Abnahmekriterium 4 |
 | **T14** | Kapitelliste als Druckseite, zweispaltig, auf ein Blatt | Abnahmekriterium 5 |
 
-Brauchen E8b und E8c. Bei T14 fällt der offene Punkt aus technik.md §7 an, wohin die Liste
+Beide hängen an E8b und E8c, seit dem 21.08.2026 entschieden (Tor 0). Bei T14 fällt der
+offene Punkt aus technik.md §7 an, wohin die Liste
 „Figuren & Orte" gehört.
 
 ---
@@ -169,7 +170,7 @@ Brauchen E8b und E8c. Bei T14 fällt der offene Punkt aus technik.md §7 an, woh
 
 | # | Teilaufgabe |
 |---|---|
-| **T17** | Durchlauf an einem echten, DRM-freien EPUB. Kriterien 1 bis 6, davon 3 als Handstichprobe über zwanzig Wörter mit mindestens drei mehrdeutigen und zwei Redewendungen, 4 als echter Import in Anki |
+| **T17** | Durchlauf an einem echten, DRM-freien EPUB. Kriterien 1 bis 6, davon 3 als Handstichprobe über zwanzig Wörter mit mindestens drei mehrdeutigen und zwei Redewendungen, 4 als echter Import in Anki. Dabei die **Wortobergrenze beurteilen** (konzept.md, Schritt 4): Am 21.08.2026 erwogen zu streichen und unverändert gelassen — ob „maximal 25 neue Wörter" trägt, zeigt erst der erste echte Durchlauf. Mitzudenken: Abnahmekriterium 5 ruht auf der Grenze (technik.md §8c, „Gemessene Ergebnisse: »passt auf ein Blatt« ist gedeckt"); `Origin.WORD_LIMIT` steht bereits im Profilschema, ersatzloses Streichen wäre also eine Schemaänderung mit `user_version`-Sprung (Regel 5); erwogen und nicht gewählt wurde, die Grenze zur Einstellung mit zulässigem Wert „aus" zu machen — Präzedenzfall ist Entscheidung 10 vom 17.08.2026 (konzept.md, Schritt 4, Anreicherungstiefe) |
 | **T18** | Dokumente nachziehen: Schemaspalten festhalten, „Figuren & Orte" verorten, Wirkung der Wortart als Vorfilter auf lange Auswahllisten **messen** statt vermuten (technik.md §3, `run` mit 48 Bedeutungen), Stand in CLAUDE.md. Dazu die letzte Auflösung von `nacharbeit.md`: jeder verbliebene `leicht`-Punkt wird eingefaltet oder gestrichen, dann fällt die Datei weg |
 
 ## Tor 5 — Oberfläche, nach der Abnahme
@@ -215,4 +216,3 @@ spaCy-Typen (technik.md §6, „Nachtrag 17.08.2026").
   eigenes Paket daneben. Zu entscheiden bei T16, nicht vorher
 - **Ob der Durchstich in T15 genügt** oder `pipeline` je Schritt eine Zwischenablage
   braucht (technik.md §7, offener Punkt). Erst messen, dann bauen
-- **E8b und E8c sind offen** und stehen oben in Tor 0
