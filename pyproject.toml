@@ -70,7 +70,10 @@ split-on-trailing-comma = false
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["libreverbum", "tests"]
+# "cli" seit T16 (bauplan.md): die Kommandozeile liegt bewusst neben dem Kern, nicht
+# darunter (bauplan.md, „Die Kommandozeile ist eine Oberfläche…"), wird aber im selben
+# Tor geprüft wie libreverbum und tests.
+files = ["libreverbum", "tests", "cli"]
 
 # REGEL (technik.md §6, Tor „Prüfen vor »fertig«"): genanki bringt weder Typangaben noch
 # einen py.typed-Marker mit (geprüft am installierten Paket, 21.08.2026) — eng auf dieses
