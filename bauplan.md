@@ -151,9 +151,10 @@ nicht der Kern: Es misst, T12 baut.
 | **T13** | Deck mit Wort, Grundform, Übersetzung, Wortart, Belegsatz, Buch und Kapitel; Verschlagwortung; Kartenrichtung je Export wählbar; GUID **zurückgeben** — geschrieben wird sie in `profile`, sonst kennt `anki` zwei Schritte | Regel 6, Abnahmekriterium 4 |
 | **T14** | Kapitelliste als Druckseite, zweispaltig, auf ein Blatt | Abnahmekriterium 5 |
 
-Beide hängen an E8b und E8c, seit dem 21.08.2026 entschieden (Tor 0). Bei T14 fällt der
-offene Punkt aus technik.md §7 an, wohin die Liste
-„Figuren & Orte" gehört.
+Beide hängen an E8b und E8c, seit dem 21.08.2026 entschieden (Tor 0). Mit T14 ist auch der
+offene Punkt aus technik.md §7 entschieden, wohin die Liste „Figuren & Orte" gehört: nicht
+in Phase 1, und gebaut gehörte sie nach `printout` — technik.md §7, „Die Liste »Figuren &
+Orte« ist Phase 2".
 
 ---
 
@@ -171,7 +172,7 @@ offene Punkt aus technik.md §7 an, wohin die Liste
 | # | Teilaufgabe |
 |---|---|
 | **T17** | Durchlauf an einem echten, DRM-freien EPUB. Kriterien 1 bis 6, davon 3 als Handstichprobe über zwanzig Wörter mit mindestens drei mehrdeutigen und zwei Redewendungen, 4 als echter Import in Anki. Dabei die **Wortobergrenze beurteilen** (konzept.md, Schritt 4): Am 21.08.2026 erwogen zu streichen und unverändert gelassen — ob „maximal 25 neue Wörter" trägt, zeigt erst der erste echte Durchlauf. Mitzudenken: Abnahmekriterium 5 ruht auf der Grenze (technik.md §8c, „Gemessene Ergebnisse: »passt auf ein Blatt« ist gedeckt"); `Origin.WORD_LIMIT` steht bereits im Profilschema, ersatzloses Streichen wäre also eine Schemaänderung mit `user_version`-Sprung (Regel 5); erwogen und nicht gewählt wurde, die Grenze zur Einstellung mit zulässigem Wert „aus" zu machen — Präzedenzfall ist Entscheidung 10 vom 17.08.2026 (konzept.md, Schritt 4, Anreicherungstiefe) |
-| **T18** | Dokumente nachziehen: Schemaspalten festhalten, „Figuren & Orte" verorten, Wirkung der Wortart als Vorfilter auf lange Auswahllisten **messen** statt vermuten (technik.md §3, `run` mit 48 Bedeutungen), Stand in CLAUDE.md. Dazu die letzte Auflösung von `nacharbeit.md`: jeder verbliebene `leicht`-Punkt wird eingefaltet oder gestrichen, dann fällt die Datei weg |
+| **T18** | Dokumente nachziehen: Schemaspalten festhalten, Wirkung der Wortart als Vorfilter auf lange Auswahllisten **messen** statt vermuten (technik.md §3, `run` mit 48 Bedeutungen), Stand in CLAUDE.md. Dazu die letzte Auflösung von `nacharbeit.md`: jeder verbliebene `leicht`-Punkt wird eingefaltet oder gestrichen, dann fällt die Datei weg |
 
 ## Tor 5 — Oberfläche, nach der Abnahme
 

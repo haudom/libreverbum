@@ -282,8 +282,9 @@ DESC` fehlte.
 
 Verfälscht wird die **Umsetzung**, nicht der Test: Bedingung umdrehen, Sortierung
 entfernen, Filter weglassen. Welcher Test bei welcher Verfälschung gefallen ist, gehört in
-den Bericht (§9). Das kostet Minuten und ersetzt einen Teil der Durchsicht durch Mechanik —
-wo es getan wurde, hat der Bauende die Falle selbst gefunden, um die es ging.
+den Bericht (§9). Das kostet Minuten, und wo es getan wurde, hat der Bauende die Falle
+selbst gefunden, um die es ging. Es ist damit der Teil der Prüfung, den der Bauende allein
+leisten kann — **die Durchsicht ersetzt es nicht und wird davon nicht ersetzt** (§10).
 
 **Bleibt der Test bei der Verfälschung grün, ist die Zusicherung zu schwach** — nicht die
 Verfälschung falsch gewählt. Dann wird die Behauptung geschärft: Meldungstext statt
@@ -419,3 +420,52 @@ angestoßen, wo es sich lohnt — **spätestens am Phasenende** wird jeder verbl
 eingefaltet oder ersatzlos gestrichen. Streichen ist dort oft die richtige Antwort, weil
 die Reibung inzwischen weg ist. Ohne diesen Termin zeigt die Verfallsklausel der
 Sammelliste ins Leere, und aus dem Rest wird die Sedimentschicht aus §7.
+
+---
+
+## 10. Die Durchsicht
+
+Das Tor aus CLAUDE.md, „Prüfen vor »fertig«" beantwortet **eine** Frage: Stimmt die Form —
+Format, Regeln, Typen, laufen die Tests? Ob das Gebaute das Richtige tut, beantwortet es
+nicht. Auf das grüne Tor folgt deshalb die **Durchsicht**, bei jeder Teilaufgabe und
+**nicht durch denselben Bearbeiter**, der gebaut hat.
+
+**Der Beleg** (entschieden am 21.08.2026): neun Teilaufgaben, neun grüne Tore, neun
+Durchsichten mit Befunden — T6, T7, T9, T12, T12b und T15 (18./19.08.2026, vier davon
+`schwer`), T11, T13 und T14 (21.08.2026, zwei `schwer`, dazu einer, der bei jedem echten
+Kapiteldurchlauf zugeschlagen hätte). Alle vom **stillen** Typ: Etwas kam leer, unmarkiert
+oder unbemerkt falsch zurück, und alle vier Torbefehle blieben grün — genau die Art
+Fehlschlag, gegen die Regel 13 geschrieben ist. Neun von neun sind keine Nachlässigkeit,
+sondern die Bauart des Tors. Und **nicht derselbe Bearbeiter**, weil drei der vier
+`schwer`-Befunde der ersten Sitzung in Annahmen lagen, die der Bauende selbst getroffen
+und in seinen eigenen Tests wiederholt hatte — dieselbe Wurzel wie bei der selbstgebauten
+Vorrichtung in §5, „Woran geprüft wird". Wer prüft, muss die Annahme nicht teilen.
+
+### Wonach sie sucht, und was herauskommt
+
+Nicht nach Formfehlern, die hat das Tor. Gesucht wird der **stille Fehlschlag**: ein
+Ergebnis, das leer zurückkommt, ohne dass etwas meldet; ein Eintrag, der falsch ist und
+nicht `uncertain` trägt; ein Zweig, der außerhalb der Tests keinen Aufrufer hat; ein Test,
+der grün ist, weil er nichts zusichert. Gegengehalten wird dem, was verlangt war —
+Abnahmekriterium, Regel, Auftrag —, und dem echten Gegenüber (§5, „Woran geprüft wird").
+
+**Das Ergebnis sind Befunde**, je Befund drei Angaben:
+
+| Angabe | Inhalt |
+|---|---|
+| **Ort** | Datei und Stelle |
+| **Wirkung** | was falsch herauskommt, wenn es so bleibt |
+| **Schwere** | `schwer` / `mittel` / `leicht` nach der Tabelle in §9 |
+
+`schwer` und `mittel` werden nachgebessert, `leicht` nur, wo es sich lohnt. **Die Stufe
+vergibt hier der Durchsehende selbst** — anders als bei einer Beobachtung: Die Wirkung
+eines Befunds ist örtlich und jetzt sichtbar, sie zeigt sich nicht erst, wenn mehrere
+Berichte nebeneinander liegen.
+
+### Befund und Beobachtung sind zweierlei
+
+Ein **Befund** betrifft **das Gebaute**. Er geht an die Teilaufgabe zurück und ist erledigt,
+wenn die Stelle behoben ist; bleibt er dort als Begründung stehen, trägt er die Marke aus
+§4. Eine **Beobachtung** betrifft **den Ablauf**, geht in den Bericht (§9) und wird an einem
+Tor eingefaltet. Wer beides in denselben Kanal wirft, verliert die Beobachtung — die
+Teilaufgabe ist danach zu, der Ablauf bleibt derselbe.

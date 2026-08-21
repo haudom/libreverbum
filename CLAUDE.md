@@ -114,6 +114,14 @@ Zwei Prüfregeln sind abgeschaltet, weil sie gegen die Sprachregel arbeiten (`RU
 melden Gedankenstrich und typografische Anführungszeichen). Wer sie wieder anschaltet,
 liest erst technik.md §6, „Zwei Prüfregeln arbeiten gegen die Hausordnung".
 
+**Nach den vier Befehlen folgt die Durchsicht.** Sie ist kein fünfter Befehl, sondern die
+Antwort auf eine andere Frage: Das Tor prüft **Form** — ob das Gebaute das Richtige tut,
+prüft es nicht. Die Durchsicht sucht den **stillen Fehlschlag** — das leere, unmarkierte
+oder unbemerkt falsche Ergebnis bei vier grünen Befehlen — und **macht nicht derselbe
+Bearbeiter**, der gebaut hat. Ihr Ergebnis sind Befunde mit Ort, Wirkung und Schwere
+(`schwer`/`mittel`/`leicht`); `schwer` und `mittel` werden nachgebessert. Ausführlich:
+dokumentation.md §10, „Die Durchsicht".
+
 **Das Tor ist auf den Bauenden geschrieben.** Wer *prüft*, während ein zweiter Bearbeiter im
 Arbeitsbaum steht, nimmt stattdessen `ruff format --check .` und lässt `pytest` nur auf den
 betroffenen Dateien laufen: `ruff format .` formatiert fremde Arbeit mit, und ein
@@ -197,6 +205,10 @@ Testtexte `tools/*.txt` und die EPUBs `tools/*.epub`. Tests, die davon abhängen
 - **Fertig heißt committet.** Was abgeschlossen ist **und das Tor aus „Prüfen vor
   »fertig«" besteht**, wird committet — ohne Rückfrage; diese Regel ist die Erlaubnis.
   „Läuft" ist dabei kein Eindruck, sondern sind die vier grünen Befehle
+  - **Die vier Befehle erlauben den Commit, sie schließen die Teilaufgabe nicht ab.** Das
+    tut erst die Durchsicht (dokumentation.md §10, „Die Durchsicht"); ihre Befunde der
+    Stufen `schwer` und `mittel` werden nachgebessert und ergeben nach derselben Regel
+    ihren eigenen Commit
   - **Ein Commit je abgeschlossener Sache**, nicht je Sitzung. Liegen zwei Anliegen im
     Arbeitsbaum, werden es zwei Commits
   - Auf `main` und **ohne zu pushen**. Veröffentlichen bleibt eine eigene Entscheidung

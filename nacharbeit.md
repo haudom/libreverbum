@@ -29,40 +29,6 @@ sich erst, wenn mehrere Berichte nebeneinander liegen — dokumentation.md §9.
 
 # Teil A — Regeln und Arbeitsweise
 
-## A19 — mittel · Das Review steht in keiner Hausordnung
-
-**Beobachtet (Sitzung 18./19.08.2026).** Sechs Teilaufgaben (T6, T7, T9, T12, T12b, T15)
-wurden gebaut, jede mit **grünem Tor** — und jede Durchsicht danach fand Befunde, vier davon
-`schwer`:
-
-- **T6:** Fehlt der `Content-Length`-Kopf, entfiel die Längenprüfung ersatzlos; eine halb
-  geladene Datei bestand die Schemaprüfung und wäre als gültiges Wörterbuch liegen geblieben
-- **T7:** Nichttreffer wurden für beide Kandidatenwege als `uncertain` markiert — rund 23.500
-  unsichere Einträge je Kapitel; zugleich war der Eigennamenfilter durch den binären
-  Schreibungsvergleich toter Code
-- **T12b:** Ein Kapitel kam nach dem Aussteuern **still leer** zurück, ohne Fehler
-- **T15:** 213 Wendungen je Kapitel fehlten im Ergebnis; T4 und T7 hatten außerhalb der Tests
-  keinen Aufrufer
-
-Alle vier sind **stille** Fehler — genau die Art, gegen die Regel 13 geschrieben ist, und
-genau die Art, die vier grüne Befehle nicht sehen. Das Tor prüft **Form** (Format, Regeln,
-Typen, Tests laufen); ob das Gebaute das Richtige tut, prüft es nicht. In CLAUDE.md und
-dokumentation.md kommt die Durchsicht als Arbeitsschritt gleichwohl **nicht vor** — sie fand
-in dieser Sitzung nur statt, weil der Auftraggeber sie angeordnet hat.
-
-**Kosten:** keine, solange jemand daran denkt. Ein falsches Ergebnis wäre in vier Fällen
-durchgegangen — jedes davon in einem committeten, grünen Stand.
-
-**Zweiter Beleg (Sitzung 21.08.2026).** T11, T13 und T14 gebaut, jede mit grünem Tor, und
-**jede Durchsicht danach fand wieder Befunde** — bei T11 und T13 je einen `schwer`, bei T14
-zwei `mittel`, davon einer, der bei jedem echten Lauf zugeschlagen hätte (A25). Damit stützt
-sich A19 auf doppelt so viele Fälle wie am 19.08.2026.
-
-**Vorschlag:** Zu entscheiden, ob „Prüfen vor »fertig«“ um die Durchsicht ergänzt wird — mit
-dem Zusatz, dass sie **nicht derselbe Bearbeiter** macht, denn drei der vier Befunde lagen
-in Annahmen, die der Bauende selbst getroffen und in seinen Tests wiederholt hatte. Das
-berührt A8, das dasselbe von der Werkzeugseite her beschreibt.
-
 ## A21 — mittel · Gemischte Zeilenenden lassen Verfälschungsproben ins Leere laufen
 
 **Beobachtet (Durchsicht A11/A15, 19.08.2026).** `libreverbum/profile.py` liegt mit CRLF im
@@ -179,6 +145,11 @@ reproduzierten die Messungen, auf die sich technik.md stützt.
 **Vorschlag:** `tools/print_check.py` neben die anderen Messskripte. Für einen einzelnen
 Befund war es nach Regel 14 nicht gerechtfertigt; zu entscheiden ist, ob die
 Reproduzierbarkeit eines Messwerts der zweite Anwendungsfall ist.
+
+> **Am 21.08.2026 eingefaltet und gestrichen:** A19 (die Durchsicht ist ein fester
+> Arbeitsschritt nach dem Tor und wird nicht vom Bauenden gemacht — dokumentation.md §10,
+> „Die Durchsicht", dazu der Absatz in CLAUDE.md, „Prüfen vor »fertig«"; „Fertig heißt
+> committet" unter „Arbeitsweise" ist entsprechend nachgezogen).
 
 > **Am 19.08.2026 eingefaltet und gestrichen:** A7 (die Prüfspalte nennt beide Wege —
 > bauplan.md, „Was die Reihenfolge bestimmt", dazu die berichtigte T4-Zeile; nicht in zwei

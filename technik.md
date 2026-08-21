@@ -1144,10 +1144,21 @@ Projekt durchgehend das LLM (Abschnitt 3). Ein `model.py` neben `translation.py`
 genau die Doppelbedeutung, gegen die die Begriffstabelle in dokumentation.md §2 angelegt
 ist.
 
+### Die Liste „Figuren & Orte" ist Phase 2
+
+Entschieden am 21.08.2026 mit dem Bau der Druckausgabe (T14). konzept.md §6, „Export"
+führt sie unter „Druckausgabe" als *optionalen* Anhang, in derselben Aufzählung wie das
+„Lesezeichen-Format" — und der Phasenplan zählt „Lesezeichen-Druck und weitere
+Druckvarianten" ausdrücklich zu Phase 2; der Phase-1-Satz und Abnahmekriterium 5 nennen
+nur die eine Kapitelliste. In Phase 1 entsteht sie deshalb nicht (Regel 14).
+
+Würde sie gebaut, gehörte das Zusammenstellen nach `printout` und nicht nach `extraction`:
+`extraction` liefert je Vorkommen bereits, wie oft es ein Eigenname war
+(`Occurrence.proper_noun_frequency`, Regel 12) — mehr braucht die Liste nicht, und eine
+zweite Ausgabeliste daraus ist Ausgabe, keine Extraktion.
+
 ### Offene Punkte
 
-- **Wohin die Liste „Figuren & Orte" gehört.** Sie fällt in `extraction` an, ist aber
-  Ausgabe und keine Lernvokabel. Zu entscheiden, wenn die Druckausgabe gebaut wird
 - **Ob `pipeline` je Schritt eine eigene Zwischenablage braucht** oder ein Durchlauf am
   Stück genügt. Für ein Kapitel von einer Sekunde Rechenzeit (Abschnitt 5) genügt er
   vermutlich; gemessen ist es nicht
