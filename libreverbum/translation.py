@@ -19,11 +19,13 @@ Voraussetzungen
 schlägt selbst nicht im Wörterbuch nach und importiert dafür nichts als `entities`
 (technik.md §7, „Die Importregel"). Ein Kandidat, der schon als `uncertain` markiert
 hereinkommt (der Verb-Partikel-Platzhalter aus T7, `dictionary.particle_verb_candidates`),
-gehört nicht in diese Liste — ob und wie ein solcher Kandidat überhaupt zur Übersetzung
-vorgelegt wird, entscheidet der Aufrufer (T15/T16), nicht dieses Modul. `model_name` ist
-bereits aufgelöst: Ist in `config.toml` (technik.md §9) kein Modellname hinterlegt, ist
-das Bestimmen des ersten vom Server genannten Modells Sache des Aufrufers, nicht dieses
-Moduls — bauplan.md T11 verlangt nur den Aufruf über die Schnittstelle, keine
+kann in dieser Liste stehen — `dictionary.py` legt das ausdrücklich so an (Befund 2,
+Review T11). Ob ein solcher Kandidat überhaupt zur Übersetzung vorgelegt wird, entscheidet
+der Aufrufer (T15/T16); kommt er an, behandelt ihn dieses Modul wie unten unter „Liefert"
+beschrieben — durchgereicht, nicht stillschweigend zur sicheren Bedeutung gemacht.
+`model_name` ist bereits aufgelöst: Ist in `config.toml` (technik.md §9) kein Modellname
+hinterlegt, ist das Bestimmen des ersten vom Server genannten Modells Sache des Aufrufers,
+nicht dieses Moduls — bauplan.md T11 verlangt nur den Aufruf über die Schnittstelle, keine
 Serversuche, und die Autosuche aus `tools/` ist ausdrücklich nicht das Vorbild
 (technik.md §9).
 
@@ -32,8 +34,12 @@ Liefert
 `choose_sense` liefert einen `Sense` aus `sense_candidates` mit gesetztem `translation`
 (WikDicts `trans_list` der gewählten Zeile) und `uncertain=False` — oder, wenn keine der
 vorgelegten Bedeutungen passt, einen `Sense` mit `uncertain=True` und `translation=None`.
-Eine leere Auswahlliste führt **nicht** zu einem Modellaufruf, sondern unmittelbar zu
-`uncertain` (Regel 11; Begründung an der Stelle im Code). Jeder Fehlschlag aus
+Wählt das Modell einen Kandidaten, der selbst schon als `uncertain` hereinkam (kein
+Wörterbucheintrag, `translation=None`), bleibt diese Marke am Ergebnis erhalten statt auf
+`False` zurückgesetzt zu werden — eine plausible, aber unbestätigte Wahl wird nicht durch
+den bloßen Zusammenbau des Ergebnisses zu einer sicheren Bedeutung (Befund 2, Review T11;
+Regel 10). Eine leere Auswahlliste führt **nicht** zu einem Modellaufruf, sondern
+unmittelbar zu `uncertain` (Regel 11; Begründung an der Stelle im Code). Jeder Fehlschlag aus
 technik.md §3 und bauplan.md T11 — HTTP-Fehler, unformbare Antwort, `finish_reason:
 "length"` mit leerem Inhalt, eine Nummer außerhalb von 1..N+1, ein zu langer Prompt —
 bricht sichtbar mit einer deutschen Meldung ab statt eines `uncertain`-Eintrags; die
@@ -52,6 +58,7 @@ offener Punkt; `tests/conftest.py`, `ModelServerDouble`). Wählt das Modell sie,
 
 from __future__ import annotations
 
+import http.client
 import json
 import urllib.error
 import urllib.request
@@ -66,10 +73,25 @@ from libreverbum.entities import Occurrence, Sense
 # importiert, weil die Importregel `translation` auf `entities` beschränkt (technik.md §7).
 _NO_SENSE_TEXT = "Hauptbedeutung, ohne nähere Angabe"
 
+# (Befund 2, Review T11): Ein Kandidat, der schon als uncertain hereinkommt (der
+# Verb-Partikel-Platzhalter aus T7, `dictionary.particle_verb_candidates`) trägt kein
+# wikdict_sense und sähe im Prompt ohne eigene Beschriftung wie eine echte Regel-1-Zeile
+# (_NO_SENSE_TEXT) aus — ununterscheidbar von einer bestätigten Hauptbedeutung. Dieselbe
+# Bedeutung wie `dictionary.UNCERTAIN_LABEL`, hier noch einmal definiert statt importiert
+# (Importregel, technik.md §7) — dort steht ein Kommentar, der hierher zurückverweist,
+# damit ein Auseinanderlaufen der beiden Texte auffällt.
+_UNCERTAIN_TEXT = "kein Wörterbucheintrag — unsicher"
+
 # Deutlich über der gemessenen rund einen Sekunde je Wort (technik.md §3, „Gemessene
 # Ergebnisse") — Reserve für einen langsameren Rechner oder eine ungewöhnlich lange
-# Auswahlliste, kein Vertrauen in einen bestimmten Wert.
-DEFAULT_TIMEOUT: float = 30
+# Auswahlliste, kein Vertrauen in einen bestimmten Wert. (Befund 3, Review T11): 30 s
+# deckt die erste Anfrage eines Kapitels nicht sicher ab, wenn der Server das Modell erst
+# in den Speicher laden muss — der Lauf stürbe dann schon beim ersten Wort mit „timed out",
+# obwohl nichts kaputt ist, und der Auftraggeber betreibt Ollama übers Netz, nicht auf
+# localhost, was das Nachladen eher langsamer als schneller macht. 120 s ist eine
+# Schätzung, keine Messung: großzügig genug für den Kaltstart eines mittelgroßen Modells,
+# ohne bei einer echten Störung minutenlang stumm zu warten.
+DEFAULT_TIMEOUT: float = 120
 
 # Grobe, bewusst konservative Schätzung der Promptgröße vor dem Senden — rund 4 Zeichen
 # je Token, aufgerundet, damit die Schätzung eher zu groß als zu klein ausfällt (wie
@@ -98,8 +120,10 @@ def _pos_label(lexentry: str | None) -> str:
 
 def _sense_line(number: int, sense: Sense) -> str:
     """Eine nummerierte Zeile der Auswahlliste für den Prompt: Wortart, Bedeutungstext
-    (oder Regel 1s feste Beschriftung) und WikDicts deutsche Entsprechungen."""
-    sense_text = sense.wikdict_sense or _NO_SENSE_TEXT
+    (oder Regel 1s feste Beschriftung, oder — bei einem schon als uncertain hereingegebenen
+    Kandidaten, Befund 2 Review T11 — dessen eigene, davon unterscheidbare Beschriftung)
+    und WikDicts deutsche Entsprechungen."""
+    sense_text = _UNCERTAIN_TEXT if sense.uncertain else sense.wikdict_sense or _NO_SENSE_TEXT
     translations = sense.wikdict_trans_list or "?"
     return f"{number}. ({_pos_label(sense.wikdict_lexentry)}) {sense_text} → {translations}"
 
@@ -160,12 +184,15 @@ def _ask_model(*, url: str, model_name: str, prompt: str, option_count: int, tim
     sie geprüft zurück.
 
     Jeder Fehlschlag bricht sichtbar mit einer deutschen Meldung ab (Regel 13) statt eines
-    `uncertain`-Eintrags — die vier hier unterschiedenen Fälle sagen alle nichts über
-    dieses eine Wort aus, sondern über den Server oder die Betriebsart, und träten bei
-    jedem weiteren Aufruf erneut auf. Als `uncertain` markiert, verwechselte sich ein
-    solcher Ausfall über ein Kapitel hinweg unbemerkt mit echten Modell-Unsicherheiten und
-    dem Gutfall „keine passt" (Regel 13, „Die Falle: es scheitert nicht laut, sondern
-    leise")."""
+    `uncertain`-Eintrags — die hier unterschiedenen Fälle sagen alle nichts über dieses
+    eine Wort aus, sondern über den Server oder die Betriebsart, und träten bei jedem
+    weiteren Aufruf erneut auf. Als `uncertain` markiert, verwechselte sich ein solcher
+    Ausfall über ein Kapitel hinweg unbemerkt mit echten Modell-Unsicherheiten und dem
+    Gutfall „keine passt" (Regel 13, „Die Falle: es scheitert nicht laut, sondern
+    leise"). Dazu gehören auch die drei Fälle aus Befund 3, Review T11 — Lesezeit-
+    überschreitung, ein HTTP-200-Körper ohne JSON und ein Abbruch mitten in der Antwort —,
+    die ohne eigene Behandlung als englische, nicht als `ValueError` eingeordnete
+    Ausnahmen durchgereicht worden wären."""
     request = urllib.request.Request(
         f"{url.rstrip('/')}/v1/chat/completions",
         data=json.dumps(_request_body(model_name, prompt, option_count)).encode("utf-8"),
@@ -183,6 +210,27 @@ def _ask_model(*, url: str, model_name: str, prompt: str, option_count: int, tim
         ) from error
     except urllib.error.URLError as error:
         raise ValueError(f"Modellserver unter {url} nicht erreichbar: {error}") from error
+    except TimeoutError as error:
+        # (Befund 3, Review T11): Eine Lesezeitüberschreitung nach dem Verbindungsaufbau
+        # kommt als rohes TimeoutError an, nicht als URLError — urllib bettet nur
+        # Fehlschläge beim Verbindungsaufbau selbst ein. Dieselbe Einordnung wie oben:
+        # eine Störung des Servers oder der Betriebsart, keine Aussage über dieses Wort.
+        raise ValueError(
+            f"Modellserver unter {url} hat nicht innerhalb von {timeout} s geantwortet."
+        ) from error
+    except json.JSONDecodeError as error:
+        # (Befund 3, Review T11): HTTP 200 mit einem Körper, der kein JSON ist (etwa
+        # Ollamas Wurzelseite über einen falsch konfigurierten Proxy) — der Server hat
+        # geantwortet, aber nicht mit der zugesagten Schnittstelle.
+        raise ValueError(
+            f"Antwort des Modellservers unter {url} ist kein gültiges JSON: {error}"
+        ) from error
+    except (http.client.IncompleteRead, http.client.RemoteDisconnected) as error:
+        # (Befund 3, Review T11): Die Verbindung bricht mitten in der Antwort ab — weder
+        # ein HTTP-Fehlercode noch fehlende Erreichbarkeit, sondern ein Abriss dazwischen.
+        raise ValueError(
+            f"Verbindung zum Modellserver unter {url} brach mitten in der Antwort ab: {error}"
+        ) from error
 
     try:
         completion = payload["choices"][0]
@@ -205,14 +253,24 @@ def _ask_model(*, url: str, model_name: str, prompt: str, option_count: int, tim
         )
 
     try:
-        choice = int(json.loads(content)["choice"])
-    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as error:
+        raw_choice = json.loads(content)["choice"]
+    except (json.JSONDecodeError, KeyError, TypeError) as error:
         # Der Server soll die Antwortform per JSON-Schema erzwingen (bauplan.md T11) —
         # eine Antwort, die trotzdem nicht passt, ist ein Vertragsbruch des Servers,
         # keine Aussage über dieses Wort.
         raise ValueError(
             f'Antwort des Modellservers ist kein gültiges JSON mit "choice": {content!r}'
         ) from error
+
+    # (Befund 4, Review T11): int() rundete eine Bruchzahl wie 1.9 still auf 1 ab —
+    # derselbe Weltzustand, den die Bereichsprüfung zwei Zeilen weiter unten laut
+    # behandelt. Der Typ wird deshalb geprüft statt konvertiert; bool zählt trotz Pythons
+    # int-Unterklasse nicht mit, weil ein JSON-Wahrheitswert keine ganze Zahl ist.
+    if not isinstance(raw_choice, int) or isinstance(raw_choice, bool):
+        raise ValueError(
+            f'"choice" in der Antwort des Modellservers ist keine ganze Zahl: {content!r}'
+        )
+    choice: int = raw_choice
 
     if not 1 <= choice <= option_count:
         # Das JSON-Schema erzwingt minimum/maximum bereits — eine Nummer außerhalb
@@ -275,11 +333,15 @@ def choose_sense(
         return Sense(lemma=occurrence.lemma, uncertain=True)
 
     chosen = sense_candidates[choice - 1]
+    # (Befund 2, Review T11): uncertain wird vom gewählten Kandidaten übernommen statt fest
+    # auf False gesetzt — sonst verlöre ein Wörterbuch-loser Platzhalter (T7,
+    # dictionary.particle_verb_candidates) beim Zusammenbau des Ergebnisses genau die
+    # Markierung, die ihn von einer sicheren Bedeutung unterscheidet (Regel 10).
     return Sense(
         lemma=chosen.lemma,
         translation=chosen.wikdict_trans_list,
         wikdict_sense=chosen.wikdict_sense,
         wikdict_trans_list=chosen.wikdict_trans_list,
         wikdict_lexentry=chosen.wikdict_lexentry,
-        uncertain=False,
+        uncertain=chosen.uncertain,
     )

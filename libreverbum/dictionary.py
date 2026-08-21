@@ -95,6 +95,11 @@ _WIKDICT_POS = {
 # `wikdict_sense` — ohne eigene Beschriftung liefe er in `NO_SENSE_LABEL` und sähe aus wie
 # eine echte Regel-1-Zeile mit Hauptbedeutung, obwohl kein `wikdict_trans_list` dahinter
 # steht. `label` muss den Unterschied vor der Anzeige (T11, T13) sichtbar machen.
+# (Befund 2, Review T11): `translation._sense_line` beschriftet einen so hereingegebenen
+# Kandidaten im Prompt mit einer eigenen, gleichlautenden Konstante
+# (`translation._UNCERTAIN_TEXT`) statt eines Imports — die Importregel verbietet
+# `translation` den Zugriff auf `dictionary` (technik.md §7). Läuft der Text hier
+# auseinander, sollte er dort mitgezogen werden.
 UNCERTAIN_LABEL = "kein Wörterbucheintrag — unsicher"
 
 

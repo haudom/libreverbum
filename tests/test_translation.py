@@ -3,7 +3,11 @@ Auswahlliste des Wörterbuchs über die OpenAI-kompatible Schnittstelle."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import http.client
+import json
+import urllib.request
+from collections.abc import Callable
+from typing import TYPE_CHECKING, NoReturn
 
 import pytest
 
@@ -32,6 +36,49 @@ _RIVERBANK = Sense(
     wikdict_lexentry="eng/bank__Noun__2",
 )
 _BANK_CANDIDATES = [_INSTITUTION, _RIVERBANK]
+
+# (Befund 2, Review T11): der Verb-Partikel-Platzhalter aus T7 ohne jeden
+# wikdict_-Wert — genau die Form, die `dictionary.particle_verb_candidates` für einen
+# Mehrwortausdruck ohne Wörterbucheintrag liefert (`Sense(lemma=lemma, uncertain=True)`).
+_UNCERTAIN_CANDIDATE = Sense(lemma=_BANK_LEMMA, uncertain=True)
+
+# Eine echte Regel-1-Zeile (kein sense-Text, aber ein Wörterbucheintrag) zum Vergleich —
+# wie tools/en-de.sqlite3s "watch" als Substantiv (tests/conftest.py, _DICTIONARY_ROWS).
+_NO_SENSE_CANDIDATE = Sense(
+    lemma=_BANK_LEMMA,
+    wikdict_sense=None,
+    wikdict_trans_list="Uhr",
+    wikdict_lexentry="eng/watch__Noun__1",
+)
+
+
+def _urlopen_raising(exc: BaseException) -> Callable[..., NoReturn]:
+    """Ersatz für `urllib.request.urlopen`, der beim Aufruf sofort `exc` wirft (Befund 3,
+    Review T11) — die drei zusätzlichen Fehlschläge brauchen keine echte Gegenstelle,
+    ein Ersatz für den Netzaufruf genügt und bleibt schnell."""
+
+    def _fake(*args: object, **kwargs: object) -> NoReturn:
+        raise exc
+
+    return _fake
+
+
+class _FakeHTTPResponse:
+    """Minimale Gegenstelle für `json.load(response)`: nur `read()` und die
+    Kontextmanager-Protokollmethoden, wie sie `urllib.request.urlopen` normalerweise
+    liefert (Befund 3 und Befund 4, Review T11)."""
+
+    def __init__(self, body: bytes) -> None:
+        self._body = body
+
+    def __enter__(self) -> _FakeHTTPResponse:
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self._body
 
 
 def _occurrence(
@@ -220,3 +267,220 @@ def test_long_candidate_list_is_rejected_before_sending_to_avoid_silent_truncati
         )
 
     assert model_server_double.requests == []
+
+
+# ------------------------------------------------------- Befund 1, Review T11: der Prompt
+
+
+def test_prompt_contains_the_fallback_answer_as_entry_number_n_plus_1(
+    model_server_double: ModelServerDouble,
+) -> None:
+    """technik.md §3, offener Punkt „keine passt" (Befund 1, Review T11): Der
+    tatsächlich gesendete Prompt enthält die Ausweichzeile als Eintrag N+1 (N=2 echte
+    Bedeutungen) — ohne sie hat das Modell kein Mittel, den `saw`-Fall zu melden."""
+    model_server_double.choice = 1
+
+    translation.choose_sense(
+        url=model_server_double.url,
+        model_name=model_server_double.model_name,
+        occurrence=_occurrence(),
+        sense_candidates=_BANK_CANDIDATES,
+    )
+
+    prompt = model_server_double.requests[-1]["messages"][0]["content"]
+    assert "3. none of the listed meanings fits" in prompt
+
+
+def test_prompt_numbers_correspond_to_the_supplied_candidate_order(
+    model_server_double: ModelServerDouble,
+) -> None:
+    """Befund 1 (Review T11): Nummer k im gesendeten Prompt bezeichnet denselben
+    Kandidaten wie sense_candidates[k-1] — nicht nur irgendeine Nummerierung, sondern
+    diese Zuordnung, geprüft an zwei Kandidaten mit unterscheidbaren Bedeutungstexten,
+    damit eine vertauschte Reihenfolge auffiele."""
+    model_server_double.choice = 1
+
+    translation.choose_sense(
+        url=model_server_double.url,
+        model_name=model_server_double.model_name,
+        occurrence=_occurrence(),
+        sense_candidates=_BANK_CANDIDATES,
+    )
+
+    prompt = model_server_double.requests[-1]["messages"][0]["content"]
+    assert "1. (Noun) institution → Bank" in prompt
+    assert "2. (Noun) edge of river or lake → Ufer" in prompt
+
+
+def test_prompt_contains_the_example_sentence_and_the_word_form(
+    model_server_double: ModelServerDouble,
+) -> None:
+    """Befund 1 (Review T11): Ohne Belegsatz und Wortform im gesendeten Prompt wäre die
+    Auswahl reine Ratesache — beide gehören zum Kontext, den das Modell für die Wahl
+    braucht."""
+    model_server_double.choice = 1
+    occurrence = _occurrence()
+
+    translation.choose_sense(
+        url=model_server_double.url,
+        model_name=model_server_double.model_name,
+        occurrence=occurrence,
+        sense_candidates=_BANK_CANDIDATES,
+    )
+
+    prompt = model_server_double.requests[-1]["messages"][0]["content"]
+    assert occurrence.example_sentence in prompt
+    assert f'"{occurrence.word_form}"' in prompt
+
+
+# ------------------------------------------------- Befund 2, Review T11: uncertain-Marke
+
+
+def test_prompt_labels_an_uncertain_candidate_differently_from_the_no_sense_text(
+    model_server_double: ModelServerDouble,
+) -> None:
+    """Befund 2 (Review T11): Ein als uncertain hereingegebener Kandidat (der
+    Verb-Partikel-Platzhalter aus T7, `dictionary.particle_verb_candidates`) wird im
+    Prompt erkennbar anders beschriftet als eine echte Regel-1-Zeile ohne sense-Text —
+    sonst wäre er von einer bestätigten Hauptbedeutung nicht zu unterscheiden."""
+    model_server_double.choice = 1
+    candidates = [_UNCERTAIN_CANDIDATE, _NO_SENSE_CANDIDATE]
+
+    translation.choose_sense(
+        url=model_server_double.url,
+        model_name=model_server_double.model_name,
+        occurrence=_occurrence(),
+        sense_candidates=candidates,
+    )
+
+    prompt = model_server_double.requests[-1]["messages"][0]["content"]
+    assert "1. (?) kein Wörterbucheintrag — unsicher → ?" in prompt
+    assert "2. (Noun) Hauptbedeutung, ohne nähere Angabe → Uhr" in prompt
+
+
+def test_choosing_an_uncertain_candidate_keeps_the_uncertain_marker_on_the_result(
+    model_server_double: ModelServerDouble,
+) -> None:
+    """Befund 2 (Review T11), Regel 10: Wählt das Modell einen schon als uncertain
+    hereingegebenen Kandidaten, trägt das Ergebnis uncertain=True statt beim Zusammenbau
+    fest auf False gesetzt zu werden."""
+    model_server_double.choice = 1  # wählt den uncertain-Platzhalter auf Position 1
+    candidates = [_UNCERTAIN_CANDIDATE, _RIVERBANK]
+
+    result = translation.choose_sense(
+        url=model_server_double.url,
+        model_name=model_server_double.model_name,
+        occurrence=_occurrence(),
+        sense_candidates=candidates,
+    )
+
+    assert result.uncertain is True
+    assert result.translation is None
+
+
+# ------------------------------------ Befund 3, Review T11: drei zusätzliche Fehlschläge
+
+
+def test_rule_13_timeout_is_a_visible_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Befund 3 (Review T11), Regel 13: Eine Lesezeitüberschreitung nach dem
+    Verbindungsaufbau kommt als rohes TimeoutError an (kein URLError) und muss ebenso
+    sichtbar mit einer deutschen Meldung abbrechen wie die übrigen Fehlschläge."""
+    monkeypatch.setattr(urllib.request, "urlopen", _urlopen_raising(TimeoutError("timed out")))
+
+    with pytest.raises(ValueError, match="nicht innerhalb von"):
+        translation.choose_sense(
+            url="http://example.invalid",
+            model_name="mini-model",
+            occurrence=_occurrence(),
+            sense_candidates=_BANK_CANDIDATES,
+        )
+
+
+def test_rule_13_non_json_response_body_is_a_visible_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Befund 3 (Review T11), Regel 13: HTTP 200 mit einem Körper, der kein JSON ist
+    (etwa Ollamas Wurzelseite hinter einem falsch konfigurierten Proxy), muss sichtbar
+    abbrechen statt mit einem rohen json.JSONDecodeError durchzugehen."""
+    html_body = b"<html><body>Ollama is running</body></html>"
+    monkeypatch.setattr(
+        urllib.request, "urlopen", lambda *args, **kwargs: _FakeHTTPResponse(html_body)
+    )
+
+    with pytest.raises(ValueError, match="kein gültiges JSON"):
+        translation.choose_sense(
+            url="http://example.invalid",
+            model_name="mini-model",
+            occurrence=_occurrence(),
+            sense_candidates=_BANK_CANDIDATES,
+        )
+
+
+def test_rule_13_incomplete_read_is_a_visible_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Befund 3 (Review T11), Regel 13: Ein Abbruch mitten in der Antwort
+    (http.client.IncompleteRead) muss sichtbar abbrechen statt als englische Ausnahme
+    durchzugehen."""
+    monkeypatch.setattr(
+        urllib.request, "urlopen", _urlopen_raising(http.client.IncompleteRead(b""))
+    )
+
+    with pytest.raises(ValueError, match="brach mitten in der Antwort ab"):
+        translation.choose_sense(
+            url="http://example.invalid",
+            model_name="mini-model",
+            occurrence=_occurrence(),
+            sense_candidates=_BANK_CANDIDATES,
+        )
+
+
+def test_rule_13_remote_disconnected_is_a_visible_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Befund 3 (Review T11), Regel 13: Dieselbe Einordnung wie bei IncompleteRead — beide
+    Ausnahmeklassen stehen im selben except-Block und müssen dort beide tatsächlich
+    gefangen werden, nicht nur die zuerst genannte."""
+    monkeypatch.setattr(
+        urllib.request,
+        "urlopen",
+        _urlopen_raising(
+            http.client.RemoteDisconnected("Remote end closed connection without response")
+        ),
+    )
+
+    with pytest.raises(ValueError, match="brach mitten in der Antwort ab"):
+        translation.choose_sense(
+            url="http://example.invalid",
+            model_name="mini-model",
+            occurrence=_occurrence(),
+            sense_candidates=_BANK_CANDIDATES,
+        )
+
+
+# --------------------------------------------- Befund 4, Review T11: keine stille Rundung
+
+
+def test_fractional_choice_is_a_visible_failure_instead_of_being_rounded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Befund 4 (Review T11): {"choice": 1.9} ist derselbe Vertragsbruch, den die
+    Bereichsprüfung zwei Zeilen weiter unten laut behandelt — int() darf ihn nicht still
+    auf 1 abrunden."""
+    payload = json.dumps(
+        {
+            "choices": [
+                {
+                    "message": {"role": "assistant", "content": json.dumps({"choice": 1.9})},
+                    "finish_reason": "stop",
+                }
+            ]
+        }
+    ).encode("utf-8")
+    monkeypatch.setattr(
+        urllib.request, "urlopen", lambda *args, **kwargs: _FakeHTTPResponse(payload)
+    )
+
+    with pytest.raises(ValueError, match="keine ganze Zahl"):
+        translation.choose_sense(
+            url="http://example.invalid",
+            model_name="mini-model",
+            occurrence=_occurrence(),
+            sense_candidates=_BANK_CANDIDATES,
+        )
