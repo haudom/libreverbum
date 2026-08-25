@@ -60,12 +60,16 @@ dictionary = ""
 profile = ""
 
 [triage]
-# "new_words_first": zuerst Wörter, von denen noch keine Bedeutung bekannt ist —
-#   schnell, rund 25 Modellaufrufe je Kapitel.
+# "new_words_first": zuerst Wörter, von denen noch keine Bedeutung bekannt ist — vier
+#   Messläufe am echten Server (granite4.1:8b, sherlock.epub Kapitel 2, 25.08.2026)
+#   ergaben 39 bis 44 Modellaufrufe je Kapitel, 44 bis 64 Sekunden. Dabei wird die
+#   Gruppe der teilweise bekannten Wörter bei diesem Kapitel nie erreicht — „neue
+#   Bedeutung eines bekannten Wortes" (konzept.md §5) taucht unter dieser Vorgabe also
+#   praktisch nicht auf.
 # "frequency": streng nach Häufigkeit, einschließlich der Wörter, von denen schon eine
-#   andere Bedeutung bekannt ist. Findet mehr neue Bedeutungen bekannter Wörter, kann
-#   bei reifem Profil aber viele Hundert Modellaufrufe kosten (Größenordnung: eine
-#   halbe Stunde je Kapitel).
+#   andere Bedeutung bekannt ist. Dieselben vier Läufe ergaben 39 bis 112 Aufrufe (21
+#   bis 37 Sekunden) und fand dabei auch neue Bedeutungen bekannter Wörter — anders als
+#   "new_words_first" oben.
 order = "new_words_first"
 """
 
@@ -155,7 +159,11 @@ def load_config(data_dir: Path) -> tuple[Config, bool]:
     dictionary_path = Path(dictionary_raw) if dictionary_raw else data_dir / "en-de.sqlite3"
     profile_path = Path(profile_raw) if profile_raw else data_dir / "profil.sqlite3"
 
-    triage_order = str(triage.get("order") or "new_words_first")
+    # (Befund leicht 3, Durchsicht T16/T17): `.get("order") or …` ließ jeden falschen,
+    # aber leeren oder falschtypigen Wert (order = "", order = 0, order = false)
+    # stillschweigend auf die Vorgabe zurückfallen, während jeder andere unzulässige Wert
+    # abbrach — nur ein **fehlender** Schlüssel darf die Vorgabe nehmen (Regel 13).
+    triage_order = str(triage.get("order", "new_words_first"))
     if triage_order not in _VALID_TRIAGE_ORDERS:
         erlaubt = " oder ".join(f'"{wert}"' for wert in _VALID_TRIAGE_ORDERS)
         raise ValueError(

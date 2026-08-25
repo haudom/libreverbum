@@ -443,7 +443,15 @@ def resolve_triage_entries(
        = "frequency"` — dem bisherigen Verhalten — laufen beide Gruppen gemeinsam in
        einer einzigen Häufigkeitsreihenfolge, wie vor dieser Behebung; findet dabei mehr
        neue Bedeutungen bekannter Wörter, kostet bei reifem Profil aber wieder bis zu
-       mehrere Hundert Aufrufe.
+       mehrere Hundert Aufrufe. Gemessen (`granite4.1:8b`, `sherlock.epub` Kapitel 2, 1410
+       Worteinträge, vier Durchläufe je Einstellung mit wachsendem Profil, 25.08.2026):
+       `new_words_first` 39 bis 44 Aufrufe (44 bis 64 s), `frequency` 39 bis 112 (21 bis
+       37 s) — die Folge, die aus der Theorie oben nicht hervorgeht: Bei so vielen
+       Worteinträgen liefern die sicheren Treffer allein schon mehr als `limit` Plätze, die
+       teilweise bekannten werden unter `new_words_first` deshalb **nie** erreicht (in allen
+       vier Läufen 0 Einträge „neue Bedeutung eines bekannten Wortes", konzept.md §5; unter
+       `frequency` dagegen 0, 5, 1 und 8). Der `bank`-Fall aus konzept.md §5 ist auf der
+       Vorgabe damit faktisch abgeschaltet, nicht nur seltener.
     3. In dieser Reihenfolge löst `_resolve_sense` je Eintrag die gemeinte Bedeutung auf
        (eine Anfrage je Wort, kein Bündeln — technik.md §3, Nachtrag 19.08.2026). Wählt das
        Modell dabei „keine passt", obwohl echte Wörterbuchkandidaten vorlagen, liefert

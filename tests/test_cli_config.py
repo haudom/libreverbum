@@ -92,3 +92,29 @@ def test_load_config_rejects_an_unknown_triage_order_value(tmp_path: Path) -> No
 
     with pytest.raises(ValueError, match="new_words_first"):
         config.load_config(tmp_path)
+
+
+@pytest.mark.parametrize("order_literal", ['""', "0", "false"])
+def test_load_config_rejects_an_empty_or_falsy_triage_order_value(
+    tmp_path: Path, order_literal: str
+) -> None:
+    """Befund leicht 3 (Durchsicht T16/T17): `order = ""`, `order = 0` und `order = false`
+    fielen vor dieser Behebung still auf die Vorgabe zurück (`.get("order") or …`), obwohl
+    der Schlüssel **gesetzt** war — nur ein fehlender Schlüssel darf die Vorgabe nehmen
+    (Regel 13, dokumentation.md §4). Anders als beim fehlenden `[triage]`-Abschnitt
+    (`test_load_config_defaults_triage_order_when_the_section_is_missing` oben) bricht das
+    hier sichtbar ab, genau wie bei einem unbekannten Wert.
+
+    Verfälschungsprobe: `triage.get("order", "new_words_first")` durch
+    `triage.get("order") or "new_words_first"` ersetzt (der Stand vor dieser Behebung)
+    ließ diesen Test rot werden — `load_config` lieferte dann klaglos `cfg.triage_order ==
+    "new_words_first"`, statt wie hier erwartet abzubrechen."""
+    (tmp_path / "config.toml").write_text(
+        '[model]\nurl = "http://localhost:11434/v1"\nname = ""\n\n'
+        '[paths]\ndictionary = ""\nprofile = ""\n\n'
+        f"[triage]\norder = {order_literal}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="new_words_first"):
+        config.load_config(tmp_path)

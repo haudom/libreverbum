@@ -1295,3 +1295,72 @@ def test_resolve_triage_entries_reports_ascending_progress_through_the_callback(
     assert kept_values == sorted(kept_values)
     assert examined_values == list(range(1, len(reports) + 1))
     assert reports[-1][2] == limit
+
+
+def test_resolve_triage_entries_reports_progress_for_skipped_and_resolved_known_entries(
+    profile_path: Path, model_server_double: ModelServerDouble
+) -> None:
+    """Befund leicht 2 (Durchsicht T16/T17): Die vorherige Vorrichtung
+    (`test_resolve_triage_entries_reports_ascending_progress_through_the_callback`) enthält
+    ausschließlich behaltene Einträge — genau der `frequency`-Fall mit reifem Profil, für
+    den die Anzeige gebaut wurde, bliebe damit ungeprüft. Hier laufen alle drei Zweige der
+    zweistufigen Auswahl (Schritt 3/4) durch dieselbe Statuszeile: ein behaltener, ein vom
+    Modell übersprungener (`skipped`, „keine passt") und ein nachträglich als bekannt
+    aufgelöster (`resolved_known`) Eintrag, per Häufigkeit in dieser Reihenfolge verarbeitet.
+
+    Verfälschungsprobe: `_report_progress()` aus den beiden `continue`-Zweigen entfernt
+    (wie im Auftragstext vorgegeben) ließ `len(reports) == 3` rot werden — nur der
+    behaltene Eintrag meldete sich noch, `reports` hatte danach genau ein Element.
+
+    `model_server_double.choice` bleibt über den ganzen Lauf **fest** bei 2 — die drei
+    Ausgänge entstehen allein aus der Kandidatenzahl je Eintrag, nicht aus einer
+    Zustandsänderung während des Laufs: Bei `wordkept` und `wordknown` trifft Listenplatz 2
+    den zweiten von zwei echten Kandidaten, bei `wordskip` liegt Listenplatz 2 außerhalb der
+    einzigen echten Bedeutung (N=1) und ist damit „keine passt" (Regel 11). Eine
+    Zustandsänderung im `on_progress`-Rückruf selbst hinge am genau geprüften Mechanismus
+    und verfälschte damit die Probe."""
+    kept_filler = _triage_sense("wordkept", "NOUN", "Fülleintrag")
+    kept_sense = _triage_sense("wordkept", "VERB", "behalten")
+    kept_entry = pipeline.VocabularyEntry(
+        occurrence=_triage_occurrence("wordkept", "NOUN", frequency=30),
+        candidates=[kept_filler, kept_sense],
+        status={},
+    )
+    skipped_sense = _triage_sense("wordskip", "NOUN", "übersprungen")
+    skipped_entry = pipeline.VocabularyEntry(
+        occurrence=_triage_occurrence("wordskip", "NOUN", frequency=20),
+        candidates=[skipped_sense],
+        status={},
+    )
+    known_filler = _triage_sense("wordknown", "NOUN", "Fülleintrag")
+    known_sense = _triage_sense("wordknown", "VERB", "bekannt")
+    known_entry = pipeline.VocabularyEntry(
+        occurrence=_triage_occurrence("wordknown", "NOUN", frequency=10),
+        candidates=[known_filler, known_sense],
+        status={},
+    )
+
+    reports: list[tuple[int, int, int, int]] = []
+    model_server_double.choice = 2  # zweiter Listenplatz, unverändert über den ganzen Lauf
+
+    con = profile.open_profile(profile_path)
+    try:
+        _record_known(con, known_sense, _TRIAGE_BOOK, chapter_number=1)
+        resolution = pipeline.resolve_triage_entries(
+            con=con,
+            entries=[kept_entry, skipped_entry, known_entry],
+            limit=10,
+            url=model_server_double.url,
+            get_model_name=lambda: model_server_double.model_name,
+            on_progress=lambda examined, total_to_check, kept, limit_: reports.append(
+                (examined, total_to_check, kept, limit_)
+            ),
+        )
+    finally:
+        con.close()
+
+    assert len(resolution.entries) == 1
+    assert resolution.entries[0].sense.wikdict_trans_list == "behalten"
+    assert resolution.skipped == 1
+    assert resolution.resolved_known == 1
+    assert len(reports) == 3, reports

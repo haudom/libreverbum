@@ -380,6 +380,9 @@ def test_needs_dictionary_marker_reaches_the_real_wikdict_schema(
 def test_needs_model_marker_reaches_a_configured_server() -> None:
     """Bauplan.md T2: Mit LIBREVERBUM_MODEL_URL erreicht dieser Test den echten
     Modellserver; ohne die Umgebungsvariable wird er übersprungen statt zu scheitern."""
+    # (Befund mittel 2, Durchsicht T16): url trägt /v1 bereits selbst (technik.md §9,
+    # cli/model.py) — ein zusätzliches /v1 hier ergab beim echten Server .../v1/v1/models
+    # und HTTP 404 statt 200.
     url = os.environ["LIBREVERBUM_MODEL_URL"].rstrip("/")
-    with urllib.request.urlopen(f"{url}/v1/models", timeout=5) as response:
+    with urllib.request.urlopen(f"{url}/models", timeout=5) as response:
         assert response.status == 200

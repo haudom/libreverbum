@@ -145,28 +145,37 @@ def _resolve_with_progress(
     §7); die Zeile schreibt sich über `cli.display.safe_print_progress` per Wagenrücklauf
     fort und wird nur dann abgeschlossen (`finish_progress_line`), wenn tatsächlich
     mindestens einmal berichtet wurde — ein Decksel ohne zu prüfende Einträge (etwa
-    „Wendungen" in einem Kapitel ohne Wendungen) soll keine leere Zeile hinterlassen."""
+    „Wendungen" in einem Kapitel ohne Wendungen) soll keine leere Zeile hinterlassen.
+    Der Abschluss läuft in `finally` (Befund leicht 1, Durchsicht T16/T17): Bricht der
+    Modellserver mitten im Kapitel ab, klebte die Fehlermeldung sonst an der noch
+    offenen Statuszeile, statt in einer eigenen Zeile zu erscheinen."""
     started = False
 
     def _on_progress(examined: int, total: int, kept: int, limit_: int) -> None:
         nonlocal started
         started = True
+        # (Befund leicht 4, Durchsicht T16/T17): total ist die Obergrenze der Einträge
+        # (Vorfilter aus resolve_triage_entries, Schritt 1, hat schon abgezogen), nicht die
+        # Zahl der tatsächlich geprüften — der Lauf endet spätestens bei `limit` Treffern,
+        # meist weit vor total. „möglichen" macht das im Nenner sichtbar.
         safe_print_progress(
-            f"Bedeutungen werden aufgelöst: {examined} von {total} geprüft, "
+            f"Bedeutungen werden aufgelöst: {examined} von {total} möglichen geprüft, "
             f"{kept} von {limit_} behalten."
         )
 
-    resolution = pipeline.resolve_triage_entries(
-        con=con,
-        entries=entries,
-        limit=limit,
-        url=url,
-        get_model_name=get_model_name,
-        order=order,
-        on_progress=_on_progress,
-    )
-    if started:
-        finish_progress_line()
+    try:
+        resolution = pipeline.resolve_triage_entries(
+            con=con,
+            entries=entries,
+            limit=limit,
+            url=url,
+            get_model_name=get_model_name,
+            order=order,
+            on_progress=_on_progress,
+        )
+    finally:
+        if started:
+            finish_progress_line()
     return resolution
 
 

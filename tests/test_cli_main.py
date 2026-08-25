@@ -9,6 +9,7 @@ Weg über spaCy, damit sie schnell bleiben.
 
 from __future__ import annotations
 
+import sqlite3
 import zipfile
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -16,10 +17,15 @@ from typing import TYPE_CHECKING
 import pytest
 
 from cli import export
+from cli import main as cli_main
 from cli.main import _build_parser, main
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
+
     from conftest import ModelServerDouble
+
+    from libreverbum import pipeline
 
 # ------------------------------------------------------------------------- Mini-EPUB
 #
@@ -458,7 +464,59 @@ def test_full_run_reports_progress_through_cli_display(
     assert exit_code == 0, "\n".join(console.log)
     assert progress_calls, "Fortschritts-Rückruf wurde nie über cli.display bedient."
     assert all(text.startswith("Bedeutungen werden aufgelöst: ") for text in progress_calls)
+    # Befund leicht 4 (Durchsicht T16/T17): der Nenner ist eine Obergrenze, nicht die Zahl
+    # der tatsächlich zu prüfenden Einträge — "möglichen" macht das im Text sichtbar.
+    assert all("möglichen geprüft" in text for text in progress_calls)
     assert finish_calls, "finish_progress_line wurde nie aufgerufen."
+
+
+def test_resolve_with_progress_closes_the_line_even_when_the_model_server_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Befund leicht 1 (Durchsicht T16/46ef37b): Bricht `pipeline.resolve_triage_entries`
+    mitten im Kapitel ab, muss `finish_progress_line` trotzdem laufen — sonst klebt die
+    Fehlermeldung an der offenen Statuszeile (`…5 von 25 behalten.Fehler: …`).
+
+    Verfälschungsprobe: `finish_progress_line()` hinter statt in `try/finally` aufgerufen
+    (der Stand vor dieser Behebung) ließ diesen Test rot werden, weil `finish_calls` dann
+    leer blieb — die Ausnahme verließ `_resolve_with_progress`, bevor die Zeile schloss."""
+    finish_calls: list[None] = []
+    monkeypatch.setattr(
+        "cli.main.finish_progress_line", lambda **_kwargs: finish_calls.append(None)
+    )
+    monkeypatch.setattr("cli.main.safe_print_progress", lambda *_args, **_kwargs: None)
+
+    def _raising_resolve_triage_entries(
+        *,
+        con: sqlite3.Connection,
+        entries: Sequence[pipeline.VocabularyEntry],
+        limit: int,
+        url: str,
+        get_model_name: Callable[[], str],
+        order: str,
+        on_progress: Callable[[int, int, int, int], None] | None = None,
+    ) -> pipeline.TriageResolution:
+        assert on_progress is not None
+        on_progress(1, 5, 0, limit)
+        raise RuntimeError("Modellserver antwortet nicht mehr.")
+
+    monkeypatch.setattr("cli.main.pipeline.resolve_triage_entries", _raising_resolve_triage_entries)
+
+    con = sqlite3.connect(":memory:")
+    try:
+        with pytest.raises(RuntimeError):
+            cli_main._resolve_with_progress(
+                con=con,
+                entries=[],
+                limit=5,
+                url="http://127.0.0.1:0/v1",
+                get_model_name=lambda: "mini-model",
+                order="new_words_first",
+            )
+    finally:
+        con.close()
+
+    assert finish_calls, "finish_progress_line lief nicht, obwohl bereits berichtet wurde."
 
 
 def test_help_text_survives_a_restricted_console_codepage() -> None:
