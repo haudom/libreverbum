@@ -180,3 +180,28 @@ Drei der dort genannten Zahlen ließen sich beim Einfalten **nicht reproduzieren
 wurden gegen `tools/en-de.sqlite3` und `tools/sherlock.txt` neu gemessen; die Schlüsse
 haben sich dadurch nicht geändert. Die eingefaltete Fassung nennt jeweils Messdatum und
 Abgrenzung mit, damit derselbe Fall nicht wiederkehrt.
+
+---
+
+# Teil C — offene `leicht`-Befunde aus den Durchsichten zu T16
+
+Angelegt am 25.08.2026. Drei Durchsichten (T16 `3cd27fc`, Nachbesserung `d2737da`,
+GUID-Verankerung `7edb546`) haben ihre `schwer`- und `mittel`-Befunde nachgebessert; was
+hier steht, ist der Rest. **Bei T18 wird jeder Punkt eingefaltet oder gestrichen.**
+
+| | Ort | Sache |
+|---|---|---|
+| **C1** | `cli/interaction.py` | Eine vertippte Antwort auf die Sammelaktionsfrage („1O" statt „10") überspringt die Sammelaktion ganz, statt nachzufragen; `_ask_action` daneben fragt bei ungültiger Eingabe erneut. Für den Nutzer bedeutet der Vertipper 25 Einzelfragen statt eines Tastendrucks |
+| **C2** | `tests/test_cli_interaction.py` | Der Docstring behauptet „weder angezeigt noch im Profil vermerkt", der Test prüft nur die Ereignisse — die Anzeige-Hälfte ist ungedeckt |
+| **C3** | `cli/interaction.py` | Jenseits der Wortobergrenze wird nichts vermerkt, obwohl `Origin.WORD_LIMIT` samt `KnowledgeState.DEFERRED` genau dafür im Schema steht. Der Testdocstring erklärt die Auslassung zur Absicht — das ist zu **entscheiden**, nicht nebenbei festzulegen |
+| **C4** | `cli/config.py` gegen `tools/sense_check.py`, `tools/mwe_check.py` | Dieselbe Serveradresse ist in `config.toml` **mit** `/v1` einzutragen, bei den Messskripten **ohne**. Wer sie kopiert, bekommt HTTP 404 |
+| **C5** | `libreverbum/profile.py` | Der `# REGEL`-Kommentar über `record_card` begründet die Zeile mit „sonst stumm eine Doppelnotiz". Das ist falsch und widerspricht `anki.py`: Weil `new_card_guid` stabil ist, aktualisiert Anki dieselbe Notiz. Echter Grund ist der Anki-Rückkanal aus Phase 3 (technik.md §4, „Jetzt billig, später teuer") |
+| **C6** | `libreverbum/profile.py`, `record_card` | Die Profil-Identität einer Bedeutung umfasst `wikdict_trans_list`, die GUID bewusst nicht. Zwei `sense`-Zeilen, die sich nur darin unterscheiden, teilen sich still eine `card`-Zeile. Im heutigen Wörterbuch nirgends auslösbar (11.961 Bedeutungen und 157.801 Zeilen gemessen), wird beim nächsten Wörterbuchbezug zu `mittel` |
+| **C7** | `tests/test_profile.py`, `tests/test_cli_export.py` | Beide Idempotenz-Tests reichen **dasselbe** `Card`-Objekt zweimal hinein; geprüft wird damit SQLites `UNIQUE(guid)`, nicht die Docstring-Aussage über die Stabilität von `new_card_guid` |
+| **C8** | `cli/export.py`, bauplan.md Tor 5 | Das Zurückschreiben der GUID hängt an der Kommandozeile, obwohl technik.md §7 „verkettet wird allein in `pipeline`" aufstellt. Unter Regel 14 heute vertretbar — eine Zeile bei Tor 5, dass der Schritt beim Bau der Qt-Oberfläche mitwandern muss |
+| **C9** | `libreverbum/pipeline.py` | Partikelverb- und Kontiguitätskandidaten werden aneinandergehängt, ohne über die Wortfolge zu entdoppeln: in `sherlock.epub` Kapitel 2 stehen 25 von 212 Wendungen zweimal („clear up", „look up", „sit down"). In sechs geprüften Kapiteln erreichte keine Dublette den Triage-Ausschnitt, in der T16-Testvorrichtung dagegen schon |
+| **C10** | `tests/`, Ende-zu-Ende | Der einzige Ende-zu-Ende-Test des Durchlaufs prüft die Druckseite, nicht das Profil — eine Zusicherung auf die `card`-Zeilen war in der Verfälschungsprobe der wirksamste fehlende Zusatz |
+| **C11** | CLAUDE.md, „Das Tor ist auf den Bauenden geschrieben" | Vorschlag zur Hausordnung: Wer durchsieht, prüft grundsätzlich gegen `git archive <commit>` in einem Wegwerfordner, nicht gegen den Arbeitsbaum. „Nur einzelne Testdateien" reicht nicht — es bleibt unklar, ob ein Rot am Commit oder an fremder Arbeit hängt. Dabei gehören `tools/en-de.sqlite3` und `tools/*.epub` mit in den Wegwerfordner, sonst überspringt `pytest` zwanzig Tests stillschweigend |
+| **C12** | technik.md §5 gegen `libreverbum/profile.py` | technik.md §5 („eine Triage-Entscheidung je Wort genügt") steht unverbunden neben `compare_chapter_vocabulary`, das je **Bedeutung** urteilt. Diese Bruchstelle war die Wurzel des schweren Befundes vom 25.08.2026; sie ist in keinem Dokument als offener Punkt vermerkt, obwohl jeder Bearbeiter, der die Triage anfasst, sie neu entscheiden muss. Mit einzufalten ist dabei, **wann** der Modellaufruf erfolgt — die Festlegung stand bis dahin nur im Moduldocstring |
+| **C13** | konzept.md §4 gegen technik.md §3 | konzept.md §4 nennt „Standard ist die erste Stellung" (Wörterbuch, kein Modellaufruf) als Vorgabe für die Triage-Anzeige, während technik.md §3 (Nachtrag 18.08.2026) verlangt, dass die **gewählte** Bedeutung in der Anzeige steht. Der Umbau vom 25.08.2026 (`46ef37b`) hat sich für Letzteres entschieden; die erste Stellung ist damit nicht mehr, was gebaut wird |
+| **C14** | zu C2 und C3 | Beide beziehen sich auf `test_word_limit_defers_the_rest_without_recording_an_event`, den `46ef37b` ersatzlos entfernt hat: Die Wortobergrenze liegt jetzt vollständig im lesenden `pipeline.resolve_triage_entries` und kann dort strukturell kein Ereignis schreiben. Vermutlich hinfällig — bei T18 zu prüfen, **bevor** C2/C3 bearbeitet werden |
