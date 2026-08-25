@@ -2,35 +2,44 @@
 
 Aufgabe
 -------
-Führt den Nutzer durch **eine** der beiden getrennten Listen aus `pipeline.
-ChapterVocabulary` (Einzelwörter oder Wendungen, siehe „Festlegung: getrennte Decksel"
-unten) mit den Erleichterungen aus konzept.md §4: Häufigkeitssortierung
-(`libreverbum.triage.sort_by_frequency`), Sammelaktion „ab hier kenne ich alles"
-(`libreverbum.triage.bulk_mark`) und Wortobergrenze
-(`libreverbum.triage.defer_beyond_word_limit`). Diese drei Rechenschritte kommen
-unverändert aus dem Kern — hier entsteht nur die Bedienung darum: Anzeige, Tastatureingabe
-und die daraus folgenden Schreibzugriffe aufs Profil (`libreverbum.profile.record_event`)
-und, bei „will ich lernen", der Modellaufruf (`libreverbum.translation.choose_sense`) samt
-Kartenerzeugung (`libreverbum.anki.new_card_guid`).
+Führt den Nutzer durch **eine** der beiden getrennten Listen aus `libreverbum.pipeline.
+TriageResolution` (Einzelwörter oder Wendungen, siehe „Festlegung: getrennte Decksel"
+unten) mit den Erleichterungen aus konzept.md §4: Sammelaktion „ab hier kenne ich alles"
+(`libreverbum.triage.bulk_mark`, hier als `_bulk_phase`) und Anzeige samt Tastatureingabe.
+Die restliche Rechnung — Profilabgleich, Häufigkeitssortierung, Bedeutungsauflösung durch
+das Modell, Wortobergrenze — liegt seit der zweiten T16-Durchsicht (Befund schwer 1) im
+Kern: `libreverbum.pipeline.resolve_triage_entries` liefert die fertige, höchstens
+`WORD_LIMIT`/`EXPRESSION_LIMIT` lange Liste, **eine** Bedeutung je Eintrag statt einer
+Auswahlliste. `run_triage_pass` bekommt dieses Ergebnis (`resolution`) und macht daraus nur
+noch Anzeige, Tastatureingabe und die daraus folgenden Schreibzugriffe aufs Profil
+(`libreverbum.profile.record_event`) samt Kartenerzeugung (`libreverbum.anki.
+new_card_guid`) — kein Modellaufruf mehr an dieser Stelle, die Bedeutung steht bereits fest.
 
-Schritt 4 des Kernablaufs, „gegen das Profil filtern" (konzept.md §4): `run_chapter`
-liefert je Kandidat bereits den fertigen Abgleich in `VocabularyEntry.status`
-(`libreverbum.profile.compare_chapter_vocabulary`) — `run_triage_pass` nimmt davon jeden
-Eintrag heraus, dessen sämtliche Kandidaten `VocabularyStatus.KNOWN` tragen (`_split_known`
-unten), **bevor** `sort_by_frequency` und die Wortobergrenze greifen (Befund schwer 1,
-Durchsicht T16). Vor dieser Behebung griff das Profil nicht: Abnahmekriterium 6 „beim
-zweiten Durchlauf … nicht erneut abgefragt" fiel, und bereits bekannte Wörter verbrauchten
-Plätze aus `WORD_LIMIT`, die den tatsächlich neuen Wörtern gefehlt hätten. Eine zweite,
-bereits bekannte Bedeutung derselben Grundform (`VocabularyStatus.
-NEW_MEANING_OF_KNOWN_WORD`, konzept.md §5 „Mehrdeutigkeit") bleibt dagegen in der Triage
-und wird in `_entry_lines` als „neue Bedeutung eines bekannten Wortes" gekennzeichnet
-(Befund mittel 6, Durchsicht T16) — sie ist gerade **nicht** bereits bekannt.
+Warum die Auflösung nicht mehr hier liegt (Befund schwer 1, zweite T16-Durchsicht)
+------------------------------------------------------------------------------------
+Vor dieser Behebung bucht(e) dieses Modul „kenne ich" auf `candidates[0]`
+(`_representative_sense`, entfallen), während der Vorfilter **alle** Kandidaten `KNOWN`
+verlangte (`_is_known`, ebenfalls entfallen) — Schreib- und Leseseite maßen an
+verschiedenen Bedeutungen. Da 65,8 % der Grundformen eines Kapitels mehrdeutig sind
+(technik.md §3, Nachtrag 18.08.2026), verfehlte der Vorfilter die meisten bereits bekannten
+Wörter: Abnahmekriterium 6 „beim zweiten Durchlauf … nicht erneut abgefragt" galt nur
+zufällig, für eindeutige Wörter wie `watch`. Die Auflösung, welche Bedeutung ein Kapitel
+tatsächlich meint, braucht das Modell (`translation.choose_sense`) — und *das* ist Sache des
+Kerns (technik.md §7: „`translation` als einziger Ort mit Modellzugriff"), nicht der
+Oberfläche. `pipeline.resolve_triage_entries` löst deshalb **vor** der Triage auf, wie es
+konzept.md, Nachtrag 17.08.2026 verlangt: „Die Triage kommt nach dem Beschaffen der
+Bedeutungen." Schreib- und Leseseite sind seither dieselbe Stelle: `resolve_triage_entries`
+prüft den Kenntnisstand der aufgelösten Bedeutung selbst (`pipeline._all_candidates_known`
+für den Vorfilter, ein frischer `profile.compare_chapter_vocabulary`-Aufruf je aufgelöster
+Bedeutung danach), und dieses Modul bucht hier nur noch genau diese eine Bedeutung
+(`entry.sense`), nie mehr eine geratene erste.
 
 Festlegung: getrennte Decksel für Wörter und Wendungen
 -------------------------------------------------------
 Entschieden am 21.08.2026 (Auftrag zu T16), von hier aus übernommen: Einzelwörter und
-Wendungen laufen als **zwei** vollständig getrennte Durchläufe von `run_triage_pass`,
-nicht als eine gemeinsame, nach Häufigkeit gemischte Liste. Begründung:
+Wendungen laufen als **zwei** vollständig getrennte Durchläufe von `resolve_triage_entries`
+und `run_triage_pass`, nicht als eine gemeinsame, nach Häufigkeit gemischte Liste.
+Begründung:
 
 - Die Häufigkeitsskalen sind nicht vergleichbar. Ein häufiges Wort kommt im Kapitel
   fünfzigmal vor, eine Wendung ein- bis zweimal. In einer gemeinsamen, nach Häufigkeit
@@ -64,10 +73,12 @@ Voraussetzungen
 die Kapitelzeile, die `profile.record_event` als Fremdschlüssel braucht, muss vorher
 angelegt sein — `ensure_chapter_row` unten übernimmt das, weil `profile.py` dafür bewusst
 keine eigene Schreibfunktion anbietet (Regel 14, siehe Bericht zu T16, „Beobachtungen zum
-Ablauf"). `read_line`/`write_line` sind austauschbar (Vorgabe `input`/`cli.display.
-safe_print`) — Tests ersetzen beide, statt die echte Konsole zu bedienen
-(dokumentation.md §5: „Prüfe die Entscheidungen, die dabei fallen, nicht die
-Bildschirmausgabe Zeichen für Zeichen").
+Ablauf"). `resolution` ist das Ergebnis von `libreverbum.pipeline.resolve_triage_entries`
+für dieselbe Liste — `cli.main` ruft diese Funktion vor `run_triage_pass` auf, mit
+derselben `con` und demselben `limit` (`WORD_LIMIT`/`EXPRESSION_LIMIT`). `read_line`/
+`write_line` sind austauschbar (Vorgabe `input`/`cli.display.safe_print`) — Tests ersetzen
+beide, statt die echte Konsole zu bedienen (dokumentation.md §5: „Prüfe die
+Entscheidungen, die dabei fallen, nicht die Bildschirmausgabe Zeichen für Zeichen").
 
 Liefert
 -------
@@ -80,10 +91,10 @@ gestellten Entscheidungen, keine bereits getroffenen.
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from datetime import UTC, datetime
 
-from libreverbum import anki, dictionary, pipeline, printout, profile, translation, triage
+from libreverbum import anki, dictionary, pipeline, printout, profile, triage
 from libreverbum.entities import (
     Book,
     Card,
@@ -133,50 +144,6 @@ def ensure_chapter_row(
     con.commit()
 
 
-def _representative_sense(occurrence: Occurrence, candidates: Sequence[Sense]) -> Sense:
-    """Die Hauptbedeutung für Entscheidungen ohne Karte (`dictionary.candidates` liefert
-    nach `score` absteigend, Regel 1 — der erste Kandidat ist die Hauptbedeutung) — oder
-    ein unsicherer Platzhalter ohne Wörterbucheintrag, dieselbe Rückfallregel wie in
-    `translation.choose_sense` bei leerer Auswahlliste (Regel 11).
-
-    Nur für „kenne ich", „überspringen" und die Sammelaktion: Eine dieser drei
-    Entscheidungen braucht eine Bedeutung, an der das Profil die Kenntnis festmacht, aber
-    keine kontextgetreue Übersetzung (die nur eine Karte trägt) — bei „will ich lernen"
-    entscheidet stattdessen das Modell.
-    """
-    if not candidates:
-        return Sense(lemma=occurrence.lemma, uncertain=True)
-    return candidates[0]
-
-
-def _is_known(entry: pipeline.VocabularyEntry) -> bool:
-    """Ein Eintrag gilt als bereits bekannt, wenn er mindestens einen Kandidaten hat und
-    jeder davon `VocabularyStatus.KNOWN` trägt (Befund schwer 1, Durchsicht T16).
-
-    Ein Eintrag ohne Wörterbucheintrag (leere `candidates`) ist nie „bekannt" — geprüft
-    über `bool(entry.candidates)`, weil `all()` über eine leere Menge stillschweigend
-    wahr wäre und ein unsicherer Kandidat ohne jede Bedeutung sonst spurlos aus der
-    Triage verschwände (dokumentation.md §4 Regel 13). Aus demselben Grund wird über
-    `entry.candidates` iteriert und je Kandidat in `entry.status` nachgeschlagen, nicht
-    über `entry.status.values()`: Ein Kandidat ohne Eintrag in `status` — etwa in einer
-    Testvorrichtung, die `status={}` gar nicht füllt — zählte über `.values()` sonst
-    ebenfalls als stillschweigend „bekannt", statt als „kein Befund" zu gelten."""
-    return bool(entry.candidates) and all(
-        entry.status.get(sense) is VocabularyStatus.KNOWN for sense in entry.candidates
-    )
-
-
-def _split_known(
-    entries: Sequence[pipeline.VocabularyEntry],
-) -> tuple[list[pipeline.VocabularyEntry], list[pipeline.VocabularyEntry]]:
-    """Teilt `entries` in `(bekannt, Rest)` — die Grundlage des Profilabgleichs in
-    `run_triage_pass` (Befund schwer 1, Durchsicht T16). Reihenfolge bleibt je Teilliste
-    erhalten, `sort_by_frequency` läuft erst danach auf dem Rest."""
-    known = [entry for entry in entries if _is_known(entry)]
-    unknown = [entry for entry in entries if not _is_known(entry)]
-    return known, unknown
-
-
 def _record(
     con: sqlite3.Connection,
     sense: Sense,
@@ -198,32 +165,26 @@ def _record(
     )
 
 
-def _entry_lines(entry: pipeline.VocabularyEntry) -> list[str]:
-    """Anzeige eines Eintrags: Wortform, Wortart, Häufigkeit, Belegsatz und die
-    Auswahlliste (E10, bauplan.md Tor 0: „Die gewählte Bedeutung gehört aber in die
-    Anzeige der Triage, nicht bloß das Wort") — hier, in der Standardstellung
-    „Wörterbuch" (konzept.md §4), die volle Liste der möglichen Bedeutungen ohne
-    Modell-Markierung; die endgültige, kontextgetreue Bedeutung entsteht erst bei „will
-    ich lernen" (`translation.choose_sense`).
+def _entry_lines(entry: pipeline.ResolvedEntry) -> list[str]:
+    """Anzeige eines Eintrags: Wortform, Wortart, Häufigkeit, Belegsatz und die **eine**
+    im Belegsatz gemeinte Bedeutung, wie `pipeline.resolve_triage_entries` sie aufgelöst
+    hat (technik.md §3, Nachtrag 18.08.2026: „Die gewählte Bedeutung samt Belegsatz gehört
+    also in die Anzeige — das ist Darstellung, keine zweite Entscheidung"). Vor der
+    zweiten T16-Durchsicht stand hier stattdessen die volle Auswahlliste des Wörterbuchs,
+    ohne Modell-Markierung.
 
-    Ein Kandidat mit `VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD` trägt zusätzlich die
-    Kennzeichnung „neue Bedeutung eines bekannten Wortes" (konzept.md §5,
-    „Mehrdeutigkeit"; Befund mittel 6, Durchsicht T16) — ohne sie sähe der zweite Eintrag
-    einer mehrdeutigen Grundform wie ein bereits bekanntes Wort aus, das grundlos erneut
-    auftaucht."""
+    `VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD` trägt zusätzlich die Kennzeichnung „neue
+    Bedeutung eines bekannten Wortes" (konzept.md §5, „Mehrdeutigkeit") — ohne sie sähe
+    dieser Eintrag wie ein bereits bekanntes Wort aus, das grundlos erneut auftaucht."""
     occurrence = entry.occurrence
     pos_display = occurrence.lemma.pos or "MWE"
     lines = [f"{occurrence.word_form} ({pos_display}), {occurrence.frequency}x im Kapitel"]
     lines.append(f"  {occurrence.example_sentence}")
-    if entry.candidates:
-        for number, sense in enumerate(entry.candidates, start=1):
-            translation_text = sense.wikdict_trans_list or "?"
-            line = f"  {number}. {dictionary.label(sense)} -> {translation_text}"
-            if entry.status.get(sense) is VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD:
-                line += " [neue Bedeutung eines bekannten Wortes]"
-            lines.append(line)
-    else:
-        lines.append("  (kein Wörterbucheintrag)")
+    translation_text = entry.sense.translation or entry.sense.wikdict_trans_list or "?"
+    line = f"  {dictionary.label(entry.sense)} -> {translation_text}"
+    if entry.status is VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD:
+        line += " [neue Bedeutung eines bekannten Wortes]"
+    lines.append(line)
     return lines
 
 
@@ -233,7 +194,7 @@ def _bulk_phase(
     book: Book,
     chapter_number: int,
     ordered: list[Occurrence],
-    entries_by_occurrence: dict[Occurrence, pipeline.VocabularyEntry],
+    entries_by_occurrence: dict[Occurrence, pipeline.ResolvedEntry],
     label: str,
     read_line: ReadLine,
     write_line: WriteLine,
@@ -272,8 +233,7 @@ def _bulk_phase(
     bulk = triage.bulk_mark(ordered, selected)
     for occurrence in bulk:
         entry = entries_by_occurrence[occurrence]
-        sense = _representative_sense(occurrence, entry.candidates)
-        _record(con, sense, KnowledgeState.KNOWN, Origin.BULK_MARK, book, chapter_number)
+        _record(con, entry.sense, KnowledgeState.KNOWN, Origin.BULK_MARK, book, chapter_number)
     write_line(f"{len(bulk)} als bekannt gebucht.")
     return set(bulk)
 
@@ -309,10 +269,8 @@ def _individual_phase(
     book: Book,
     chapter_number: int,
     remaining: list[Occurrence],
-    entries_by_occurrence: dict[Occurrence, pipeline.VocabularyEntry],
+    entries_by_occurrence: dict[Occurrence, pipeline.ResolvedEntry],
     card_direction: CardDirection,
-    get_model_name: Callable[[], str],
-    model_url: str,
     read_line: ReadLine,
     write_line: WriteLine,
 ) -> list[Card]:
@@ -320,7 +278,13 @@ def _individual_phase(
     Reihenfolge. `q` bricht die restliche Liste ab (Abnahmekriterium 7: „man kann
     jederzeit abbrechen, ohne das Wichtigste zu verpassen") — bereits getroffene
     Entscheidungen bleiben dabei im Profil stehen, ungestellte Fragen hinterlassen kein
-    Ereignis und werden beim nächsten Durchlauf erneut gestellt."""
+    Ereignis und werden beim nächsten Durchlauf erneut gestellt.
+
+    Kein Modellaufruf mehr an dieser Stelle (Befund schwer 1, zweite T16-Durchsicht):
+    `entry.sense` ist bereits die im Belegsatz gemeinte Bedeutung
+    (`pipeline.resolve_triage_entries`) — „kenne ich", „will ich lernen" und „überspringen"
+    buchen und verkarten alle dieselbe eine Bedeutung, statt „kenne ich"/„überspringen" auf
+    einer geratenen ersten und nur „will ich lernen" auf der vom Modell gewählten."""
     cards: list[Card] = []
     for occurrence in remaining:
         entry = entries_by_occurrence[occurrence]
@@ -332,35 +296,20 @@ def _individual_phase(
             write_line("Abgebrochen.")
             break
         if action == "known":
-            sense = _representative_sense(occurrence, entry.candidates)
-            _record(con, sense, KnowledgeState.KNOWN, Origin.TRIAGE, book, chapter_number)
+            _record(con, entry.sense, KnowledgeState.KNOWN, Origin.TRIAGE, book, chapter_number)
         elif action == "learn":
-            # REGEL (dokumentation.md §4 Regel 11, „Das Modell wählt aus einer Liste"):
-            # Nur hier, bei einer Karte, die der Nutzer wiederholt sehen wird, lohnt der
-            # Modellaufruf für eine kontextgetreue Übersetzung (Abnahmekriterium 3).
-            # Ohne Auswahlliste bleibt `get_model_name()` dabei ungerufen: Python wertet
-            # Funktionsargumente vor dem Aufruf aus, und translation.choose_sense selbst
-            # bräuchte den Modellnamen bei leerer Liste nie — ein Kandidat ganz ohne
-            # Wörterbucheintrag darf eine Triage-Sitzung deshalb nicht zwingen, den
-            # Modellserver überhaupt zu erreichen (Regel 11, „Kandidaten ohne
-            # Wörterbucheintrag werden uncertain markiert").
-            if entry.candidates:
-                sense = translation.choose_sense(
-                    url=model_url,
-                    model_name=get_model_name(),
-                    occurrence=occurrence,
-                    sense_candidates=entry.candidates,
-                )
-            else:
-                sense = Sense(lemma=occurrence.lemma, uncertain=True)
-            _record(con, sense, KnowledgeState.LEARNING, Origin.TRIAGE, book, chapter_number)
-            guid = anki.new_card_guid(occurrence, sense, card_direction)
+            guid = anki.new_card_guid(occurrence, entry.sense, card_direction)
             cards.append(
-                Card(sense=sense, occurrence=occurrence, card_direction=card_direction, guid=guid)
+                Card(
+                    sense=entry.sense,
+                    occurrence=occurrence,
+                    card_direction=card_direction,
+                    guid=guid,
+                )
             )
+            _record(con, entry.sense, KnowledgeState.LEARNING, Origin.TRIAGE, book, chapter_number)
         else:  # "skip"
-            sense = _representative_sense(occurrence, entry.candidates)
-            _record(con, sense, KnowledgeState.DEFERRED, Origin.TRIAGE, book, chapter_number)
+            _record(con, entry.sense, KnowledgeState.DEFERRED, Origin.TRIAGE, book, chapter_number)
     return cards
 
 
@@ -369,55 +318,56 @@ def run_triage_pass(
     con: sqlite3.Connection,
     book: Book,
     chapter_number: int,
-    entries: Sequence[pipeline.VocabularyEntry],
-    limit: int,
+    resolution: pipeline.TriageResolution,
     label: str,
     card_direction: CardDirection,
-    get_model_name: Callable[[], str],
-    model_url: str,
     read_line: ReadLine,
     write_line: WriteLine,
 ) -> list[Card]:
-    """Ein vollständiger Triage-Deckel: Profilabgleich, Häufigkeitssortierung,
-    Wortobergrenze, Sammelaktion, Einzelabfrage — für **eine** der beiden Listen aus
-    `pipeline.ChapterVocabulary` (siehe Moduldocstring, „Festlegung: getrennte
-    Decksel"). `limit` ist `WORD_LIMIT` für `entries` beziehungsweise
-    `EXPRESSION_LIMIT` für `expressions` (`cli.main`).
+    """Ein vollständiger Triage-Deckel: Meldungen, Sammelaktion, Einzelabfrage — für
+    **eine** der beiden Listen aus `pipeline.ChapterVocabulary` (siehe Moduldocstring,
+    „Festlegung: getrennte Decksel"), bereits von `pipeline.resolve_triage_entries` zu
+    `resolution` aufbereitet: Profilabgleich, Häufigkeitssortierung, Bedeutungsauflösung
+    durch das Modell und Wortobergrenze liegen dort, nicht mehr hier (Befund schwer 1,
+    zweite T16-Durchsicht).
 
     Abnahmekriterium 6: „Beim zweiten Durchlauf desselben Kapitels werden die als
     *bekannt* markierten Wörter **nicht erneut** abgefragt — das Profil greift"
-    (konzept.md, „Abnahmekriterien"). `_split_known` nimmt die laut `entry.status`
-    bereits bekannten Einträge **vor** `sort_by_frequency` und der Wortobergrenze heraus
-    (Befund schwer 1, Durchsicht T16) — sonst verbrauchten sie Plätze aus `limit`, die
-    den tatsächlich neuen Wörtern gefehlt hätten. Die Anzahl der übersprungenen Einträge
-    wird gemeldet, nicht verschwiegen (Regel 13)."""
-    known, entries = _split_known(entries)
-    if known:
-        write_line(f"{len(known)} {label} laut Profil bereits bekannt — nicht erneut abgefragt.")
+    (konzept.md, „Abnahmekriterien"). Erfüllt seit der zweiten T16-Durchsicht
+    `pipeline.resolve_triage_entries` selbst: Der Vorfilter dort prüft **alle** Kandidaten
+    einer Grundform (`pipeline._all_candidates_known`) gegen dieselbe Bedeutung, die auch
+    gebucht wird (`entry.sense` in `_individual_phase`/`_bulk_phase`) — vor der Behebung
+    bucht(e) dieses Modul „kenne ich" auf `candidates[0]`, während der Vorfilter *alle*
+    Kandidaten verlangte, und verfehlte bei 65,8 % mehrdeutigen Grundformen je Kapitel
+    (technik.md §3, Nachtrag 18.08.2026) die meisten bereits bekannten Wörter. Die Anzahl
+    der laut Vorfilter bereits bekannten (`resolution.known`) und der über die
+    Wortobergrenze hinaus zurückgestellten Einträge (`resolution.deferred`) wird gemeldet,
+    nicht verschwiegen (Regel 13)."""
+    if resolution.known:
+        write_line(
+            f"{resolution.known} {label} laut Profil bereits bekannt — nicht erneut abgefragt."
+        )
+    if resolution.deferred:
+        write_line(f"{resolution.deferred} {label} zurückgestellt (Wortobergrenze erreicht).")
 
-    occurrences = [entry.occurrence for entry in entries]
-    entries_by_occurrence = {entry.occurrence: entry for entry in entries}
-
-    ordered = triage.sort_by_frequency(occurrences)
-    deferred = triage.defer_beyond_word_limit(occurrences, limit)
-    in_scope = ordered[: len(ordered) - len(deferred)]
-
-    if deferred:
-        write_line(f"{len(deferred)} {label} zurückgestellt (Obergrenze {limit}).")
-    if not in_scope:
+    entries = resolution.entries
+    if not entries:
         return []
+
+    ordered = [entry.occurrence for entry in entries]
+    entries_by_occurrence = {entry.occurrence: entry for entry in entries}
 
     bulk_marked = _bulk_phase(
         con=con,
         book=book,
         chapter_number=chapter_number,
-        ordered=in_scope,
+        ordered=ordered,
         entries_by_occurrence=entries_by_occurrence,
         label=label,
         read_line=read_line,
         write_line=write_line,
     )
-    remaining = [occurrence for occurrence in in_scope if occurrence not in bulk_marked]
+    remaining = [occurrence for occurrence in ordered if occurrence not in bulk_marked]
     return _individual_phase(
         con=con,
         book=book,
@@ -425,8 +375,6 @@ def run_triage_pass(
         remaining=remaining,
         entries_by_occurrence=entries_by_occurrence,
         card_direction=card_direction,
-        get_model_name=get_model_name,
-        model_url=model_url,
         read_line=read_line,
         write_line=write_line,
     )

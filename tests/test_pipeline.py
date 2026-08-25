@@ -12,10 +12,11 @@ from typing import TYPE_CHECKING
 import pytest
 
 from libreverbum import dictionary, epub, extraction, pipeline, profile
-from libreverbum.entities import Book, Event, KnowledgeState, Origin, Sense
+from libreverbum.entities import Book, Event, KnowledgeState, Lemma, Occurrence, Origin, Sense
 from libreverbum.extraction import load_nlp
 
 if TYPE_CHECKING:
+    from conftest import ModelServerDouble
     from spacy.language import Language
 
 # ------------------------------------------------------------------------- Mini-EPUB
@@ -295,7 +296,10 @@ def test_run_chapter_keeps_the_saw_case_from_scoring_a_saw_meaning(
     """technik.md, „Warum die Reihenfolge zwingend ist": "saw" im Belegsatz ist die
     Vergangenheitsform von "see", nicht die Säge. Der Durchstich muss die Grundform "see"
     ans Wörterbuch weiterreichen — das Mini-Wörterbuch kennt "see" nicht, die Auswahlliste
-    bleibt leer, statt fälschlich die Säge-Bedeutungen von "saw" zu liefern."""
+    trägt statt der Säge-Bedeutungen von "saw" nur den unsicheren Platzhalter ohne
+    Wörterbucheintrag (Befund mittel, zweite T16-Durchsicht: derselbe Platzhalter wie
+    `dictionary.particle_verb_candidates` für ein Phrasal Verb ohne Treffer, damit er auf
+    Schreib- und Leseseite gleich aussieht, siehe Moduldocstring `pipeline.py`)."""
     result = pipeline.run_chapter(
         epub_path=pipeline_epub,
         chapter_number=1,
@@ -304,7 +308,9 @@ def test_run_chapter_keeps_the_saw_case_from_scoring_a_saw_meaning(
         nlp=nlp,
     )
     see = _entry(result, "see")
-    assert see.candidates == []
+    assert len(see.candidates) == 1
+    assert see.candidates[0].uncertain is True
+    assert see.candidates[0].wikdict_trans_list is None
     assert not any(e.occurrence.lemma.text == "saw" for e in result.entries)
 
 
@@ -533,8 +539,16 @@ def test_run_chapter_processes_a_real_chapter_with_the_real_dictionary(
     )
 
     assert len(result.entries) > 1300
-    entries_with_candidates = [entry for entry in result.entries if entry.candidates]
-    assert len(entries_with_candidates) / len(result.entries) > 0.8
+    # (Befund mittel, zweite T16-Durchsicht): Eine leere Auswahlliste trägt seither den
+    # Platzhalter Sense(uncertain=True) statt einer leeren Liste (Moduldocstring
+    # `pipeline.py`) — "mit Kandidaten" heißt hier deshalb "mit einem echten
+    # Wörterbucheintrag", nicht nur "candidates nicht leer".
+    entries_with_real_candidates = [
+        entry
+        for entry in result.entries
+        if entry.candidates and not (len(entry.candidates) == 1 and entry.candidates[0].uncertain)
+    ]
+    assert len(entries_with_real_candidates) / len(result.entries) > 0.8
     assert all(
         status == profile.VocabularyStatus.UNKNOWN
         for entry in result.entries
@@ -547,3 +561,237 @@ def test_run_chapter_processes_a_real_chapter_with_the_real_dictionary(
     woman = _entry(result, "woman")
     assert woman.occurrence.lemma.pos == "NOUN"
     assert any("Frau" in (sense.wikdict_trans_list or "") for sense in woman.candidates)
+
+
+# ---------------------------------------- resolve_triage_entries (zweite T16-Durchsicht)
+#
+# Handgebaute VocabularyEntry-Vorrichtungen statt des vollen Wegs über EPUB und spaCy
+# (schneller, und resolve_triage_entries importiert ohnehin nur entities-Objekte) — die
+# Ausnahme ist der Platzhalter-Test, der genau die Injektion in run_chapter selbst prüft
+# und deshalb den echten Durchlauf braucht.
+
+_TRIAGE_BOOK = Book(title="Triage-Testbuch", author="Autorin")
+
+
+def _triage_occurrence(word: str, pos: str, frequency: int) -> Occurrence:
+    return Occurrence(
+        book=_TRIAGE_BOOK,
+        chapter_number=1,
+        lemma=Lemma(text=word, pos=pos),
+        word_form=word,
+        example_sentence=f"An example sentence with {word} in it.",
+        frequency=frequency,
+        proper_noun_frequency=0,
+    )
+
+
+def _triage_sense(word: str, pos: str, translation: str) -> Sense:
+    return Sense(
+        lemma=Lemma(text=word, pos=pos),
+        wikdict_sense="a meaning",
+        wikdict_trans_list=translation,
+        wikdict_lexentry=f"eng/{word}__{pos.title()}__1",
+    )
+
+
+def test_resolve_triage_entries_drops_an_ambiguous_entry_whose_meant_sense_is_known(
+    profile_path: Path, model_server_double: ModelServerDouble
+) -> None:
+    """Abnahmekriterium 6 (konzept.md, „Abnahmekriterien"): „Beim zweiten Durchlauf
+    desselben Kapitels werden die als bekannt markierten Wörter nicht erneut abgefragt —
+    das Profil greift." Hier an einem **mehrdeutigen** Wort (`bank`, zwei Kandidaten,
+    Befund schwer 1 aus dem Auftrag): Der Vorfilter allein kann den Eintrag nicht
+    herausnehmen, weil nicht *jede* Bedeutung bekannt ist — erst nachdem das Modell im
+    Belegsatz die bereits bekannte Bedeutung (Geldinstitut) auflöst, fällt er weg."""
+    institution = _triage_sense("bank", "NOUN", "Bank")
+    edge_of_river = _triage_sense("bank", "NOUN", "Ufer")
+    entry = pipeline.VocabularyEntry(
+        occurrence=_triage_occurrence("bank", "NOUN", frequency=3),
+        candidates=[institution, edge_of_river],
+        status={
+            institution: profile.VocabularyStatus.KNOWN,
+            edge_of_river: profile.VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD,
+        },
+    )
+    model_server_double.choice = 1  # erster Listenplatz: institution ("Bank")
+
+    con = profile.open_profile(profile_path)
+    try:
+        _record_known(con, institution, _TRIAGE_BOOK, chapter_number=1)
+        resolution = pipeline.resolve_triage_entries(
+            con=con,
+            entries=[entry],
+            limit=10,
+            url=model_server_double.url,
+            get_model_name=lambda: model_server_double.model_name,
+        )
+    finally:
+        con.close()
+
+    assert resolution.entries == []
+    assert len(model_server_double.requests) == 1
+
+
+def test_resolve_triage_entries_marks_a_newly_resolved_sense_of_a_known_word(
+    profile_path: Path, model_server_double: ModelServerDouble
+) -> None:
+    """konzept.md §5, „Mehrdeutigkeit": Meint das Kapitel bei einem mehrdeutigen Wort eine
+    **andere** Bedeutung als die bereits bekannte, bleibt der Eintrag in der Triage und
+    trägt `NEW_MEANING_OF_KNOWN_WORD` — hier ist „Bank" (Geldinstitut) bekannt, der
+    Belegsatz meint aber „Ufer"."""
+    institution = _triage_sense("bank", "NOUN", "Bank")
+    edge_of_river = _triage_sense("bank", "NOUN", "Ufer")
+    entry = pipeline.VocabularyEntry(
+        occurrence=_triage_occurrence("bank", "NOUN", frequency=3),
+        candidates=[institution, edge_of_river],
+        status={
+            institution: profile.VocabularyStatus.KNOWN,
+            edge_of_river: profile.VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD,
+        },
+    )
+    model_server_double.choice = 2  # zweiter Listenplatz: edge_of_river ("Ufer")
+
+    con = profile.open_profile(profile_path)
+    try:
+        _record_known(con, institution, _TRIAGE_BOOK, chapter_number=1)
+        resolution = pipeline.resolve_triage_entries(
+            con=con,
+            entries=[entry],
+            limit=10,
+            url=model_server_double.url,
+            get_model_name=lambda: model_server_double.model_name,
+        )
+    finally:
+        con.close()
+
+    assert len(resolution.entries) == 1
+    resolved = resolution.entries[0]
+    assert resolved.sense.wikdict_trans_list == "Ufer"
+    assert resolved.status == profile.VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD
+
+
+def test_resolve_triage_entries_does_not_ask_again_for_a_known_word_without_a_dictionary_entry(
+    pipeline_epub: Path, mini_dictionary_db: Path, profile_path: Path, nlp: Language
+) -> None:
+    """Befund mittel, zweite T16-Durchsicht: Ein Wort ganz ohne Wörterbucheintrag
+    ("sunset", im Mini-Wörterbuch nicht geführt) muss ebenso „bekannt" werden können wie
+    ein Wort mit Eintrag — derselbe Platzhalter steht dafür auf Schreib- **und**
+    Leseseite (Moduldocstring `pipeline.py`). `get_model_name` bricht ab, wenn er
+    überhaupt aufgerufen wird: Es gibt nichts, worüber das Modell entscheiden könnte."""
+    first_pass = pipeline.run_chapter(
+        epub_path=pipeline_epub,
+        chapter_number=1,
+        dictionary_path=mini_dictionary_db,
+        profile_path=profile_path,
+        nlp=nlp,
+    )
+    sunset_entry = _entry(first_pass, "sunset")
+    assert len(sunset_entry.candidates) == 1
+    assert sunset_entry.candidates[0].uncertain is True
+
+    con = profile.open_profile(profile_path)
+    try:
+        _record_known(con, sunset_entry.candidates[0], first_pass.chapter.book, chapter_number=1)
+    finally:
+        con.close()
+
+    second_pass = pipeline.run_chapter(
+        epub_path=pipeline_epub,
+        chapter_number=1,
+        dictionary_path=mini_dictionary_db,
+        profile_path=profile_path,
+        nlp=nlp,
+    )
+    sunset_entry_2 = _entry(second_pass, "sunset")
+
+    def _never_needed() -> str:
+        raise AssertionError("Modellserver wurde angefragt, obwohl 'sunset' bereits bekannt war.")
+
+    con = profile.open_profile(profile_path)
+    try:
+        resolution = pipeline.resolve_triage_entries(
+            con=con,
+            entries=[sunset_entry_2],
+            limit=10,
+            url="http://unerreichbar.invalid",
+            get_model_name=_never_needed,
+        )
+    finally:
+        con.close()
+
+    assert resolution.entries == []
+    assert resolution.known == 1
+
+
+def test_resolve_triage_entries_never_calls_the_model_for_a_word_without_a_dictionary_entry(
+    profile_path: Path,
+) -> None:
+    """Regel 11 (dokumentation.md §4, „Kandidaten ohne Wörterbucheintrag werden uncertain
+    markiert") und der Auftragstext: „Kein Modellaufruf für solche Einträge — es gibt
+    nichts zu wählen." Anders als der vorige Test (bereits bekannt, vom Vorfilter
+    herausgenommen) ist dieses Wort hier **neu** — der Vorfilter allein kann `_resolve_sense`
+    also nicht umgehen, nur die eigene Ausweichregel für einen einzelnen `uncertain`-
+    Platzhalter (`pipeline.py`, `_resolve_sense`) tut das. `get_model_name` bricht ab, wenn
+    er aufgerufen wird."""
+    placeholder = Sense(lemma=Lemma(text="obscure", pos="NOUN"), uncertain=True)
+    entry = pipeline.VocabularyEntry(
+        occurrence=_triage_occurrence("obscure", "NOUN", frequency=1),
+        candidates=[placeholder],
+        status={},
+    )
+
+    def _never_needed() -> str:
+        raise AssertionError("Modellserver wurde angefragt, obwohl es nichts zu wählen gab.")
+
+    con = profile.open_profile(profile_path)
+    try:
+        resolution = pipeline.resolve_triage_entries(
+            con=con,
+            entries=[entry],
+            limit=10,
+            url="http://unerreichbar.invalid",
+            get_model_name=_never_needed,
+        )
+    finally:
+        con.close()
+
+    assert len(resolution.entries) == 1
+    assert resolution.entries[0].sense.uncertain is True
+    assert resolution.entries[0].status == profile.VocabularyStatus.UNKNOWN
+
+
+def test_resolve_triage_entries_stops_once_the_limit_of_kept_entries_is_reached(
+    profile_path: Path, model_server_double: ModelServerDouble
+) -> None:
+    """Zeitbudget aus konzept.md §4 („eine halbe Minute" bei höchstens 25 neuen Wörtern):
+    Für ein Kapitel mit sehr vielen Grundformen werden nicht alle beim Modell vorgelegt —
+    hier 1.000 synthetische, unzweideutige Wörter gegen ein `limit` von 25. Ohne den
+    Abbruch aus Schritt 4 (`resolve_triage_entries`) wären das 1.000 Modellanfragen statt
+    25, rund 17 statt einer halben Minute (technik.md §3)."""
+    total = 1000
+    limit = 25
+    entries = [
+        pipeline.VocabularyEntry(
+            occurrence=_triage_occurrence(f"word{i}", "NOUN", frequency=total - i),
+            candidates=[_triage_sense(f"word{i}", "NOUN", f"Übersetzung{i}")],
+            status={},
+        )
+        for i in range(total)
+    ]
+    model_server_double.choice = 1
+
+    con = profile.open_profile(profile_path)
+    try:
+        resolution = pipeline.resolve_triage_entries(
+            con=con,
+            entries=entries,
+            limit=limit,
+            url=model_server_double.url,
+            get_model_name=lambda: model_server_double.model_name,
+        )
+    finally:
+        con.close()
+
+    assert len(resolution.entries) == limit
+    assert len(model_server_double.requests) == limit
+    assert resolution.deferred == total - limit

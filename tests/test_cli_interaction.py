@@ -1,9 +1,13 @@
 """Prüft `cli/interaction.py` — die Triage über die Tastatur (bauplan.md T16).
 
-Baut die Testvorrichtung direkt aus `entities`/`pipeline.VocabularyEntry`, ohne EPUB oder
+Baut die Testvorrichtung direkt aus `entities`/`pipeline.ResolvedEntry`, ohne EPUB oder
 spaCy: Geprüft werden die Entscheidungen, die die Triage trifft, nicht die
-Bildschirmausgabe (dokumentation.md §5). Der volle Weg durch `pipeline.run_chapter` bis
-zum Export ist `tests/test_cli_main.py` vorbehalten.
+Bildschirmausgabe (dokumentation.md §5). Seit der zweiten T16-Durchsicht (Befund schwer 1)
+liegen Profilabgleich, Häufigkeitssortierung, Bedeutungsauflösung durch das Modell und
+Wortobergrenze in `pipeline.resolve_triage_entries`, nicht mehr hier — geprüft in
+`tests/test_pipeline.py`. Diese Datei baut deshalb `pipeline.TriageResolution` direkt statt
+über einen echten `resolve_triage_entries`-Aufruf, ohne Modellserver. Der volle Weg durch
+`pipeline.run_chapter` bis zum Export ist `tests/test_cli_main.py` vorbehalten.
 """
 
 from __future__ import annotations
@@ -11,16 +15,13 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import pytest
 
 from cli import interaction
 from libreverbum import pipeline, printout, profile
 from libreverbum.entities import Book, CardDirection, Lemma, Occurrence, Sense
-
-if TYPE_CHECKING:
-    from conftest import ModelServerDouble
+from libreverbum.profile import VocabularyStatus
 
 _BOOK = Book(title="Testbuch", author="Autorin")
 
@@ -37,26 +38,41 @@ def _occurrence(word: str, pos: str, frequency: int) -> Occurrence:
     )
 
 
-def _sense(word: str, pos: str, translation: str) -> Sense:
+def _resolved_sense(word: str, pos: str, translation: str) -> Sense:
+    """Eine bereits aufgelöste Bedeutung, wie `translation.choose_sense` sie liefert —
+    `translation` und `wikdict_trans_list` tragen denselben Text (`translation.py`,
+    „Liefert")."""
     return Sense(
         lemma=Lemma(text=word, pos=pos),
+        translation=translation,
         wikdict_sense="a meaning",
         wikdict_trans_list=translation,
         wikdict_lexentry=f"eng/{word}__{pos.title()}__1",
     )
 
 
-def _entries(count: int) -> list[pipeline.VocabularyEntry]:
-    """`count` Einzelwort-Einträge, `word0` am häufigsten, `word{count-1}` am seltensten
-    — je einer eindeutigen Bedeutung, damit `_representative_sense` keine Wahl hat."""
-    result = []
-    for index in range(count):
-        occurrence = _occurrence(f"word{index}", "NOUN", frequency=count - index)
-        sense = _sense(f"word{index}", "NOUN", f"Übersetzung{index}")
-        result.append(
-            pipeline.VocabularyEntry(occurrence=occurrence, candidates=[sense], status={})
-        )
-    return result
+def _resolved_entry(
+    word: str,
+    pos: str,
+    frequency: int,
+    translation: str,
+    *,
+    status: VocabularyStatus = VocabularyStatus.UNKNOWN,
+) -> pipeline.ResolvedEntry:
+    return pipeline.ResolvedEntry(
+        occurrence=_occurrence(word, pos, frequency),
+        sense=_resolved_sense(word, pos, translation),
+        status=status,
+    )
+
+
+def _entries(count: int) -> list[pipeline.ResolvedEntry]:
+    """`count` bereits aufgelöste Einzelwort-Einträge, `word0` am häufigsten,
+    `word{count-1}` am seltensten — wie `pipeline.resolve_triage_entries` sie liefert."""
+    return [
+        _resolved_entry(f"word{index}", "NOUN", count - index, f"Übersetzung{index}")
+        for index in range(count)
+    ]
 
 
 @pytest.fixture
@@ -83,28 +99,21 @@ def _no_op_write(_: str) -> None:
     return None
 
 
-def _never_needed() -> str:
-    raise AssertionError("Modellserver wurde angefragt, obwohl kein Wort gelernt wurde.")
-
-
 def test_bulk_action_marks_all_more_frequent_words(profile_con: sqlite3.Connection) -> None:
     """konzept.md §4, „Sammelaktion »ab hier kenne ich alles« — markiert alle
     häufigeren Wörter auf einen Schlag" (bauplan.md T10, hier über die Tastatur
     bedient): Position 3 markiert die drei häufigsten Wörter als bekannt, der Rest wird
     einzeln gefragt."""
-    entries = _entries(5)
+    resolution = pipeline.TriageResolution(entries=_entries(5), known=0, deferred=0)
     answers = iter(["3", "s", "s"])  # Sammelaktion bis 3, dann zwei individuelle "skip"
 
     cards = interaction.run_triage_pass(
         con=profile_con,
         book=_BOOK,
         chapter_number=1,
-        entries=entries,
-        limit=10,
+        resolution=resolution,
         label="Wörter",
         card_direction=CardDirection.EN_DE,
-        get_model_name=_never_needed,
-        model_url="http://unerreichbar.invalid",
         read_line=lambda _prompt: next(answers),
         write_line=_no_op_write,
     )
@@ -125,30 +134,17 @@ def test_bulk_action_does_not_mark_a_word_behind_the_selected_position(
     """`triage.bulk_mark`, Regel: „Ein gleich häufiges Wort hinter selected bucht der
     Klick nicht mit" — hier mit zwei gleich häufigen Wörtern, damit ein Off-by-one bei
     der Positionsauflösung sichtbar würde."""
-    tied = [
-        pipeline.VocabularyEntry(
-            occurrence=_occurrence("tied_a", "NOUN", frequency=1),
-            candidates=[_sense("tied_a", "NOUN", "A")],
-            status={},
-        ),
-        pipeline.VocabularyEntry(
-            occurrence=_occurrence("tied_b", "NOUN", frequency=1),
-            candidates=[_sense("tied_b", "NOUN", "B")],
-            status={},
-        ),
-    ]
+    tied = [_resolved_entry("tied_a", "NOUN", 1, "A"), _resolved_entry("tied_b", "NOUN", 1, "B")]
+    resolution = pipeline.TriageResolution(entries=tied, known=0, deferred=0)
     answers = iter(["1", "s"])
 
     interaction.run_triage_pass(
         con=profile_con,
         book=_BOOK,
         chapter_number=1,
-        entries=tied,
-        limit=10,
+        resolution=resolution,
         label="Wörter",
         card_direction=CardDirection.EN_DE,
-        get_model_name=_never_needed,
-        model_url="http://unerreichbar.invalid",
         read_line=lambda _prompt: next(answers),
         write_line=_no_op_write,
     )
@@ -158,51 +154,23 @@ def test_bulk_action_does_not_mark_a_word_behind_the_selected_position(
     assert bulk_marked == {"tied_a"}
 
 
-def test_word_limit_defers_the_rest_without_recording_an_event(
+def test_learning_a_word_creates_a_card_with_the_already_resolved_sense(
     profile_con: sqlite3.Connection,
 ) -> None:
-    """konzept.md §4, „Obergrenze pro Kapitel — der Rest wird zurückgestellt": Wörter
-    jenseits von `limit` werden weder angezeigt noch im Profil vermerkt."""
-    entries = _entries(5)
-    answers = iter(["", "s", "s", "s"])  # keine Sammelaktion, drei individuelle "skip"
-
-    interaction.run_triage_pass(
-        con=profile_con,
-        book=_BOOK,
-        chapter_number=1,
-        entries=entries,
-        limit=3,
-        label="Wörter",
-        card_direction=CardDirection.EN_DE,
-        get_model_name=_never_needed,
-        model_url="http://unerreichbar.invalid",
-        read_line=lambda _prompt: next(answers),
-        write_line=_no_op_write,
-    )
-
-    events = _events(profile_con)
-    assert {lemma for lemma, _, _ in events} == {"word0", "word1", "word2"}
-
-
-def test_learning_a_word_calls_the_model_and_creates_a_card(
-    profile_con: sqlite3.Connection, model_server_double: ModelServerDouble
-) -> None:
-    """„will ich lernen" ruft `translation.choose_sense` auf (Abnahmekriterium 3) und
-    erzeugt eine `Card` mit der vom Modell gewählten, aufgelösten Übersetzung."""
-    entries = _entries(1)
-    model_server_double.choice = 1
+    """„will ich lernen" erzeugt eine `Card` mit der Bedeutung, die
+    `pipeline.resolve_triage_entries` bereits aufgelöst hat (Befund schwer 1, zweite
+    T16-Durchsicht) — kein weiterer Modellaufruf an dieser Stelle, `entry.sense` wird
+    unverändert übernommen."""
+    resolution = pipeline.TriageResolution(entries=_entries(1), known=0, deferred=0)
     answers = iter(["", "l"])
 
     cards = interaction.run_triage_pass(
         con=profile_con,
         book=_BOOK,
         chapter_number=1,
-        entries=entries,
-        limit=10,
+        resolution=resolution,
         label="Wörter",
         card_direction=CardDirection.EN_DE,
-        get_model_name=lambda: model_server_double.model_name,
-        model_url=model_server_double.url,
         read_line=lambda _prompt: next(answers),
         write_line=_no_op_write,
     )
@@ -215,12 +183,11 @@ def test_learning_a_word_calls_the_model_and_creates_a_card(
 
 
 def test_expressions_reach_the_triage_and_the_resulting_card(
-    profile_con: sqlite3.Connection, model_server_double: ModelServerDouble
+    profile_con: sqlite3.Connection,
 ) -> None:
     """Abnahmekriterium 3 in klein (bauplan.md T16, „Wendungen erscheinen in der Triage
-    und landen im Export"): Eine Wendung aus `pipeline.ChapterVocabulary.expressions`
-    läuft durch dieselbe Triage wie ein Einzelwort und erzeugt bei „will ich lernen"
-    ebenso eine Karte."""
+    und landen im Export"): Eine Wendung läuft durch dieselbe Triage wie ein Einzelwort
+    und erzeugt bei „will ich lernen" ebenso eine Karte."""
     expression_occurrence = Occurrence(
         book=_BOOK,
         chapter_number=1,
@@ -232,28 +199,31 @@ def test_expressions_reach_the_triage_and_the_resulting_card(
     )
     expression_sense = Sense(
         lemma=Lemma(text="give up", pos="VERB"),
+        translation="aufgeben",
         wikdict_sense="admit defeat",
         wikdict_trans_list="aufgeben",
         wikdict_lexentry="eng/give_up__Verb__1",
     )
-    expressions = [
-        pipeline.VocabularyEntry(
-            occurrence=expression_occurrence, candidates=[expression_sense], status={}
-        )
-    ]
-    model_server_double.choice = 1
+    resolution = pipeline.TriageResolution(
+        entries=[
+            pipeline.ResolvedEntry(
+                occurrence=expression_occurrence,
+                sense=expression_sense,
+                status=VocabularyStatus.UNKNOWN,
+            )
+        ],
+        known=0,
+        deferred=0,
+    )
     answers = iter(["", "l"])
 
     cards = interaction.run_triage_pass(
         con=profile_con,
         book=_BOOK,
         chapter_number=1,
-        entries=expressions,
-        limit=interaction.EXPRESSION_LIMIT,
+        resolution=resolution,
         label="Wendungen",
         card_direction=CardDirection.EN_DE,
-        get_model_name=lambda: model_server_double.model_name,
-        model_url=model_server_double.url,
         read_line=lambda _prompt: next(answers),
         write_line=_no_op_write,
     )
@@ -271,19 +241,17 @@ def test_word_limit_plus_expression_limit_fits_the_printout() -> None:
     assert interaction.WORD_LIMIT + interaction.EXPRESSION_LIMIT == printout.MAX_ENTRIES
 
 
-def test_acceptance_6_known_words_are_not_asked_again(profile_con: sqlite3.Connection) -> None:
+def test_run_triage_pass_reports_entries_the_pipeline_already_filtered_as_known(
+    profile_con: sqlite3.Connection,
+) -> None:
     """Abnahmekriterium 6 (konzept.md, „Abnahmekriterien"): „Beim zweiten Durchlauf
     desselben Kapitels werden die als *bekannt* markierten Wörter **nicht erneut**
-    abgefragt — das Profil greift." Geprüft direkt an `run_triage_pass` mit
-    `entry.status`, wie `pipeline.run_chapter` es aus `profile.
-    compare_chapter_vocabulary` liefert (Befund schwer 1, Durchsicht T16)."""
-    known_sense = _sense("known_word", "NOUN", "Bekannt")
-    known_entry = pipeline.VocabularyEntry(
-        occurrence=_occurrence("known_word", "NOUN", frequency=5),
-        candidates=[known_sense],
-        status={known_sense: profile.VocabularyStatus.KNOWN},
-    )
-    new_entry = _entries(1)[0]  # word0, ohne Profileintrag
+    abgefragt — das Profil greift." Der Vorfilter selbst liegt seit der zweiten
+    T16-Durchsicht (Befund schwer 1) in `pipeline.resolve_triage_entries`
+    (`tests/test_pipeline.py`) — hier wird nur geprüft, dass `run_triage_pass` die Zahl
+    aus `resolution.known` meldet und ausschließlich zeigt, was tatsächlich in
+    `resolution.entries` steht."""
+    resolution = pipeline.TriageResolution(entries=_entries(1), known=1, deferred=0)
     written: list[str] = []
     answers = iter(["", "s"])  # keine Sammelaktion, dann "skip" für word0
 
@@ -291,12 +259,9 @@ def test_acceptance_6_known_words_are_not_asked_again(profile_con: sqlite3.Conne
         con=profile_con,
         book=_BOOK,
         chapter_number=1,
-        entries=[known_entry, new_entry],
-        limit=10,
+        resolution=resolution,
         label="Wörter",
         card_direction=CardDirection.EN_DE,
-        get_model_name=_never_needed,
-        model_url="http://unerreichbar.invalid",
         read_line=lambda _prompt: next(answers),
         write_line=written.append,
     )
@@ -307,60 +272,17 @@ def test_acceptance_6_known_words_are_not_asked_again(profile_con: sqlite3.Conne
     assert any("bereits bekannt" in line for line in written)
 
 
-def test_a_candidate_with_one_known_and_one_new_sense_is_not_skipped(
-    profile_con: sqlite3.Connection,
-) -> None:
-    """Ein Eintrag mit **gemischtem** Kenntnisstand — eine Bedeutung bekannt, eine noch
-    nicht — bleibt in der Triage: Nur ein Eintrag, dessen *sämtliche* Kandidaten bekannt
-    sind, gilt als bekannt (Befund schwer 1, Durchsicht T16, `_is_known`). Ohne dieses
-    Wort wäre die neue Bedeutung eines mehrdeutigen Worts nie abgefragt worden."""
-    known_sense = _sense("bank", "NOUN", "Geldinstitut")
-    new_sense = _sense("bank", "NOUN", "Flussufer")
-    entry = pipeline.VocabularyEntry(
-        occurrence=_occurrence("bank", "NOUN", frequency=2),
-        candidates=[known_sense, new_sense],
-        status={
-            known_sense: profile.VocabularyStatus.KNOWN,
-            new_sense: profile.VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD,
-        },
-    )
-    written: list[str] = []
-    answers = iter(["", "s"])
-
-    interaction.run_triage_pass(
-        con=profile_con,
-        book=_BOOK,
-        chapter_number=1,
-        entries=[entry],
-        limit=10,
-        label="Wörter",
-        card_direction=CardDirection.EN_DE,
-        get_model_name=_never_needed,
-        model_url="http://unerreichbar.invalid",
-        read_line=lambda _prompt: next(answers),
-        write_line=written.append,
-    )
-
-    assert any(line.startswith("bank (") for line in written)
-
-
 def test_new_meaning_of_a_known_word_is_marked_in_the_display(
     profile_con: sqlite3.Connection,
 ) -> None:
-    """konzept.md §5, „Mehrdeutigkeit": Der zweite Eintrag einer mehrdeutigen Grundform
-    wird in der Triage als „neue Bedeutung eines bekannten Wortes" gekennzeichnet, damit
-    der Nutzer versteht, warum ein scheinbar bekanntes Wort erneut auftaucht (Befund
-    mittel 6, Durchsicht T16)."""
-    known_sense = _sense("bank", "NOUN", "Geldinstitut")
-    new_sense = _sense("bank", "NOUN", "Flussufer")
-    entry = pipeline.VocabularyEntry(
-        occurrence=_occurrence("bank", "NOUN", frequency=2),
-        candidates=[known_sense, new_sense],
-        status={
-            known_sense: profile.VocabularyStatus.KNOWN,
-            new_sense: profile.VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD,
-        },
+    """konzept.md §5, „Mehrdeutigkeit": Ein Eintrag mit `VocabularyStatus.
+    NEW_MEANING_OF_KNOWN_WORD` wird in der Triage als „neue Bedeutung eines bekannten
+    Wortes" gekennzeichnet, damit der Nutzer versteht, warum ein scheinbar bekanntes Wort
+    erneut auftaucht."""
+    entry = _resolved_entry(
+        "bank", "NOUN", 2, "Ufer", status=VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD
     )
+    resolution = pipeline.TriageResolution(entries=[entry], known=0, deferred=0)
     written: list[str] = []
     answers = iter(["", "s"])
 
@@ -368,46 +290,41 @@ def test_new_meaning_of_a_known_word_is_marked_in_the_display(
         con=profile_con,
         book=_BOOK,
         chapter_number=1,
-        entries=[entry],
-        limit=10,
+        resolution=resolution,
         label="Wörter",
         card_direction=CardDirection.EN_DE,
-        get_model_name=_never_needed,
-        model_url="http://unerreichbar.invalid",
         read_line=lambda _prompt: next(answers),
         write_line=written.append,
     )
 
     marked = [line for line in written if "neue Bedeutung eines bekannten Wortes" in line]
     assert len(marked) == 1
-    assert "Flussufer" in marked[0]
-    assert not any("Geldinstitut" in line and "neue Bedeutung" in line for line in written)
+    assert "Ufer" in marked[0]
 
 
-def test_a_candidate_without_a_dictionary_entry_becomes_uncertain_when_learned(
+def test_a_word_without_a_dictionary_entry_keeps_its_uncertain_marker_when_learned(
     profile_con: sqlite3.Connection,
 ) -> None:
-    """Regel 11 (dokumentation.md §4): Ein Wort ohne Wörterbucheintrag wird nicht dem
-    Modell vorgelegt, sondern unmittelbar `uncertain` (dieselbe Regel wie
-    `translation.choose_sense` bei leerer Auswahlliste — hier ohne Modellaufruf
-    geprüft, `get_model_name` darf nie aufgerufen werden)."""
-    entries = [
-        pipeline.VocabularyEntry(
-            occurrence=_occurrence("obscure", "NOUN", frequency=1), candidates=[], status={}
-        )
-    ]
+    """Regel 11 (dokumentation.md §4): Ein Wort ohne Wörterbucheintrag trägt weiterhin
+    `uncertain=True`, wenn es gelernt wird — dieselbe Markierung, mit der `pipeline.
+    resolve_triage_entries` es geliefert hat, ohne dass hier ein zweiter Modellaufruf
+    nötig wäre (der erste unterblieb bereits dort, siehe `tests/test_pipeline.py`)."""
+    placeholder = Sense(lemma=Lemma(text="obscure", pos="NOUN"), uncertain=True)
+    entry = pipeline.ResolvedEntry(
+        occurrence=_occurrence("obscure", "NOUN", 1),
+        sense=placeholder,
+        status=VocabularyStatus.UNKNOWN,
+    )
+    resolution = pipeline.TriageResolution(entries=[entry], known=0, deferred=0)
     answers = iter(["", "l"])
 
     cards = interaction.run_triage_pass(
         con=profile_con,
         book=_BOOK,
         chapter_number=1,
-        entries=entries,
-        limit=10,
+        resolution=resolution,
         label="Wörter",
         card_direction=CardDirection.EN_DE,
-        get_model_name=_never_needed,
-        model_url="http://unerreichbar.invalid",
         read_line=lambda _prompt: next(answers),
         write_line=_no_op_write,
     )

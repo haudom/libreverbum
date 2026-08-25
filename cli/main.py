@@ -5,7 +5,9 @@ Aufgabe
 Verkettet, was `cli.config`, `libreverbum.epub`, `libreverbum.extraction`,
 `libreverbum.pipeline`, `cli.interaction` und `cli.export` je für sich liefern, zu einem
 Aufruf von der Kommandozeile: EPUB wählen, Kapitel wählen, `pipeline.run_chapter`,
-Triage über die Tastatur (Wörter, dann Wendungen), Export nach Anki und als Druckseite.
+je Decksel `pipeline.resolve_triage_entries` (Bedeutung vor der Triage auflösen, Befund
+schwer 1, zweite T16-Durchsicht), Triage über die Tastatur (Wörter, dann Wendungen),
+Export nach Anki und als Druckseite.
 
 Regel 9 (dokumentation.md §4), strukturelle Hälfte: Dieses Kommandozeilenprogramm hat
 keine Ereignisschleife und keinen Oberflächen-Thread, den ein NLP- oder Modellaufruf
@@ -176,31 +178,44 @@ def _run(args: argparse.Namespace, *, read_line: ReadLine, write_line: WriteLine
         interaction.ensure_chapter_row(
             con, result.chapter.book, result.chapter.number, result.chapter.title
         )
+
+        # (Befund schwer 1, zweite T16-Durchsicht): Die Bedeutung wird vor der Triage
+        # aufgelöst (`pipeline.resolve_triage_entries`, je Decksel einmal) — Wörter und
+        # Wendungen bleiben dabei getrennte Durchläufe mit eigener Obergrenze (`cli.
+        # interaction`, „Festlegung: getrennte Decksel").
         write_line("== Wörter ==")
+        word_resolution = pipeline.resolve_triage_entries(
+            con=con,
+            entries=result.entries,
+            limit=interaction.WORD_LIMIT,
+            url=cfg.model_url,
+            get_model_name=get_model_name,
+        )
         word_cards = interaction.run_triage_pass(
             con=con,
             book=result.chapter.book,
             chapter_number=result.chapter.number,
-            entries=result.entries,
-            limit=interaction.WORD_LIMIT,
+            resolution=word_resolution,
             label="Wörter",
             card_direction=card_direction,
-            get_model_name=get_model_name,
-            model_url=cfg.model_url,
             read_line=read_line,
             write_line=write_line,
         )
         write_line("== Wendungen ==")
+        expression_resolution = pipeline.resolve_triage_entries(
+            con=con,
+            entries=result.expressions,
+            limit=interaction.EXPRESSION_LIMIT,
+            url=cfg.model_url,
+            get_model_name=get_model_name,
+        )
         expression_cards = interaction.run_triage_pass(
             con=con,
             book=result.chapter.book,
             chapter_number=result.chapter.number,
-            entries=result.expressions,
-            limit=interaction.EXPRESSION_LIMIT,
+            resolution=expression_resolution,
             label="Wendungen",
             card_direction=card_direction,
-            get_model_name=get_model_name,
-            model_url=cfg.model_url,
             read_line=read_line,
             write_line=write_line,
         )

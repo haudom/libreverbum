@@ -196,21 +196,40 @@ class _RejectWordConsole:
 
 
 def test_acceptance_6_a_second_run_does_not_ask_about_words_marked_known(
-    tmp_path: Path, book_epub: Path, mini_dictionary_db: Path
+    tmp_path: Path,
+    book_epub: Path,
+    mini_dictionary_db: Path,
+    model_server_double: ModelServerDouble,
 ) -> None:
     """Abnahmekriterium 6 (konzept.md, „Abnahmekriterien"): „Beim zweiten Durchlauf
     desselben Kapitels werden die als *bekannt* markierten Wörter **nicht erneut**
     abgefragt — das Profil greift." Hier über den vollen Einstiegspunkt `cli.main.main`,
     zweimal auf demselben Datenverzeichnis (Befund schwer 1, Durchsicht T16):
     `entry.status` aus `pipeline.run_chapter` wurde bis dahin von keinem `cli`-Modul
-    gelesen, und der zweite Durchlauf fragte dieselben Wörter erneut ab."""
+    gelesen, und der zweite Durchlauf fragte dieselben Wörter erneut ab.
+
+    Ein erreichbarer Modellserver ist seit der zweiten T16-Durchsicht (Befund schwer 1)
+    nötig, obwohl in diesem Test nie „will ich lernen" gewählt wird: Die Bedeutung wird
+    seither vor **jeder** Triage-Entscheidung aufgelöst (`pipeline.resolve_triage_entries`,
+    konzept.md Nachtrag 17.08.2026), auch für „kenne ich" und „überspringen" — andere
+    Wörter im Kapitel (`bank`, `draw`, „give up") brauchen dafür ein Modell, selbst wenn
+    dieser Test nur `watch` beobachtet.
+
+    `watch` ist dabei **eindeutig** (ein einziger Kandidat in `mini_dictionary_db`) — der
+    ursprüngliche Test bestand deshalb schon vor der Behebung, nur zufällig: Der alte
+    Vorfilter verglich, ob *irgendeine* Bedeutung bekannt sei (`any(...)`), gegen
+    `candidates[0]` auf der Schreibseite — bei genau einem Kandidaten sind beide
+    dasselbe. Der eigentliche, vorher rote Fall steht in
+    `test_acceptance_6_a_second_run_does_not_ask_about_an_ambiguous_word_marked_known`
+    (`bank`, zwei Kandidaten)."""
     data_dir = tmp_path / "data"
     _write_config(
         data_dir,
-        model_url="http://unerreichbar.invalid",
-        model_name="",
+        model_url=model_server_double.url,
+        model_name=model_server_double.model_name,
         dictionary_path=mini_dictionary_db,
     )
+    model_server_double.choice = 1
 
     first_console = _MarkOneWordKnownConsole(known_word="watch")
     first_exit = main(
@@ -224,6 +243,50 @@ def test_acceptance_6_a_second_run_does_not_ask_about_words_marked_known(
     )
 
     second_console = _RejectWordConsole(forbidden_word="watch")
+    second_exit = main(
+        [str(book_epub), "--chapter", "1", "--data-dir", str(data_dir)],
+        read_line=second_console.read,
+        write_line=second_console.write,
+    )
+    assert second_exit == 0, "\n".join(second_console.log)
+
+
+def test_acceptance_6_a_second_run_does_not_ask_about_an_ambiguous_word_marked_known(
+    tmp_path: Path,
+    book_epub: Path,
+    mini_dictionary_db: Path,
+    model_server_double: ModelServerDouble,
+) -> None:
+    """Dieselbe Zusicherung wie
+    `test_acceptance_6_a_second_run_does_not_ask_about_words_marked_known`, aber an einem
+    **mehrdeutigen** Wort: `bank` hat in `mini_dictionary_db` zwei Zeilen (Geldinstitut,
+    Ufer, Auftragstext) und steht im Kapiteltext. Dieser Test war gegen den Stand vor der
+    zweiten T16-Durchsicht (Befund schwer 1) rot: Der damalige Vorfilter verlangte, dass
+    *irgendeine* Bedeutung von `bank` bekannt sei, während „kenne ich" stets nur
+    `candidates[0]` bucht (bei `bank` die Geldinstitut-Bedeutung, höchster `score`) — der
+    Vorfilter hätte `bank` beim zweiten Durchlauf also fälschlich erneut gezeigt, weil die
+    zweite Bedeutung (Ufer) weiterhin als unbekannt galt."""
+    data_dir = tmp_path / "data"
+    _write_config(
+        data_dir,
+        model_url=model_server_double.url,
+        model_name=model_server_double.model_name,
+        dictionary_path=mini_dictionary_db,
+    )
+    model_server_double.choice = 1  # erster Listenplatz nach score: Geldinstitut
+
+    first_console = _MarkOneWordKnownConsole(known_word="bank")
+    first_exit = main(
+        [str(book_epub), "--chapter", "1", "--data-dir", str(data_dir)],
+        read_line=first_console.read,
+        write_line=first_console.write,
+    )
+    assert first_exit == 0, "\n".join(first_console.log)
+    assert any(line.startswith("bank (") for line in first_console.log), (
+        "Testvoraussetzung verletzt: 'bank' wurde im ersten Durchlauf gar nicht gefragt."
+    )
+
+    second_console = _RejectWordConsole(forbidden_word="bank")
     second_exit = main(
         [str(book_epub), "--chapter", "1", "--data-dir", str(data_dir)],
         read_line=second_console.read,

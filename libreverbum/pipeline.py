@@ -48,26 +48,45 @@ Zusammenführung fehlten die Wendungen im Ergebnis aber vollständig, nicht nur 
 zu verschweigen. Was zu tun bleibt, steht in `nacharbeit.md`. Ein reiner Lesezugriff, es
 wird kein Ereignis in das Profil geschrieben.
 
-**Hier endet der Durchstich.** Die nächste Stufe des Kernablaufs ist `translation` (T11):
-Sie wählt aus der Auswahlliste jedes `VocabularyEntry` — in `entries` wie in
-`expressions` — die im Belegsatz gemeinte Bedeutung aus. T11 ist im Bauplan ausdrücklich
-gesperrt, bis die zweite Messung aus E10 vorliegt (bauplan.md, Tor 0, „Skaliert das
-Bündeln beim Modell?") — ohne sie müsste geraten werden, ob einzeln oder gebündelt
-gefragt wird, und eine geratene Auswahl wäre genau der stille Fehlschlag, den Regel 13
-verbietet. Gesperrt ist damit nur die *markierte* Bedeutung, nicht die Triage selbst
-(Befund 10, Review T15): Für die Standardstellung „Wörterbuch" (konzept.md §4, Tabelle
-„Stellung") liefert `run_chapter` bereits alles, was die Triage (Schritt 4) dort
-braucht — die Liste der möglichen Bedeutungen ohne Markierung, rund 1,1 s, kein
-Modellaufruf. T16 kann darauf aufbauen, ohne auf T11 zu warten.
+**`run_chapter` bleibt der netzlose Teil.** Sie schlägt im Wörterbuch nach und gleicht
+gegen das Profil ab (rund 1,1 s, technik.md §3, „Nachtrag 17.08.2026") — die Liste der
+möglichen Bedeutungen je Vorkommen, ohne dass dafür ein Modellserver erreichbar sein
+müsste. Was daraus für die Triage wird, macht seit der zweiten T16-Durchsicht (Befund
+schwer 1) eine zweite Funktion, `resolve_triage_entries`: Sie ruft `translation.
+choose_sense` auf — den einzigen Ort mit Modellzugriff (technik.md §7) — und ist deshalb
+bewusst **nicht** Teil von `run_chapter`. Zwei Gründe:
+
+1. `run_chapter`s Kosten (rund 1,1 s) bleiben unverändert und ohne Netzabhängigkeit, statt
+   für jeden Aufrufer verbindlich rund 25 bis 40 Modellanfragen mitzubringen. Ein künftiger
+   Aufrufer, der nur die Auswahllisten braucht (etwa ein Messwerkzeug), bekommt sie weiterhin
+   ohne Modellserver
+2. `resolve_triage_entries` bekommt `limit` **je Decksel** (`cli.interaction.WORD_LIMIT` für
+   `entries`, `EXPRESSION_LIMIT` für `expressions`, „Festlegung: getrennte Decksel",
+   `cli/interaction.py`) — zwei verschiedene Aufrufe mit zwei verschiedenen Obergrenzen. In
+   `run_chapter` selbst gäbe es dafür keinen natürlichen Ort, ohne dass das Modul plötzlich
+   von `cli`-Konstanten wüsste
 
 Regeln
 ------
-Der Abgleich gegen das Profil läuft **nach** dem Nachschlagen im Wörterbuch, nicht davor:
-`profile.compare_chapter_vocabulary` erwartet aufgelöste Bedeutungen (`entities.Sense`
-samt `wikdict_`-Feldern), weil Kenntnis pro Bedeutung geführt wird, nicht pro Wort
-(technik.md §4, „Kernentscheidung: Kenntnis pro Bedeutung, nicht pro Wort"). Begründet und
-für T15 ausdrücklich festgehalten in konzept.md, Nachtrag 18.08.2026 beim Kernablauf:
-„damit T15 die Reihenfolge nicht neu entscheidet."
+Der Abgleich gegen das Profil in `run_chapter` läuft **nach** dem Nachschlagen im
+Wörterbuch, nicht davor: `profile.compare_chapter_vocabulary` erwartet aufgelöste
+Bedeutungen (`entities.Sense` samt `wikdict_`-Feldern), weil Kenntnis pro Bedeutung geführt
+wird, nicht pro Wort (technik.md §4, „Kernentscheidung: Kenntnis pro Bedeutung, nicht pro
+Wort"). Begründet und für T15 ausdrücklich festgehalten in konzept.md, Nachtrag 18.08.2026
+beim Kernablauf: „damit T15 die Reihenfolge nicht neu entscheidet."
+
+Eine Grundform ganz ohne Wörterbucheintrag (7,2 % je Kapitel, technik.md §3, Nachtrag
+18.08.2026) bekommt in `entries` denselben Platzhalter wie `dictionary.
+particle_verb_candidates` für ein Phrasal Verb ohne Treffer: einen einzelnen `Sense` mit
+`uncertain=True` und ohne jedes `wikdict_`-Feld, statt einer leeren `candidates`-Liste
+(Befund mittel, zweite T16-Durchsicht). Vor dieser Behebung stand dieser Platzhalter nur in
+`cli.interaction._representative_sense`, nie in `candidates`/`status` — ein als „kenne ich"
+gebuchtes Wort ohne Wörterbucheintrag (etwa „sunset") wurde dadurch bei jedem weiteren
+Durchlauf erneut gefragt, weil der Vorfilter aus `resolve_triage_entries`
+(`_all_candidates_known`) eine leere `candidates`-Liste nie als „bekannt" werten kann. Mit
+dem Platzhalter in `candidates` **und** `status` (`profile.compare_chapter_vocabulary`
+bekommt ihn wie jeden anderen Kandidaten) greift derselbe Vorfilter wie bei jedem
+Wörterbucheintrag auch hier.
 """
 
 from __future__ import annotations
@@ -75,11 +94,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from libreverbum import dictionary, epub, extraction, profile
+from libreverbum import dictionary, epub, extraction, profile, translation, triage
 from libreverbum.entities import Chapter, Occurrence, Sense
 from libreverbum.profile import VocabularyStatus
 
 if TYPE_CHECKING:
+    import sqlite3
+    from collections.abc import Callable, Sequence
     from pathlib import Path
 
     from spacy.language import Language
@@ -167,6 +188,17 @@ def run_chapter(
     single_word_candidates = dictionary.candidate_lists(
         dictionary_path, [occurrence.lemma for occurrence in occurrences]
     )
+    # (Befund mittel, zweite T16-Durchsicht): Eine leere Auswahlliste bekommt hier
+    # denselben Platzhalter wie dictionary.particle_verb_candidates für ein Phrasal Verb
+    # ohne Treffer (Sense(lemma=..., uncertain=True), kein wikdict_-Feld) — siehe
+    # Moduldocstring, letzter Absatz. Ohne diese Angleichung stünde der Platzhalter nur
+    # auf der Schreibseite (früher `cli.interaction._representative_sense`), nie in
+    # `candidates`/`status`, und ein Wort ohne Wörterbucheintrag könnte nie als „bekannt"
+    # erkannt werden.
+    single_word_candidates = [
+        candidates or [Sense(lemma=occurrence.lemma, uncertain=True)]
+        for occurrence, candidates in zip(occurrences, single_word_candidates, strict=True)
+    ]
 
     # Befund 1 (Review T15): Die Mehrwortausdruck-Kandidaten aus T4 werden abgeglichen,
     # nicht nur erwähnt — dictionary.particle_verb_candidates und contiguous_candidates
@@ -223,4 +255,146 @@ def run_chapter(
 
     return ChapterVocabulary(
         chapter=chapter, notice=structure.notice, entries=entries, expressions=expressions
+    )
+
+
+@dataclass(frozen=True)
+class ResolvedEntry:
+    """Ein für die Triage aufbereiteter Eintrag (`resolve_triage_entries`): das Vorkommen
+    und die im Belegsatz **gemeinte** Bedeutung — eine einzelne `Sense`, nicht mehr die
+    volle Auswahlliste aus `VocabularyEntry.candidates` —, dazu ihr Kenntnisstand.
+
+    Ersetzt die Auswahlliste in der Anzeige durch die aufgelöste Bedeutung (technik.md §3,
+    Nachtrag 18.08.2026: „Die gewählte Bedeutung samt Belegsatz gehört also in die
+    Anzeige — das ist Darstellung, keine zweite Entscheidung"). `status` ist nie `KNOWN`:
+    Eine auf `KNOWN` aufgelöste Bedeutung fällt in `resolve_triage_entries` weg, bevor ein
+    `ResolvedEntry` für sie entsteht (konzept.md, Abnahmekriterium 6)."""
+
+    occurrence: Occurrence
+    sense: Sense
+    status: VocabularyStatus
+
+
+@dataclass(frozen=True)
+class TriageResolution:
+    """Ergebnis von `resolve_triage_entries` für **einen** Decksel (Wörter oder Wendungen,
+    `cli/interaction.py`, „Festlegung: getrennte Decksel"): `entries` — höchstens `limit`
+    aufgelöste Einträge, in Häufigkeitsreihenfolge, bereit für die interaktive Triage —,
+    dazu zwei Zählungen für deren Meldungen davor. `known`: wie viele Einträge der
+    kostenlose Vorfilter bereits verworfen hat, weil jede ihrer Bedeutungen bekannt war
+    (Abnahmekriterium 6). `deferred`: wie viele der übrigen, nach Häufigkeit sortierten
+    Einträge die Wortobergrenze gar nicht mehr erreicht hat — unangetastet wie das bisherige
+    Verhalten von `triage.defer_beyond_word_limit`, nur an **behaltenen** statt an
+    gesehenen Einträgen gezählt (Moduldocstring von `resolve_triage_entries`, Schritt 4)."""
+
+    entries: list[ResolvedEntry]
+    known: int
+    deferred: int
+
+
+def _all_candidates_known(entry: VocabularyEntry) -> bool:
+    """Der kostenlose Vorfilter aus technik.md §3, Nachtrag 18.08.2026 („eine
+    Triage-Entscheidung je Wort genügt"): Ein Eintrag gilt als vollständig bekannt, wenn er
+    mindestens einen Kandidaten hat und **jeder** davon `VocabularyStatus.KNOWN` trägt. Ist
+    jede mögliche Bedeutung bereits bekannt, ist es auch die, die das Modell wählen würde —
+    ohne dass dafür eine Anfrage nötig wäre.
+
+    Geprüft über `bool(entry.candidates)`, weil `all()` über eine leere Menge
+    stillschweigend wahr wäre (Befund schwer 1, zweite T16-Durchsicht: die vormalige
+    `cli.interaction._is_known` verglich stattdessen `any(...)` gegen dieses `all(...)` auf
+    der Schreibseite — bei 65,8 % mehrdeutigen Grundformen je Kapitel [technik.md §3,
+    Nachtrag 18.08.2026] traf das die meisten Wörter). Seit `run_chapter` auch für eine
+    leere Auswahlliste einen Platzhalter in `candidates` führt (Moduldocstring, letzter
+    Absatz), deckt dieselbe Prüfung auch ein Wort ganz ohne Wörterbucheintrag ab."""
+    return bool(entry.candidates) and all(
+        entry.status.get(sense) is VocabularyStatus.KNOWN for sense in entry.candidates
+    )
+
+
+def _resolve_sense(entry: VocabularyEntry, *, url: str, get_model_name: Callable[[], str]) -> Sense:
+    """Löst die im Belegsatz gemeinte Bedeutung eines einzelnen Eintrags auf.
+
+    Besteht `entry.candidates` **nur** aus dem Platzhalter ohne Wörterbucheintrag
+    (`uncertain=True`, kein `wikdict_`-Feld — derselbe, den `run_chapter` für eine leere
+    Auswahlliste einsetzt, und derselbe, den `dictionary.particle_verb_candidates` für ein
+    Phrasal Verb ohne Treffer liefert), gibt es nichts zu wählen: kein Modellaufruf (Regel
+    11), der Platzhalter bleibt die Bedeutung — `translation.py` überlässt diese
+    Entscheidung ausdrücklich dem Aufrufer („Ob ein solcher Kandidat überhaupt zur
+    Übersetzung vorgelegt wird, entscheidet der Aufrufer"). Sonst eine Anfrage an
+    `translation.choose_sense`, auch bei genau einem echten Kandidaten: Dieselbe Funktion
+    gilt für jede Kandidatenzahl, und die Kostenrechnung aus technik.md §3 (rund 1 s je
+    Wort, „Naiv wäre das Modell für alle ~1.000 Grundformen … zu fragen") geht von genau
+    dieser Zählweise aus. `get_model_name` wird deshalb erst hier aufgerufen, nicht vom
+    Aufrufer vorab — eine Kette aus lauter Platzhaltern braucht den Modellserver nie."""
+    if len(entry.candidates) == 1 and entry.candidates[0].uncertain:
+        return entry.candidates[0]
+    return translation.choose_sense(
+        url=url,
+        model_name=get_model_name(),
+        occurrence=entry.occurrence,
+        sense_candidates=entry.candidates,
+    )
+
+
+def resolve_triage_entries(
+    *,
+    con: sqlite3.Connection,
+    entries: Sequence[VocabularyEntry],
+    limit: int,
+    url: str,
+    get_model_name: Callable[[], str],
+) -> TriageResolution:
+    """Bereitet einen Decksel aus `ChapterVocabulary` (`entries` oder `expressions`) für
+    die interaktive Triage vor (Befund schwer 1, zweite T16-Durchsicht) — Vorfilter,
+    Häufigkeitssortierung, Bedeutungsauflösung durch das Modell, Wortobergrenze, in dieser
+    Reihenfolge, damit das Budget aus konzept.md §4 („eine halbe Minute" bei höchstens 25
+    neuen Wörtern) hält, statt für alle rund 1.000 Grundformen eines Kapitels zu fragen —
+    das wären bei rund 1 s je Wort (technik.md §3) rund 17 Minuten, bevor der Nutzer
+    überhaupt etwas sieht:
+
+    1. **Vorfilter, kostenlos:** Ein Eintrag, dessen sämtliche Kandidaten bereits `KNOWN`
+       sind, fällt ohne Modellaufruf weg (`_all_candidates_known`).
+    2. Der Rest wird nach Häufigkeit sortiert (`triage.sort_by_frequency`) — häufigste
+       zuerst, wie in der Triage selbst (konzept.md §4).
+    3. In dieser Reihenfolge löst `_resolve_sense` je Eintrag die gemeinte Bedeutung auf
+       (eine Anfrage je Wort, kein Bündeln — technik.md §3, Nachtrag 19.08.2026), und der
+       frisch gegen das Profil abgeglichene Kenntnisstand dieser **einen** Bedeutung
+       entscheidet weiter: `KNOWN` heißt, der Nutzer hat genau diese Bedeutung schon
+       gebucht — der Eintrag fällt weg, ohne einen Platz von `limit` zu verbrauchen. Sonst
+       bleibt er, markiert als `UNKNOWN` oder `NEW_MEANING_OF_KNOWN_WORD` (konzept.md §5,
+       „Mehrdeutigkeit"; der `bank`-Fall: Ufer bekannt, Kapitel meint das Geldhaus — der
+       Vorfilter aus Schritt 1 greift nicht, weil nicht *jede* Bedeutung bekannt ist, das
+       Modell löst auf, und die Geldhaus-Bedeutung erscheint markiert).
+    4. Abbruch, sobald auf diese Art `limit` Einträge **behalten** wurden — typisch 25 bis
+       40 Modellaufrufe (`TriageResolution.entries` plus die dabei verworfenen `KNOWN`-
+       Treffer), nicht mehrere Hundert.
+    5. Was danach in der sortierten Liste noch steht, wird nicht mehr angerührt: kein
+       Modellaufruf, keine Anzeige, kein Ereignis — dieselbe Wirkung wie die bisherige
+       Wortobergrenze, nur an behaltenen statt an gesehenen Einträgen gezählt
+       (`TriageResolution.deferred`).
+
+    Ein reiner Lese- und Netzzugriff auf `con`: Es wird kein Ereignis geschrieben, nur
+    `profile.compare_chapter_vocabulary` befragt — das Schreiben bleibt Sache der
+    interaktiven Triage (`cli.interaction.run_triage_pass`), die über jede getroffene
+    Entscheidung entscheidet, nicht über die hier schon aufgelöste Bedeutung."""
+    known_entries = [entry for entry in entries if _all_candidates_known(entry)]
+    remaining = [entry for entry in entries if not _all_candidates_known(entry)]
+    ordered = triage.sort_by_frequency(entry.occurrence for entry in remaining)
+    entries_by_occurrence = {entry.occurrence: entry for entry in remaining}
+
+    resolved: list[ResolvedEntry] = []
+    examined = 0
+    for occurrence in ordered:
+        if len(resolved) >= limit:
+            break
+        examined += 1
+        entry = entries_by_occurrence[occurrence]
+        sense = _resolve_sense(entry, url=url, get_model_name=get_model_name)
+        status = profile.compare_chapter_vocabulary(con, [sense])[sense]
+        if status is VocabularyStatus.KNOWN:
+            continue
+        resolved.append(ResolvedEntry(occurrence=occurrence, sense=sense, status=status))
+
+    return TriageResolution(
+        entries=resolved, known=len(known_entries), deferred=len(ordered) - examined
     )

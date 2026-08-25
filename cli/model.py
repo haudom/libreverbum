@@ -86,11 +86,15 @@ def cached_resolver(url: str, configured_name: str) -> Callable[[], str]:
     """Liefert eine Funktion, die `resolve_model_name` erst bei ihrem ersten Aufruf
     ausführt und das Ergebnis danach unverändert zurückgibt.
 
-    Eine Triage-Sitzung, in der nie „will ich lernen" gewählt wird, braucht den
-    Modellserver nie — `cli.interaction.run_triage_pass` bekommt diese Funktion
-    trotzdem immer übergeben und ruft sie nur dort auf, wo eine Karte entsteht. Kein
-    Zwischenspeicher über einen Lauf hinaus (dokumentation.md §4 Regel 14): Die Liste
-    lebt nur in dieser einen Closure.
+    Eine Triage-Sitzung, in der jede Grundform laut Profil bereits vollständig bekannt ist
+    (`pipeline._all_candidates_known`, der Vorfilter aus `pipeline.resolve_triage_entries`),
+    braucht den Modellserver nie — diese Funktion wird trotzdem immer übergeben und erst
+    dort aufgerufen, wo `pipeline._resolve_sense` tatsächlich eine Bedeutung auflöst. Seit
+    der zweiten T16-Durchsicht (Befund schwer 1) ist das nicht mehr nur „will ich lernen":
+    Die Bedeutung wird für jeden verbleibenden Eintrag vor der Triage aufgelöst, auch für
+    „kenne ich" und „überspringen" (konzept.md, Nachtrag 17.08.2026 beim Kernablauf). Kein
+    Zwischenspeicher über einen Lauf hinaus (dokumentation.md §4 Regel 14): Die Liste lebt
+    nur in dieser einen Closure.
     """
     cache: list[str] = []
 
