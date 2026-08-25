@@ -339,13 +339,28 @@ def run_triage_pass(
     gebucht wird (`entry.sense` in `_individual_phase`/`_bulk_phase`) — vor der Behebung
     bucht(e) dieses Modul „kenne ich" auf `candidates[0]`, während der Vorfilter *alle*
     Kandidaten verlangte, und verfehlte bei 65,8 % mehrdeutigen Grundformen je Kapitel
-    (technik.md §3, Nachtrag 18.08.2026) die meisten bereits bekannten Wörter. Die Anzahl
-    der laut Vorfilter bereits bekannten (`resolution.known`) und der über die
-    Wortobergrenze hinaus zurückgestellten Einträge (`resolution.deferred`) wird gemeldet,
-    nicht verschwiegen (Regel 13)."""
-    if resolution.known:
+    (technik.md §3, Nachtrag 18.08.2026) die meisten bereits bekannten Wörter.
+
+    Vier Zählungen werden gemeldet, nicht verschwiegen (Regel 13): laut Vorfilter bereits
+    bekannt (`resolution.known`) und erst nach dem Auflösen als bekannt erkannt
+    (`resolution.resolved_known`) in einer gemeinsamen Meldung — beide Wege buchen dieselbe
+    Bedeutung als `KNOWN`, nur zu verschiedenen Zeitpunkten im Ablauf, und eine getrennte
+    Zahl ohne die andere wäre wieder die Lücke aus Befund mittel, Durchsicht 46ef37b (im
+    Auftragsbeispiel: „4 bereits bekannt" statt der tatsächlichen 25). Übersprungene
+    Einträge (`resolution.skipped`, Befund schwer 1, Durchsicht 46ef37b): Kandidaten
+    bestanden, aber das Modell wählte „keine passt" — kein Wort, über das der Nutzer hätte
+    entscheiden können, deshalb weder Anzeige noch Buchung, nur diese Zählung. Über die
+    Wortobergrenze hinaus zurückgestellte Einträge (`resolution.deferred`)."""
+    if resolution.known or resolution.resolved_known:
         write_line(
-            f"{resolution.known} {label} laut Profil bereits bekannt — nicht erneut abgefragt."
+            f"{resolution.known + resolution.resolved_known} {label} laut Profil bereits "
+            f"bekannt ({resolution.resolved_known} davon erst nach Auflösen der Bedeutung) "
+            "— nicht erneut abgefragt."
+        )
+    if resolution.skipped:
+        write_line(
+            f"{resolution.skipped} {label} übersprungen: keine der Wörterbuchbedeutungen "
+            "war zuzuordnen."
         )
     if resolution.deferred:
         write_line(f"{resolution.deferred} {label} zurückgestellt (Wortobergrenze erreicht).")

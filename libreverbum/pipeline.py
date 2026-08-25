@@ -280,15 +280,30 @@ class TriageResolution:
     """Ergebnis von `resolve_triage_entries` für **einen** Decksel (Wörter oder Wendungen,
     `cli/interaction.py`, „Festlegung: getrennte Decksel"): `entries` — höchstens `limit`
     aufgelöste Einträge, in Häufigkeitsreihenfolge, bereit für die interaktive Triage —,
-    dazu zwei Zählungen für deren Meldungen davor. `known`: wie viele Einträge der
-    kostenlose Vorfilter bereits verworfen hat, weil jede ihrer Bedeutungen bekannt war
-    (Abnahmekriterium 6). `deferred`: wie viele der übrigen, nach Häufigkeit sortierten
-    Einträge die Wortobergrenze gar nicht mehr erreicht hat — unangetastet wie das bisherige
-    Verhalten von `triage.defer_beyond_word_limit`, nur an **behaltenen** statt an
-    gesehenen Einträgen gezählt (Moduldocstring von `resolve_triage_entries`, Schritt 4)."""
+    dazu vier Zählungen für deren Meldungen davor, die zusammen mit `len(entries)` wieder
+    die volle Eingabemenge ergeben (`resolve_triage_entries`, Schritte 1, 3, 4, 6; Befund
+    mittel, Durchsicht 46ef37b — vorher verschwand `resolved_known` unbeziffert).
+
+    `known`: wie viele Einträge der kostenlose Vorfilter bereits verworfen hat, weil jede
+    ihrer Bedeutungen bekannt war (Abnahmekriterium 6, Schritt 1). `resolved_known`: wie
+    viele weitere Einträge erst **nach** dem Auflösen als `KNOWN` verworfen wurden
+    (Schritt 4) — der Vorfilter allein sieht das bei einem mehrdeutigen Wort nicht, weil
+    nicht *jede* Bedeutung bekannt sein muss, nur die vom Modell aufgelöste (Befund mittel,
+    Durchsicht 46ef37b: Vorher zählte nur `known`, und 21 von 25 im Auftragsbeispiel
+    gebuchten „bereits bekannt"-Wörtern fehlten in jeder gemeldeten Zahl). `skipped`: wie
+    viele Einträge trotz echter Wörterbuchkandidaten übersprungen wurden, weil das Modell
+    „keine passt" wählte (Schritt 3; Befund schwer 1, Durchsicht 46ef37b — siehe
+    `_resolve_sense`); anders als `known` und `resolved_known` steht dahinter **keine**
+    Bedeutung, die gebucht werden könnte. `deferred`: wie viele der übrigen, nach
+    Häufigkeit sortierten Einträge die Wortobergrenze gar nicht mehr erreicht hat
+    (Schritt 6) — unangetastet wie das bisherige Verhalten von
+    `triage.defer_beyond_word_limit`, nur an **behaltenen** statt an gesehenen Einträgen
+    gezählt."""
 
     entries: list[ResolvedEntry]
     known: int
+    resolved_known: int
+    skipped: int
     deferred: int
 
 
@@ -311,8 +326,11 @@ def _all_candidates_known(entry: VocabularyEntry) -> bool:
     )
 
 
-def _resolve_sense(entry: VocabularyEntry, *, url: str, get_model_name: Callable[[], str]) -> Sense:
-    """Löst die im Belegsatz gemeinte Bedeutung eines einzelnen Eintrags auf.
+def _resolve_sense(
+    entry: VocabularyEntry, *, url: str, get_model_name: Callable[[], str]
+) -> Sense | None:
+    """Löst die im Belegsatz gemeinte Bedeutung eines einzelnen Eintrags auf — oder liefert
+    `None`, wenn keine zuordenbar ist (siehe unten).
 
     Besteht `entry.candidates` **nur** aus dem Platzhalter ohne Wörterbucheintrag
     (`uncertain=True`, kein `wikdict_`-Feld — derselbe, den `run_chapter` für eine leere
@@ -326,14 +344,37 @@ def _resolve_sense(entry: VocabularyEntry, *, url: str, get_model_name: Callable
     Wort, „Naiv wäre das Modell für alle ~1.000 Grundformen … zu fragen") geht von genau
     dieser Zählweise aus. `get_model_name` wird deshalb erst hier aufgerufen, nicht vom
     Aufrufer vorab — eine Kette aus lauter Platzhaltern braucht den Modellserver nie."""
+    # (Befund schwer 1, Durchsicht 46ef37b): Wählt das Modell hier die Ausweichantwort
+    # „keine passt" (`choose_sense` liefert dafür denselben bloßen `Sense(uncertain=True)`
+    # wie für eine leere Auswahlliste — translation.py, „Regeln"), gibt diese Funktion
+    # `None` zurück statt des Platzhalters. `entry.candidates` besteht an dieser Stelle
+    # ausschließlich aus echten, nicht-uncertain Wörterbuchkandidaten: Der einzige Weg, wie
+    # ein VocabularyEntry hier je einen uncertain-Kandidaten führt (`run_chapter`s
+    # Platzhalter für eine leere Auswahlliste, `dictionary.particle_verb_candidates` für
+    # ein Phrasal Verb ohne Treffer), liefert ihn stets als **einzigen** Eintrag der Liste
+    # — und der ist durch die frühe Rückgabe oben bereits abgedeckt. Ein `uncertain`-Ergebnis
+    # von `choose_sense` kann in diesem Zweig deshalb nur aus dessen eigener
+    # „keine passt"-Antwort stammen, nie aus einem übernommenen Kandidaten (anders als der
+    # allgemeinere Fall, den translation.py, „Voraussetzungen" für sich offenhält). Vorher
+    # schrieb dieser Platzhalter — ohne jeden `wikdict_`-Wert — als „kenne ich"/„überspringen"
+    # gebuchte Bedeutung dauerhaft ins Profil und machte jede echte Bedeutung desselben
+    # Lemmas fortan fälschlich zur „neuen Bedeutung eines bekannten Wortes" (Auftragstext,
+    # „bank"-Beispiel). Ohne zuordenbare Bedeutung gibt es nichts, worauf eine
+    # Triage-Entscheidung gebucht werden könnte — eine falsche Buchung im Profil ist teurer
+    # als ein ausgelassenes Wort. Der Aufrufer (`resolve_triage_entries`) zählt diesen Fall
+    # gesondert (`TriageResolution.skipped`) und meldet ihn, statt ihn stillschweigend wie
+    # „kein Wörterbucheintrag" zu behandeln (Regel 13).
     if len(entry.candidates) == 1 and entry.candidates[0].uncertain:
         return entry.candidates[0]
-    return translation.choose_sense(
+    chosen = translation.choose_sense(
         url=url,
         model_name=get_model_name(),
         occurrence=entry.occurrence,
         sense_candidates=entry.candidates,
     )
+    if chosen.uncertain:
+        return None
+    return chosen
 
 
 def resolve_triage_entries(
@@ -353,25 +394,38 @@ def resolve_triage_entries(
     überhaupt etwas sieht:
 
     1. **Vorfilter, kostenlos:** Ein Eintrag, dessen sämtliche Kandidaten bereits `KNOWN`
-       sind, fällt ohne Modellaufruf weg (`_all_candidates_known`).
+       sind, fällt ohne Modellaufruf weg (`_all_candidates_known`), gezählt in
+       `TriageResolution.known`.
     2. Der Rest wird nach Häufigkeit sortiert (`triage.sort_by_frequency`) — häufigste
        zuerst, wie in der Triage selbst (konzept.md §4).
     3. In dieser Reihenfolge löst `_resolve_sense` je Eintrag die gemeinte Bedeutung auf
-       (eine Anfrage je Wort, kein Bündeln — technik.md §3, Nachtrag 19.08.2026), und der
-       frisch gegen das Profil abgeglichene Kenntnisstand dieser **einen** Bedeutung
-       entscheidet weiter: `KNOWN` heißt, der Nutzer hat genau diese Bedeutung schon
-       gebucht — der Eintrag fällt weg, ohne einen Platz von `limit` zu verbrauchen. Sonst
-       bleibt er, markiert als `UNKNOWN` oder `NEW_MEANING_OF_KNOWN_WORD` (konzept.md §5,
-       „Mehrdeutigkeit"; der `bank`-Fall: Ufer bekannt, Kapitel meint das Geldhaus — der
-       Vorfilter aus Schritt 1 greift nicht, weil nicht *jede* Bedeutung bekannt ist, das
-       Modell löst auf, und die Geldhaus-Bedeutung erscheint markiert).
-    4. Abbruch, sobald auf diese Art `limit` Einträge **behalten** wurden — typisch 25 bis
+       (eine Anfrage je Wort, kein Bündeln — technik.md §3, Nachtrag 19.08.2026). Wählt das
+       Modell dabei „keine passt", obwohl echte Wörterbuchkandidaten vorlagen, liefert
+       `_resolve_sense` `None`: Der Eintrag wird übersprungen, ohne einen Platz von `limit`
+       zu verbrauchen, ohne Profilabgleich und ohne Buchung — gezählt in
+       `TriageResolution.skipped` (Befund schwer 1, Durchsicht 46ef37b). Anders als bei
+       einem Wort ganz ohne Wörterbucheintrag (Schritt „Voraussetzungen" oben) gibt es hier
+       nichts, worauf eine Triage-Entscheidung gebucht werden könnte.
+    4. Sonst entscheidet der frisch gegen das Profil abgeglichene Kenntnisstand dieser
+       **einen** aufgelösten Bedeutung weiter: `KNOWN` heißt, der Nutzer hat genau diese
+       Bedeutung schon gebucht — der Eintrag fällt weg, ohne einen Platz von `limit` zu
+       verbrauchen, gezählt in `TriageResolution.resolved_known`. Sonst bleibt er, markiert
+       als `UNKNOWN` oder `NEW_MEANING_OF_KNOWN_WORD` (konzept.md §5, „Mehrdeutigkeit"; der
+       `bank`-Fall: Ufer bekannt, Kapitel meint das Geldhaus — der Vorfilter aus Schritt 1
+       greift nicht, weil nicht *jede* Bedeutung bekannt ist, das Modell löst auf, und die
+       Geldhaus-Bedeutung erscheint markiert).
+    5. Abbruch, sobald auf diese Art `limit` Einträge **behalten** wurden — typisch 25 bis
        40 Modellaufrufe (`TriageResolution.entries` plus die dabei verworfenen `KNOWN`-
-       Treffer), nicht mehrere Hundert.
-    5. Was danach in der sortierten Liste noch steht, wird nicht mehr angerührt: kein
+       Treffer aus Schritt 4 und die übersprungenen aus Schritt 3), nicht mehrere Hundert.
+    6. Was danach in der sortierten Liste noch steht, wird nicht mehr angerührt: kein
        Modellaufruf, keine Anzeige, kein Ereignis — dieselbe Wirkung wie die bisherige
        Wortobergrenze, nur an behaltenen statt an gesehenen Einträgen gezählt
        (`TriageResolution.deferred`).
+
+    `known + resolved_known + skipped + deferred + len(resolution.entries)` ergibt wieder
+    `len(entries)` — die Zahl der hier übergebenen Einträge, unabhängig davon, wie sie sich
+    auf die vier Zählungen und die behaltene Liste verteilen. Die Zusicherung dazu steht in
+    `tests/test_pipeline.py` (Auftrag zu Befund mittel, Durchsicht 46ef37b).
 
     Ein reiner Lese- und Netzzugriff auf `con`: Es wird kein Ereignis geschrieben, nur
     `profile.compare_chapter_vocabulary` befragt — das Schreiben bleibt Sache der
@@ -383,6 +437,8 @@ def resolve_triage_entries(
     entries_by_occurrence = {entry.occurrence: entry for entry in remaining}
 
     resolved: list[ResolvedEntry] = []
+    resolved_known = 0
+    skipped = 0
     examined = 0
     for occurrence in ordered:
         if len(resolved) >= limit:
@@ -390,11 +446,25 @@ def resolve_triage_entries(
         examined += 1
         entry = entries_by_occurrence[occurrence]
         sense = _resolve_sense(entry, url=url, get_model_name=get_model_name)
+        if sense is None:
+            # (Befund schwer 1, Durchsicht 46ef37b): entry.candidates enthielt echte
+            # Wörterbuchkandidaten, das Modell wählte aber „keine passt" — siehe
+            # _resolve_sense. Kein Profilabgleich, keine Buchung, nur gezählt.
+            skipped += 1
+            continue
         status = profile.compare_chapter_vocabulary(con, [sense])[sense]
         if status is VocabularyStatus.KNOWN:
+            # (Befund mittel, Durchsicht 46ef37b): vorher ungezählt weggeworfen — die
+            # Meldung „N bereits bekannt" verschwieg dadurch genau die Wörter, die erst
+            # nach dem Auflösen als bekannt erkannt wurden (Auftragstext: 21 von 25).
+            resolved_known += 1
             continue
         resolved.append(ResolvedEntry(occurrence=occurrence, sense=sense, status=status))
 
     return TriageResolution(
-        entries=resolved, known=len(known_entries), deferred=len(ordered) - examined
+        entries=resolved,
+        known=len(known_entries),
+        resolved_known=resolved_known,
+        skipped=skipped,
+        deferred=len(ordered) - examined,
     )

@@ -11,8 +11,18 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from cli import interaction
 from libreverbum import dictionary, epub, extraction, pipeline, profile
-from libreverbum.entities import Book, Event, KnowledgeState, Lemma, Occurrence, Origin, Sense
+from libreverbum.entities import (
+    Book,
+    CardDirection,
+    Event,
+    KnowledgeState,
+    Lemma,
+    Occurrence,
+    Origin,
+    Sense,
+)
 from libreverbum.extraction import load_nlp
 
 if TYPE_CHECKING:
@@ -602,7 +612,11 @@ def test_resolve_triage_entries_drops_an_ambiguous_entry_whose_meant_sense_is_kn
     das Profil greift." Hier an einem **mehrdeutigen** Wort (`bank`, zwei Kandidaten,
     Befund schwer 1 aus dem Auftrag): Der Vorfilter allein kann den Eintrag nicht
     herausnehmen, weil nicht *jede* Bedeutung bekannt ist — erst nachdem das Modell im
-    Belegsatz die bereits bekannte Bedeutung (Geldinstitut) auflöst, fällt er weg."""
+    Belegsatz die bereits bekannte Bedeutung (Geldinstitut) auflöst, fällt er weg.
+
+    Zählt dabei in `resolution.resolved_known`, nicht in `resolution.known` (Befund mittel,
+    Durchsicht 46ef37b): Der Vorfilter selbst hat den Eintrag nicht verworfen, das geschah
+    erst nach der Auflösung."""
     institution = _triage_sense("bank", "NOUN", "Bank")
     edge_of_river = _triage_sense("bank", "NOUN", "Ufer")
     entry = pipeline.VocabularyEntry(
@@ -629,6 +643,8 @@ def test_resolve_triage_entries_drops_an_ambiguous_entry_whose_meant_sense_is_kn
         con.close()
 
     assert resolution.entries == []
+    assert resolution.resolved_known == 1
+    assert resolution.known == 0
     assert len(model_server_double.requests) == 1
 
 
@@ -795,3 +811,186 @@ def test_resolve_triage_entries_stops_once_the_limit_of_kept_entries_is_reached(
     assert len(resolution.entries) == limit
     assert len(model_server_double.requests) == limit
     assert resolution.deferred == total - limit
+
+
+def test_resolve_triage_entries_skips_and_never_lets_a_no_match_reach_the_profile(
+    profile_path: Path, model_server_double: ModelServerDouble
+) -> None:
+    """Befund schwer 1, Durchsicht 46ef37b: Wählt das Modell „keine passt", obwohl `bank`
+    zwei echte Wörterbuchkandidaten hat, darf weder der Platzhalter in die Triage gelangen
+    noch — geht das Ergebnis unverändert an `cli.interaction.run_triage_pass` weiter —
+    jemals eine Bedeutungszeile ohne jeden `wikdict_`-Wert im Profil landen. Genau das tat
+    die vorige Fassung: Der Platzhalter erschien in der Triage als „kein
+    Wörterbucheintrag — unsicher", eine Buchung von dort (etwa „kenne ich") schrieb ihn
+    dauerhaft ins Profil, und jede echte Bedeutung von `bank` galt danach fälschlich als
+    „neue Bedeutung eines bekannten Wortes" (Auftragstext, `bank`-Beispiel).
+
+    Verfälschungsprobe: Lässt `_resolve_sense` weiterhin `chosen` statt `None`
+    zurückgeben, steht nach diesem Testlauf eine `sense`-Zeile für „bank" mit allen drei
+    `wikdict_`-Feldern `NULL` in der Profildatei — der Test war an dieser Fassung rot,
+    schon an `resolution.entries == []`, spätestens aber an der Datenbankprüfung am Ende
+    (dort bricht `read_line` sonst mit einer eigenen `AssertionError` ab, weil
+    `run_triage_pass` für den Platzhalter tatsächlich eine Frage stellt)."""
+    institution = _triage_sense("bank", "NOUN", "Bank")
+    edge_of_river = _triage_sense("bank", "NOUN", "Ufer")
+    entry = pipeline.VocabularyEntry(
+        occurrence=_triage_occurrence("bank", "NOUN", frequency=3),
+        candidates=[institution, edge_of_river],
+        status={
+            institution: profile.VocabularyStatus.UNKNOWN,
+            edge_of_river: profile.VocabularyStatus.UNKNOWN,
+        },
+    )
+    # option_count = len(candidates) + 1 = 3 — die Nummer der Ausweichantwort „keine passt"
+    # (translation.py, „Regeln"), kein Sonderwert außerhalb von 1..N+1.
+    model_server_double.choice = 3
+
+    def _no_question_expected(prompt: str) -> str:
+        raise AssertionError(
+            f"run_triage_pass hat trotz leerer resolution.entries gefragt: {prompt!r}"
+        )
+
+    con = profile.open_profile(profile_path)
+    try:
+        interaction.ensure_chapter_row(con, _TRIAGE_BOOK, 1, "Testkapitel")
+        resolution = pipeline.resolve_triage_entries(
+            con=con,
+            entries=[entry],
+            limit=10,
+            url=model_server_double.url,
+            get_model_name=lambda: model_server_double.model_name,
+        )
+        assert resolution.entries == []
+        assert resolution.skipped == 1
+        assert resolution.known == 0
+        assert resolution.resolved_known == 0
+        assert len(model_server_double.requests) == 1
+
+        cards = interaction.run_triage_pass(
+            con=con,
+            book=_TRIAGE_BOOK,
+            chapter_number=1,
+            resolution=resolution,
+            label="Wörter",
+            card_direction=CardDirection.EN_DE,
+            read_line=_no_question_expected,
+            write_line=lambda _line: None,
+        )
+        assert cards == []
+
+        placeholder_rows = con.execute(
+            "SELECT COUNT(*) FROM sense s JOIN lemma l ON l.id = s.lemma_id "
+            "WHERE l.text = ? AND s.wikdict_lexentry IS NULL AND s.wikdict_sense IS NULL "
+            "AND s.wikdict_trans_list IS NULL",
+            ("bank",),
+        ).fetchone()[0]
+        assert placeholder_rows == 0
+    finally:
+        con.close()
+
+
+def test_resolve_triage_entries_counts_add_up_to_the_input_size(
+    profile_path: Path, model_server_double: ModelServerDouble
+) -> None:
+    """Befund mittel, Durchsicht 46ef37b: `known + resolved_known + skipped + deferred +
+    len(resolution.entries)` muss wieder die Zahl der übergebenen Einträge ergeben — sonst
+    verschwindet ein Teil unbeziffert aus jeder Meldung, wie im Auftragsbeispiel
+    („4" statt „25" bereits bekannt: 4 + 1.360 + 25 = 1.389 statt 1.410).
+
+    Eine Häufigkeitskaskade mit je einem Eintrag für jede der vier Zählungen und der
+    behaltenen Liste: `alpha` (Vorfilter bekannt, kein Modellaufruf), `vault`
+    (mehrdeutig, wie der `bank`-Fall erst nach Auflösen als bekannt erkannt), `spring`
+    (mehrdeutig, Modell wählt „keine passt" trotz echter Kandidaten, Befund schwer 1),
+    `pen` (bleibt in der Triage) und `quiz` (mit `limit=1` nie erreicht — die
+    Abbruchbedingung selbst bleibt unangetastet, siehe Auftrag). Dieselbe `choice`-Zahl
+    ergibt an einem Eintrag mit einem echten Kandidaten die Auswahl dieses Kandidaten und
+    an einem mit zweien die Ausweichantwort — ausgenutzt über eine Warteschlange, die
+    `get_model_name` bei jedem Aufruf weiterschaltet (Aufrufreihenfolge = Häufigkeits-
+    reihenfolge, `triage.sort_by_frequency`).
+
+    Verfälschungsprobe: Der `continue` für einen erst nach dem Auflösen bekannten Eintrag
+    ohne `resolved_known += 1` (der Stand vor dieser Behebung) lässt die Summe um genau 1
+    hinter der Eingabemenge zurück — dieser Test war daran rot."""
+    alpha_sense = _triage_sense("alpha", "NOUN", "Alpha")
+    known_entry = pipeline.VocabularyEntry(
+        occurrence=_triage_occurrence("alpha", "NOUN", frequency=1),
+        candidates=[alpha_sense],
+        status={alpha_sense: profile.VocabularyStatus.KNOWN},
+    )
+
+    vault_known = _triage_sense("vault", "NOUN", "Gewoelbe")
+    vault_other = _triage_sense("vault", "NOUN", "Sprung")
+    vault_entry = pipeline.VocabularyEntry(
+        occurrence=_triage_occurrence("vault", "NOUN", frequency=40),
+        candidates=[vault_known, vault_other],
+        status={
+            vault_known: profile.VocabularyStatus.UNKNOWN,
+            vault_other: profile.VocabularyStatus.UNKNOWN,
+        },
+    )
+
+    spring_a = _triage_sense("spring", "NOUN", "Fruehling")
+    spring_b = _triage_sense("spring", "NOUN", "Feder")
+    spring_entry = pipeline.VocabularyEntry(
+        occurrence=_triage_occurrence("spring", "NOUN", frequency=30),
+        candidates=[spring_a, spring_b],
+        status={
+            spring_a: profile.VocabularyStatus.UNKNOWN,
+            spring_b: profile.VocabularyStatus.UNKNOWN,
+        },
+    )
+
+    pen_sense = _triage_sense("pen", "NOUN", "Stift")
+    pen_entry = pipeline.VocabularyEntry(
+        occurrence=_triage_occurrence("pen", "NOUN", frequency=20),
+        candidates=[pen_sense],
+        status={pen_sense: profile.VocabularyStatus.UNKNOWN},
+    )
+
+    quiz_sense = _triage_sense("quiz", "NOUN", "Quiz")
+    quiz_entry = pipeline.VocabularyEntry(
+        occurrence=_triage_occurrence("quiz", "NOUN", frequency=10),
+        candidates=[quiz_sense],
+        status={quiz_sense: profile.VocabularyStatus.UNKNOWN},
+    )
+
+    all_entries = [known_entry, vault_entry, spring_entry, pen_entry, quiz_entry]
+
+    # 1 wählt bei vault (zwei Kandidaten) die erste, bekannte Bedeutung und bei pen (ein
+    # Kandidat) dessen einzige Bedeutung; 3 ist bei spring (zwei Kandidaten, option_count
+    # 3) die Nummer der Ausweichantwort. quiz erreicht die Warteschlange nie — die
+    # Obergrenze schlägt vorher zu.
+    choices = iter([1, 3, 1])
+
+    def _get_model_name() -> str:
+        model_server_double.choice = next(choices)
+        return model_server_double.model_name
+
+    con = profile.open_profile(profile_path)
+    try:
+        _record_known(con, vault_known, _TRIAGE_BOOK, chapter_number=1)
+        resolution = pipeline.resolve_triage_entries(
+            con=con,
+            entries=all_entries,
+            limit=1,
+            url=model_server_double.url,
+            get_model_name=_get_model_name,
+        )
+    finally:
+        con.close()
+
+    assert resolution.known == 1
+    assert resolution.resolved_known == 1
+    assert resolution.skipped == 1
+    assert resolution.deferred == 1
+    assert [entry.occurrence.lemma.text for entry in resolution.entries] == ["pen"]
+    assert len(model_server_double.requests) == 3
+
+    total = (
+        resolution.known
+        + resolution.resolved_known
+        + resolution.skipped
+        + resolution.deferred
+        + len(resolution.entries)
+    )
+    assert total == len(all_entries)

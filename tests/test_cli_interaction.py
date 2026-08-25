@@ -104,7 +104,9 @@ def test_bulk_action_marks_all_more_frequent_words(profile_con: sqlite3.Connecti
     häufigeren Wörter auf einen Schlag" (bauplan.md T10, hier über die Tastatur
     bedient): Position 3 markiert die drei häufigsten Wörter als bekannt, der Rest wird
     einzeln gefragt."""
-    resolution = pipeline.TriageResolution(entries=_entries(5), known=0, deferred=0)
+    resolution = pipeline.TriageResolution(
+        entries=_entries(5), known=0, resolved_known=0, skipped=0, deferred=0
+    )
     answers = iter(["3", "s", "s"])  # Sammelaktion bis 3, dann zwei individuelle "skip"
 
     cards = interaction.run_triage_pass(
@@ -135,7 +137,9 @@ def test_bulk_action_does_not_mark_a_word_behind_the_selected_position(
     Klick nicht mit" — hier mit zwei gleich häufigen Wörtern, damit ein Off-by-one bei
     der Positionsauflösung sichtbar würde."""
     tied = [_resolved_entry("tied_a", "NOUN", 1, "A"), _resolved_entry("tied_b", "NOUN", 1, "B")]
-    resolution = pipeline.TriageResolution(entries=tied, known=0, deferred=0)
+    resolution = pipeline.TriageResolution(
+        entries=tied, known=0, resolved_known=0, skipped=0, deferred=0
+    )
     answers = iter(["1", "s"])
 
     interaction.run_triage_pass(
@@ -161,7 +165,9 @@ def test_learning_a_word_creates_a_card_with_the_already_resolved_sense(
     `pipeline.resolve_triage_entries` bereits aufgelöst hat (Befund schwer 1, zweite
     T16-Durchsicht) — kein weiterer Modellaufruf an dieser Stelle, `entry.sense` wird
     unverändert übernommen."""
-    resolution = pipeline.TriageResolution(entries=_entries(1), known=0, deferred=0)
+    resolution = pipeline.TriageResolution(
+        entries=_entries(1), known=0, resolved_known=0, skipped=0, deferred=0
+    )
     answers = iter(["", "l"])
 
     cards = interaction.run_triage_pass(
@@ -213,6 +219,8 @@ def test_expressions_reach_the_triage_and_the_resulting_card(
             )
         ],
         known=0,
+        resolved_known=0,
+        skipped=0,
         deferred=0,
     )
     answers = iter(["", "l"])
@@ -251,7 +259,9 @@ def test_run_triage_pass_reports_entries_the_pipeline_already_filtered_as_known(
     (`tests/test_pipeline.py`) — hier wird nur geprüft, dass `run_triage_pass` die Zahl
     aus `resolution.known` meldet und ausschließlich zeigt, was tatsächlich in
     `resolution.entries` steht."""
-    resolution = pipeline.TriageResolution(entries=_entries(1), known=1, deferred=0)
+    resolution = pipeline.TriageResolution(
+        entries=_entries(1), known=1, resolved_known=0, skipped=0, deferred=0
+    )
     written: list[str] = []
     answers = iter(["", "s"])  # keine Sammelaktion, dann "skip" für word0
 
@@ -272,6 +282,63 @@ def test_run_triage_pass_reports_entries_the_pipeline_already_filtered_as_known(
     assert any("bereits bekannt" in line for line in written)
 
 
+def test_run_triage_pass_combines_both_ways_of_being_already_known_in_one_message(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """Befund mittel, Durchsicht 46ef37b: Die Meldung „bereits bekannt" muss auch die
+    Einträge zählen, die `pipeline.resolve_triage_entries` erst **nach** dem Auflösen als
+    `KNOWN` verworfen hat (`resolution.resolved_known`) — nicht nur die des kostenlosen
+    Vorfilters (`resolution.known`). Im Auftragsbeispiel fehlten so 21 von 25 Wörtern in
+    der gemeldeten Zahl (4 statt 25)."""
+    resolution = pipeline.TriageResolution(
+        entries=[], known=4, resolved_known=21, skipped=0, deferred=0
+    )
+    written: list[str] = []
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: (_ for _ in ()).throw(AssertionError("keine Frage erwartet")),
+        write_line=written.append,
+    )
+
+    matching = [line for line in written if "bereits bekannt" in line]
+    assert len(matching) == 1
+    assert "25 Wörter" in matching[0]
+
+
+def test_run_triage_pass_reports_entries_skipped_for_no_matching_sense(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """Befund schwer 1, Durchsicht 46ef37b: Ein Eintrag, den `resolve_triage_entries`
+    übersprungen hat, weil das Modell trotz echter Wörterbuchkandidaten „keine passt"
+    wählte (`resolution.skipped`), wird gezählt gemeldet — Regel 13, keine stille
+    Störungsmeldung."""
+    resolution = pipeline.TriageResolution(
+        entries=[], known=0, resolved_known=0, skipped=2, deferred=0
+    )
+    written: list[str] = []
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: (_ for _ in ()).throw(AssertionError("keine Frage erwartet")),
+        write_line=written.append,
+    )
+
+    matching = [line for line in written if "übersprungen" in line]
+    assert len(matching) == 1
+    assert "2 Wörter" in matching[0]
+
+
 def test_new_meaning_of_a_known_word_is_marked_in_the_display(
     profile_con: sqlite3.Connection,
 ) -> None:
@@ -282,7 +349,9 @@ def test_new_meaning_of_a_known_word_is_marked_in_the_display(
     entry = _resolved_entry(
         "bank", "NOUN", 2, "Ufer", status=VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD
     )
-    resolution = pipeline.TriageResolution(entries=[entry], known=0, deferred=0)
+    resolution = pipeline.TriageResolution(
+        entries=[entry], known=0, resolved_known=0, skipped=0, deferred=0
+    )
     written: list[str] = []
     answers = iter(["", "s"])
 
@@ -315,7 +384,9 @@ def test_a_word_without_a_dictionary_entry_keeps_its_uncertain_marker_when_learn
         sense=placeholder,
         status=VocabularyStatus.UNKNOWN,
     )
-    resolution = pipeline.TriageResolution(entries=[entry], known=0, deferred=0)
+    resolution = pipeline.TriageResolution(
+        entries=[entry], known=0, resolved_known=0, skipped=0, deferred=0
+    )
     answers = iter(["", "l"])
 
     cards = interaction.run_triage_pass(
