@@ -57,9 +57,13 @@ choose_sense` auf — den einzigen Ort mit Modellzugriff (technik.md §7) — un
 bewusst **nicht** Teil von `run_chapter`. Zwei Gründe:
 
 1. `run_chapter`s Kosten (rund 1,1 s) bleiben unverändert und ohne Netzabhängigkeit, statt
-   für jeden Aufrufer verbindlich rund 25 bis 40 Modellanfragen mitzubringen. Ein künftiger
-   Aufrufer, der nur die Auswahllisten braucht (etwa ein Messwerkzeug), bekommt sie weiterhin
-   ohne Modellserver
+   für jeden Aufrufer verbindlich Modellanfragen mitzubringen — bei `[triage] order =
+   "new_words_first"` (technik.md §9, Vorgabe) rund `limit` Stück, bei `"frequency"` unter
+   Umständen mehrere Hundert (Auftragstext vom 25.08.2026, „Der Anlass": acht Messungen
+   desselben Kapitels ergaben 36 bis 206 Aufrufe, weil ein als `KNOWN` aufgelöster Eintrag
+   zwar einen Aufruf kostet, aber keinen Platz von `limit` belegt). Ein künftiger Aufrufer,
+   der nur die Auswahllisten braucht (etwa ein Messwerkzeug), bekommt sie weiterhin ohne
+   Modellserver
 2. `resolve_triage_entries` bekommt `limit` **je Decksel** (`cli.interaction.WORD_LIMIT` für
    `entries`, `EXPRESSION_LIMIT` für `expressions`, „Festlegung: getrennte Decksel",
    `cli/interaction.py`) — zwei verschiedene Aufrufe mit zwei verschiedenen Obergrenzen. In
@@ -326,6 +330,21 @@ def _all_candidates_known(entry: VocabularyEntry) -> bool:
     )
 
 
+def _no_candidate_known(entry: VocabularyEntry) -> bool:
+    """Die zweite Hälfte der zweistufigen Auswahl (Auftragstext vom 25.08.2026, Abschnitt
+    1): Ein Eintrag gilt als **sicherer Treffer**, wenn kein einziger seiner Kandidaten
+    bereits `KNOWN` ist — welche Bedeutung das Modell in `_resolve_sense` auch wählt, sie
+    ist damit garantiert nicht bekannt, und der Aufruf ist nie an einem `KNOWN`-Ergebnis
+    verschwendet (anders als bei einem *teilweise* bekannten Eintrag, den erst der frische
+    Profilabgleich in `resolve_triage_entries` als `resolved_known` verwirft).
+
+    Zusammen mit `_all_candidates_known` zerlegt dieses Prädikat `entries` in die drei
+    Gruppen aus dem Auftrag: **vollständig bekannt** (`_all_candidates_known`, kostenlos),
+    **sicher** (kein Kandidat bekannt, dieses Prädikat) und **teilweise bekannt** (der
+    Rest — weder das eine noch das andere)."""
+    return all(entry.status.get(sense) is not VocabularyStatus.KNOWN for sense in entry.candidates)
+
+
 def _resolve_sense(
     entry: VocabularyEntry, *, url: str, get_model_name: Callable[[], str]
 ) -> Sense | None:
@@ -377,6 +396,9 @@ def _resolve_sense(
     return chosen
 
 
+_VALID_TRIAGE_ORDERS = ("new_words_first", "frequency")
+
+
 def resolve_triage_entries(
     *,
     con: sqlite3.Connection,
@@ -384,20 +406,44 @@ def resolve_triage_entries(
     limit: int,
     url: str,
     get_model_name: Callable[[], str],
+    order: str = "new_words_first",
+    on_progress: Callable[[int, int, int, int], None] | None = None,
 ) -> TriageResolution:
     """Bereitet einen Decksel aus `ChapterVocabulary` (`entries` oder `expressions`) für
     die interaktive Triage vor (Befund schwer 1, zweite T16-Durchsicht) — Vorfilter,
-    Häufigkeitssortierung, Bedeutungsauflösung durch das Modell, Wortobergrenze, in dieser
-    Reihenfolge, damit das Budget aus konzept.md §4 („eine halbe Minute" bei höchstens 25
-    neuen Wörtern) hält, statt für alle rund 1.000 Grundformen eines Kapitels zu fragen —
-    das wären bei rund 1 s je Wort (technik.md §3) rund 17 Minuten, bevor der Nutzer
-    überhaupt etwas sieht:
+    zweistufige Auswahl, Bedeutungsauflösung durch das Modell, Wortobergrenze, in dieser
+    Reihenfolge, damit das Budget aus technik.md §3 („Bei rund einer Sekunde je Wort … im
+    Bereich einer halben Minute" bei höchstens 25 neuen Wörtern) hält, statt für alle rund
+    1.000 Grundformen eines Kapitels zu fragen — das wären bei rund 1 s je Wort rund
+    17 Minuten, bevor der Nutzer überhaupt etwas sieht. `order` steuert dabei, **welche**
+    Einträge dem Modell zuerst vorgelegt werden (`[triage] order` aus `config.toml`,
+    technik.md §9); ein anderer Wert als `"new_words_first"` oder `"frequency"` bricht
+    sofort mit einer deutschen Meldung ab, statt still auf die Vorgabe zurückzufallen
+    (Regel 13, dokumentation.md §4):
 
     1. **Vorfilter, kostenlos:** Ein Eintrag, dessen sämtliche Kandidaten bereits `KNOWN`
        sind, fällt ohne Modellaufruf weg (`_all_candidates_known`), gezählt in
        `TriageResolution.known`.
-    2. Der Rest wird nach Häufigkeit sortiert (`triage.sort_by_frequency`) — häufigste
-       zuerst, wie in der Triage selbst (konzept.md §4).
+    2. **Zweistufige Auswahl** (Auftragstext vom 25.08.2026, Abschnitt 1) statt einer
+       einzigen, gemeinsam sortierten Liste — der eigentliche Anlass: Acht Messungen
+       desselben Kapitels ergaben unter der alten, einstufigen Häufigkeitsreihenfolge 36
+       bis 206 Modellaufrufe, weil ein Eintrag, dessen aufgelöste Bedeutung sich als
+       `KNOWN` herausstellt (Schritt 4 unten), zwar einen Aufruf kostet, aber keinen Platz
+       von `limit` belegt — im Grenzfall (reifes Profil, neues Kapitel) fast jede der rund
+       1.000 bis 1.400 Grundformen eines Kapitels. Der Rest aus Schritt 1 zerfällt deshalb
+       in zwei weitere Gruppen (`_no_candidate_known`): **sichere Treffer** (kein Kandidat
+       `KNOWN` — welche Bedeutung das Modell auch wählt, sie ist nicht bekannt, ein Aufruf
+       hier ist nie an einem `KNOWN`-Ergebnis verschwendet) und **teilweise bekannte**
+       (mindestens ein, aber nicht jeder Kandidat `KNOWN` — zugleich die Kandidaten für
+       „neue Bedeutung eines bekannten Wortes", konzept.md §5). Bei `order =
+       "new_words_first"` (Vorgabe) füllen die `limit` Plätze zuerst die sicheren Treffer,
+       je Gruppe nach Häufigkeit (`triage.sort_by_frequency`) — erst wenn sie nicht
+       reichen, geht es in die teilweise bekannten hinein; ein Kapitel mit genug sicheren
+       Treffern kostet damit rund `limit` Modellaufrufe statt mehrerer Hundert. Bei `order
+       = "frequency"` — dem bisherigen Verhalten — laufen beide Gruppen gemeinsam in
+       einer einzigen Häufigkeitsreihenfolge, wie vor dieser Behebung; findet dabei mehr
+       neue Bedeutungen bekannter Wörter, kostet bei reifem Profil aber wieder bis zu
+       mehrere Hundert Aufrufe.
     3. In dieser Reihenfolge löst `_resolve_sense` je Eintrag die gemeinte Bedeutung auf
        (eine Anfrage je Wort, kein Bündeln — technik.md §3, Nachtrag 19.08.2026). Wählt das
        Modell dabei „keine passt", obwohl echte Wörterbuchkandidaten vorlagen, liefert
@@ -414,32 +460,70 @@ def resolve_triage_entries(
        `bank`-Fall: Ufer bekannt, Kapitel meint das Geldhaus — der Vorfilter aus Schritt 1
        greift nicht, weil nicht *jede* Bedeutung bekannt ist, das Modell löst auf, und die
        Geldhaus-Bedeutung erscheint markiert).
-    5. Abbruch, sobald auf diese Art `limit` Einträge **behalten** wurden — typisch 25 bis
-       40 Modellaufrufe (`TriageResolution.entries` plus die dabei verworfenen `KNOWN`-
-       Treffer aus Schritt 4 und die übersprungenen aus Schritt 3), nicht mehrere Hundert.
+    5. Abbruch, sobald auf diese Art `limit` Einträge **behalten** wurden.
     6. Was danach in der sortierten Liste noch steht, wird nicht mehr angerührt: kein
        Modellaufruf, keine Anzeige, kein Ereignis — dieselbe Wirkung wie die bisherige
        Wortobergrenze, nur an behaltenen statt an gesehenen Einträgen gezählt
        (`TriageResolution.deferred`).
 
+    Die **Anzeigereihenfolge** bleibt in beiden Fällen Häufigkeit: Die behaltenen Einträge
+    werden am Ende erneut nach `triage.sort_by_frequency` sortiert, unabhängig davon, in
+    welcher Reihenfolge sie beim Auflösen verarbeitet wurden — sonst schlüge die
+    Auswahlstrategie aus Schritt 2 in die Triage durch, in der weiterhin die häufigsten
+    Wörter zuerst stehen sollen (konzept.md §4).
+
     `known + resolved_known + skipped + deferred + len(resolution.entries)` ergibt wieder
     `len(entries)` — die Zahl der hier übergebenen Einträge, unabhängig davon, wie sie sich
     auf die vier Zählungen und die behaltene Liste verteilen. Die Zusicherung dazu steht in
-    `tests/test_pipeline.py` (Auftrag zu Befund mittel, Durchsicht 46ef37b).
+    `tests/test_pipeline.py` (Auftrag zu Befund mittel, Durchsicht 46ef37b) — die
+    zweistufige Auswahl führt keine neue Zählung ein, sie ändert nur die Reihenfolge, in
+    der Schritt 3 die Einträge vorlegt.
+
+    `on_progress`, falls übergeben, wird nach **jedem** Schritt 3/4-Durchlauf mit vier
+    Zahlen aufgerufen — geprüfte Einträge, insgesamt zu prüfende (`len(ordered)`, vor
+    Schritt 5 feststehend), bisher behaltene, `limit` —, damit die Kommandozeile eine sich
+    fortschreibende Statuszeile zeigen kann (Auftragstext, Abschnitt 3): Ein Lauf, der bei
+    `order = "frequency"` und reifem Profil minutenlang ohne jede Ausgabe rechnet, ist
+    sonst der stille Fehlschlag, den Regel 13 verbietet. Der Kern selbst gibt nichts aus
+    (technik.md §7) — `cli.main` bedient den Rückruf über `cli.display.safe_print_progress`.
+    Ohne `on_progress` (Vorgabe `None`) verhält sich die Funktion wie vor dieser Behebung.
 
     Ein reiner Lese- und Netzzugriff auf `con`: Es wird kein Ereignis geschrieben, nur
     `profile.compare_chapter_vocabulary` befragt — das Schreiben bleibt Sache der
     interaktiven Triage (`cli.interaction.run_triage_pass`), die über jede getroffene
     Entscheidung entscheidet, nicht über die hier schon aufgelöste Bedeutung."""
+    if order not in _VALID_TRIAGE_ORDERS:
+        # REGEL (dokumentation.md §4 Regel 13): ein unzulässiger Wert bricht sichtbar ab
+        # und nennt die zulässigen Werte, statt still auf die Vorgabe zurückzufallen.
+        # `cli.config.load_config` prüft denselben Wert bereits beim Einlesen von
+        # config.toml — diese Prüfung greift zusätzlich, weil resolve_triage_entries auch
+        # unabhängig von der Kommandozeile aufrufbar bleibt (etwa aus einem Testwerkzeug).
+        erlaubt = " oder ".join(f'"{wert}"' for wert in _VALID_TRIAGE_ORDERS)
+        raise ValueError(f'order = "{order}" ist unzulässig — erlaubt sind {erlaubt}.')
+
     known_entries = [entry for entry in entries if _all_candidates_known(entry)]
     remaining = [entry for entry in entries if not _all_candidates_known(entry)]
-    ordered = triage.sort_by_frequency(entry.occurrence for entry in remaining)
     entries_by_occurrence = {entry.occurrence: entry for entry in remaining}
+
+    if order == "new_words_first":
+        certain_entries = [entry for entry in remaining if _no_candidate_known(entry)]
+        partial_entries = [entry for entry in remaining if not _no_candidate_known(entry)]
+        ordered = triage.sort_by_frequency(
+            entry.occurrence for entry in certain_entries
+        ) + triage.sort_by_frequency(entry.occurrence for entry in partial_entries)
+    else:  # "frequency" — das bisherige Verhalten, geprüft ist order oben bereits
+        ordered = triage.sort_by_frequency(entry.occurrence for entry in remaining)
 
     resolved: list[ResolvedEntry] = []
     resolved_known = 0
     skipped = 0
     examined = 0
+    total_to_check = len(ordered)
+
+    def _report_progress() -> None:
+        if on_progress is not None:
+            on_progress(examined, total_to_check, len(resolved), limit)
+
     for occurrence in ordered:
         if len(resolved) >= limit:
             break
@@ -451,6 +535,7 @@ def resolve_triage_entries(
             # Wörterbuchkandidaten, das Modell wählte aber „keine passt" — siehe
             # _resolve_sense. Kein Profilabgleich, keine Buchung, nur gezählt.
             skipped += 1
+            _report_progress()
             continue
         status = profile.compare_chapter_vocabulary(con, [sense])[sense]
         if status is VocabularyStatus.KNOWN:
@@ -458,11 +543,20 @@ def resolve_triage_entries(
             # Meldung „N bereits bekannt" verschwieg dadurch genau die Wörter, die erst
             # nach dem Auflösen als bekannt erkannt wurden (Auftragstext: 21 von 25).
             resolved_known += 1
+            _report_progress()
             continue
         resolved.append(ResolvedEntry(occurrence=occurrence, sense=sense, status=status))
+        _report_progress()
+
+    # Auftragstext, Abschnitt 1: Die Anzeigereihenfolge bleibt Häufigkeit, unabhängig von
+    # der Verarbeitungsreihenfolge aus Schritt 2 oben — sonst schlüge die Auswahlstrategie
+    # in die Triage durch.
+    display_order = triage.sort_by_frequency(entry.occurrence for entry in resolved)
+    resolved_by_occurrence = {entry.occurrence: entry for entry in resolved}
+    resolved_sorted = [resolved_by_occurrence[occurrence] for occurrence in display_order]
 
     return TriageResolution(
-        entries=resolved,
+        entries=resolved_sorted,
         known=len(known_entries),
         resolved_known=resolved_known,
         skipped=skipped,

@@ -407,6 +407,60 @@ def test_full_run_learns_a_word_and_an_expression_and_exports_them(
     assert "gave up" in html
 
 
+def test_full_run_reports_progress_through_cli_display(
+    tmp_path: Path,
+    book_epub: Path,
+    mini_dictionary_db: Path,
+    model_server_double: ModelServerDouble,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Auftragstext vom 25.08.2026, Abschnitt 3: `cli.main` bedient den Fortschritts-
+    Rückruf aus `pipeline.resolve_triage_entries` über `cli.display.safe_print_progress`
+    und schließt die Zeile mit `finish_progress_line` ab — hier über den vollen
+    Einstiegspunkt geprüft, nicht nur isoliert an `cli.main._resolve_with_progress`.
+
+    Verfälschungsprobe: Ruft `_resolve_with_progress` `on_progress` nicht an
+    `pipeline.resolve_triage_entries` durch (etwa weil `on_progress=None` bliebe), bliebe
+    `progress_calls` leer — dieser Test war daran rot."""
+    data_dir = tmp_path / "data"
+    _write_config(
+        data_dir,
+        model_url=model_server_double.url,
+        model_name=model_server_double.model_name,
+        dictionary_path=mini_dictionary_db,
+    )
+    model_server_double.choice = 1
+    console = _ScriptedConsole(learn_words={"watch", "gave up"})
+
+    progress_calls: list[str] = []
+    finish_calls: list[None] = []
+    monkeypatch.setattr(
+        "cli.main.safe_print_progress", lambda text, **_kwargs: progress_calls.append(text)
+    )
+    monkeypatch.setattr(
+        "cli.main.finish_progress_line", lambda **_kwargs: finish_calls.append(None)
+    )
+
+    exit_code = main(
+        [
+            str(book_epub),
+            "--chapter",
+            "1",
+            "--data-dir",
+            str(data_dir),
+            "--output-dir",
+            str(tmp_path / "export"),
+        ],
+        read_line=console.read,
+        write_line=console.write,
+    )
+
+    assert exit_code == 0, "\n".join(console.log)
+    assert progress_calls, "Fortschritts-Rückruf wurde nie über cli.display bedient."
+    assert all(text.startswith("Bedeutungen werden aufgelöst: ") for text in progress_calls)
+    assert finish_calls, "finish_progress_line wurde nie aufgerufen."
+
+
 def test_help_text_survives_a_restricted_console_codepage() -> None:
     """Mittel 3 (Durchsicht T16): `argparse.print_help()`/`format_help()` schreiben
     direkt auf `sys.stdout`, an `cli.display.safe_print` vorbei (dokumentation.md §4

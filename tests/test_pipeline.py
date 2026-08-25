@@ -779,10 +779,10 @@ def test_resolve_triage_entries_never_calls_the_model_for_a_word_without_a_dicti
 def test_resolve_triage_entries_stops_once_the_limit_of_kept_entries_is_reached(
     profile_path: Path, model_server_double: ModelServerDouble
 ) -> None:
-    """Zeitbudget aus konzept.md §4 („eine halbe Minute" bei höchstens 25 neuen Wörtern):
+    """Zeitbudget aus technik.md §3 („eine halbe Minute" bei höchstens 25 neuen Wörtern):
     Für ein Kapitel mit sehr vielen Grundformen werden nicht alle beim Modell vorgelegt —
     hier 1.000 synthetische, unzweideutige Wörter gegen ein `limit` von 25. Ohne den
-    Abbruch aus Schritt 4 (`resolve_triage_entries`) wären das 1.000 Modellanfragen statt
+    Abbruch aus Schritt 5 (`resolve_triage_entries`) wären das 1.000 Modellanfragen statt
     25, rund 17 statt einer halben Minute (technik.md §3)."""
     total = 1000
     limit = 25
@@ -994,3 +994,304 @@ def test_resolve_triage_entries_counts_add_up_to_the_input_size(
         + len(resolution.entries)
     )
     assert total == len(all_entries)
+
+
+# ------------------------------------ zweistufige Auswahl, order, Rückruf (Auftrag 25.08.2026)
+
+
+def test_resolve_triage_entries_needs_at_most_limit_model_calls_when_enough_certain_entries_exist(
+    profile_path: Path, model_server_double: ModelServerDouble
+) -> None:
+    """Auftragstext vom 25.08.2026, Abschnitt 1: Auf der Vorgabe (`order =
+    "new_words_first"`) kostet ein Kapitel, in dem genug sichere Treffer vorhanden sind
+    (kein Kandidat `KNOWN`), höchstens `limit` Modellaufrufe — die teilweise bekannten
+    Einträge (`partial`) werden nie angefasst, weil die sicheren Treffer den Deckel schon
+    allein füllen.
+
+    Verfälschungsprobe (dokumentation.md §5, „Ein Test gilt erst als Test..."): Ein Test,
+    in dem jeder betrachtete Eintrag auch behalten wird, bleibt grün, wenn man die
+    Abbruchbedingung von „behalten >= limit" auf „betrachtet >= limit" vertauscht — genau
+    das hat die vorige Durchsicht an `test_resolve_triage_entries_stops_once_the_limit_
+    of_kept_entries_is_reached` bemängelt. Die Vorrichtung enthält deshalb `discard`: der
+    Platzhalter ohne Wörterbucheintrag (`uncertain=True`) als einziger Kandidat, mit der
+    höchsten Häufigkeit — `_resolve_sense` liefert ihn ohne jeden Modellaufruf zurück
+    (Regel 11), ein vorab eingetragenes `known`-Ereignis lässt der frische Profilabgleich
+    ihn danach aber als `resolved_known` verwerfen: **betrachtet und dann verworfen**,
+    ohne die Modellaufruf-Zählung zu belasten. Unter der falschen Abbruchbedingung würde
+    dieser kostenlose Fehlschlag trotzdem einen der `limit` „betrachteten" Plätze
+    verbrauchen, und `len(resolution.entries)` bliebe bei `limit - 1` stehen, statt bei
+    `limit` — an dieser Zusicherung war der Test bei der Verfälschung tatsächlich rot."""
+    limit = 5
+    discard_sense = Sense(lemma=Lemma(text="discard", pos="NOUN"), uncertain=True)
+    discard_entry = pipeline.VocabularyEntry(
+        occurrence=_triage_occurrence("discard", "NOUN", frequency=1000),
+        candidates=[discard_sense],
+        status={},
+    )
+    kept_entries = [
+        pipeline.VocabularyEntry(
+            occurrence=_triage_occurrence(f"keep{i}", "NOUN", frequency=900 - i),
+            candidates=[_triage_sense(f"keep{i}", "NOUN", f"Übersetzung{i}")],
+            status={},
+        )
+        for i in range(limit)
+    ]
+    partial_entries = []
+    for i in range(3):
+        matched = _triage_sense(f"partial{i}_known", "NOUN", "Bekannt")
+        other = _triage_sense(f"partial{i}_other", "NOUN", "Andere")
+        partial_entries.append(
+            pipeline.VocabularyEntry(
+                occurrence=_triage_occurrence(f"partial{i}", "NOUN", frequency=400 - i),
+                candidates=[matched, other],
+                status={
+                    matched: profile.VocabularyStatus.KNOWN,
+                    other: profile.VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD,
+                },
+            )
+        )
+    all_entries = [discard_entry, *kept_entries, *partial_entries]
+    model_server_double.choice = 1
+
+    con = profile.open_profile(profile_path)
+    try:
+        _record_known(con, discard_sense, _TRIAGE_BOOK, chapter_number=1)
+        resolution = pipeline.resolve_triage_entries(
+            con=con,
+            entries=all_entries,
+            limit=limit,
+            url=model_server_double.url,
+            get_model_name=lambda: model_server_double.model_name,
+        )
+    finally:
+        con.close()
+
+    assert len(resolution.entries) == limit
+    assert len(model_server_double.requests) == limit
+    assert resolution.resolved_known == 1
+    assert resolution.skipped == 0
+    assert resolution.known == 0
+    assert resolution.deferred == len(partial_entries)
+    assert {entry.occurrence.lemma.text for entry in resolution.entries} == {
+        f"keep{i}" for i in range(limit)
+    }
+    total = (
+        resolution.known
+        + resolution.resolved_known
+        + resolution.skipped
+        + resolution.deferred
+        + len(resolution.entries)
+    )
+    assert total == len(all_entries)
+
+
+def test_resolve_triage_entries_new_words_first_certain_before_partial_but_sorted_by_frequency(
+    profile_path: Path, model_server_double: ModelServerDouble
+) -> None:
+    """Auftragstext, Abschnitt 1: Unter `order = "new_words_first"` legt
+    `resolve_triage_entries` zuerst die sicheren Treffer vor (hier niedrigere Häufigkeit:
+    "yankee", "xray"), erst danach die teilweise bekannten (hier höhere Häufigkeit: "papa",
+    "quebec") — die Verarbeitungsreihenfolge ist also **nicht** die Häufigkeitsreihenfolge.
+    Die **Anzeigereihenfolge** (`resolution.entries`) bleibt trotzdem Häufigkeit, weil sie
+    am Ende erneut sortiert wird (Auftragstext: „damit die Auswahlstrategie nicht in die
+    Triage durchschlägt").
+
+    Verfälschungsprobe: Lässt man die abschließende Sortierung nach `triage.
+    sort_by_frequency` weg und liefert `resolved` stattdessen in Verarbeitungsreihenfolge
+    zurück, ergibt sich `resolution.entries` „yankee, xray, papa, quebec" statt „papa,
+    quebec, yankee, xray" — an dieser Zusicherung war der Test rot."""
+    partial_specs = [("papa", 90), ("quebec", 80)]
+    certain_specs = [("yankee", 20), ("xray", 10)]
+
+    def _partial(word: str, freq: int) -> pipeline.VocabularyEntry:
+        matched = _triage_sense(f"{word}_known", "NOUN", "Bekannt")
+        other = _triage_sense(f"{word}_other", "NOUN", "Andere")
+        return pipeline.VocabularyEntry(
+            occurrence=_triage_occurrence(word, "NOUN", frequency=freq),
+            candidates=[other, matched],  # "other" zuerst: choice=1 wählt die nicht bekannte
+            status={
+                matched: profile.VocabularyStatus.KNOWN,
+                other: profile.VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD,
+            },
+        )
+
+    def _certain(word: str, freq: int) -> pipeline.VocabularyEntry:
+        return pipeline.VocabularyEntry(
+            occurrence=_triage_occurrence(word, "NOUN", frequency=freq),
+            candidates=[_triage_sense(word, "NOUN", "Übersetzung")],
+            status={},
+        )
+
+    entries = [_partial(w, f) for w, f in partial_specs] + [
+        _certain(w, f) for w, f in certain_specs
+    ]
+    model_server_double.choice = 1
+
+    con = profile.open_profile(profile_path)
+    try:
+        resolution = pipeline.resolve_triage_entries(
+            con=con,
+            entries=entries,
+            limit=4,
+            url=model_server_double.url,
+            get_model_name=lambda: model_server_double.model_name,
+            order="new_words_first",
+        )
+    finally:
+        con.close()
+
+    processed_words = [
+        word
+        for request in model_server_double.requests
+        for word in ("yankee", "xray", "papa", "quebec")
+        if f'"{word}"' in request["messages"][0]["content"]
+    ]
+    assert processed_words == ["yankee", "xray", "papa", "quebec"]
+    assert [entry.occurrence.lemma.text for entry in resolution.entries] == [
+        "papa",
+        "quebec",
+        "yankee",
+        "xray",
+    ]
+
+
+def test_resolve_triage_entries_under_frequency_order_interleaves_both_groups(
+    profile_path: Path, model_server_double: ModelServerDouble
+) -> None:
+    """Auftragstext, Abschnitt 2: `order = "frequency"` ist „genau das heutige Verhalten:
+    sichere Treffer und teilweise bekannte gemeinsam in Häufigkeitsreihenfolge" — die
+    Verarbeitungsreihenfolge mischt beide Gruppen, statt sie wie bei `"new_words_first"`
+    zu trennen.
+
+    Verfälschungsprobe: Ignoriert `resolve_triage_entries` den Wert von `order` und
+    gruppiert immer nach `"new_words_first"`, ergäbe sich die Reihenfolge „alpha, charlie,
+    echo, bravo, delta" (erst alle sicheren, dann alle teilweise bekannten Treffer) statt
+    der erwarteten strikten Häufigkeitsreihenfolge „alpha, bravo, charlie, delta, echo" —
+    an dieser Zusicherung war der Test rot."""
+
+    def _partial(word: str, freq: int) -> pipeline.VocabularyEntry:
+        matched = _triage_sense(f"{word}_known", "NOUN", "Bekannt")
+        other = _triage_sense(f"{word}_other", "NOUN", "Andere")
+        return pipeline.VocabularyEntry(
+            occurrence=_triage_occurrence(word, "NOUN", frequency=freq),
+            candidates=[other, matched],
+            status={
+                matched: profile.VocabularyStatus.KNOWN,
+                other: profile.VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD,
+            },
+        )
+
+    def _certain(word: str, freq: int) -> pipeline.VocabularyEntry:
+        return pipeline.VocabularyEntry(
+            occurrence=_triage_occurrence(word, "NOUN", frequency=freq),
+            candidates=[_triage_sense(word, "NOUN", "Übersetzung")],
+            status={},
+        )
+
+    entries = [
+        _certain("alpha", 100),
+        _partial("bravo", 90),
+        _certain("charlie", 80),
+        _partial("delta", 70),
+        _certain("echo", 60),
+    ]
+    model_server_double.choice = 1
+
+    con = profile.open_profile(profile_path)
+    try:
+        resolution = pipeline.resolve_triage_entries(
+            con=con,
+            entries=entries,
+            limit=10,
+            url=model_server_double.url,
+            get_model_name=lambda: model_server_double.model_name,
+            order="frequency",
+        )
+    finally:
+        con.close()
+
+    expected = ["alpha", "bravo", "charlie", "delta", "echo"]
+    processed_words = [
+        word
+        for request in model_server_double.requests
+        for word in expected
+        if f'"{word}"' in request["messages"][0]["content"]
+    ]
+    assert processed_words == expected
+    assert [entry.occurrence.lemma.text for entry in resolution.entries] == expected
+
+
+def test_resolve_triage_entries_rejects_an_unknown_order_value(profile_path: Path) -> None:
+    """Auftragstext, Abschnitt 2: Ein unzulässiger Wert von `order` bricht sichtbar ab und
+    nennt die zulässigen Werte (Regel 13, dokumentation.md §4) — statt still auf die
+    Vorgabe `new_words_first` zurückzufallen."""
+    entry = pipeline.VocabularyEntry(
+        occurrence=_triage_occurrence("whatever", "NOUN", frequency=1),
+        candidates=[_triage_sense("whatever", "NOUN", "Irgendwas")],
+        status={},
+    )
+
+    def _never_needed() -> str:
+        raise AssertionError("Modellserver wurde trotz ungültigem order-Wert angefragt.")
+
+    con = profile.open_profile(profile_path)
+    try:
+        with pytest.raises(ValueError, match="new_words_first"):
+            pipeline.resolve_triage_entries(
+                con=con,
+                entries=[entry],
+                limit=10,
+                url="http://unerreichbar.invalid",
+                get_model_name=_never_needed,
+                order="alphabetical",
+            )
+    finally:
+        con.close()
+
+
+def test_resolve_triage_entries_reports_ascending_progress_through_the_callback(
+    profile_path: Path, model_server_double: ModelServerDouble
+) -> None:
+    """Auftragstext, Abschnitt 3: `resolve_triage_entries` bekommt einen Rückruf, den die
+    Kommandozeile bedient. Die übrigen Tests dieser Datei übergeben `on_progress` nicht
+    und belegen damit bereits, dass sich die Funktion ohne Rückruf wie bisher verhält;
+    hier wird geprüft, dass der Rückruf tatsächlich aufgerufen wird und die gemeldeten
+    Zahlen (geprüft, behalten) über einen Lauf hinweg nur wachsen."""
+    total = 30
+    limit = 10
+    entries = [
+        pipeline.VocabularyEntry(
+            occurrence=_triage_occurrence(f"word{i}", "NOUN", frequency=total - i),
+            candidates=[_triage_sense(f"word{i}", "NOUN", f"Übersetzung{i}")],
+            status={},
+        )
+        for i in range(total)
+    ]
+    model_server_double.choice = 1
+    reports: list[tuple[int, int, int, int]] = []
+
+    con = profile.open_profile(profile_path)
+    try:
+        resolution = pipeline.resolve_triage_entries(
+            con=con,
+            entries=entries,
+            limit=limit,
+            url=model_server_double.url,
+            get_model_name=lambda: model_server_double.model_name,
+            on_progress=lambda examined, total_to_check, kept, limit_: reports.append(
+                (examined, total_to_check, kept, limit_)
+            ),
+        )
+    finally:
+        con.close()
+
+    assert len(resolution.entries) == limit
+    assert reports  # Rückruf wurde mindestens einmal aufgerufen
+    assert all(total_to_check == total for _, total_to_check, _, _ in reports)
+    assert all(limit_ == limit for _, _, _, limit_ in reports)
+    examined_values = [examined for examined, _, _, _ in reports]
+    kept_values = [kept for _, _, kept, _ in reports]
+    assert examined_values == sorted(examined_values)
+    assert kept_values == sorted(kept_values)
+    assert examined_values == list(range(1, len(reports) + 1))
+    assert reports[-1][2] == limit

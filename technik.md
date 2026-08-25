@@ -1450,6 +1450,7 @@ Oberfläche muss die Vorgabe später nicht beim Kern erfragen, sondern setzt ihr
 | `model.url` | Adresse des Modellservers | `http://localhost:11434/v1` |
 | `model.name` | Modellname | leer — dann das erste, das der Server nennt |
 | `paths.dictionary`, `paths.profile` | abweichende Ablage | leer — dann das Verzeichnis oben |
+| `triage.order` | Reihenfolge, in der `pipeline.resolve_triage_entries` Einträge vor der Triage auflöst (`"new_words_first"` oder `"frequency"`) — seit dem 25.08.2026, weil Regel 14 (dokumentation.md §4) einen zweiten Anwendungsfall verlangt und der vorliegt: Der Nutzer will die teilweise bekannten Wörter wahlweise gleichberechtigt neben den neuen sehen, statt sie grundsätzlich zurückzustellen | `new_words_first` |
 
 Warum eine Datei und nicht bloß ein Aufrufargument: Der Modellserver dieses Projekts läuft
 **nicht** auf `localhost`, sondern auf einer festen Adresse im Heimnetz. Eine Einstellung,

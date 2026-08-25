@@ -33,10 +33,13 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-# REGEL (technik.md §9, „Einstellungen: config.toml"): dieselben vier Schlüssel, dieselben
-# Vorgaben wie in der dortigen Tabelle. Kein fünfter Schlüssel ohne zweiten Anwendungsfall
+# REGEL (technik.md §9, „Einstellungen: config.toml"): dieselben fünf Schlüssel, dieselben
+# Vorgaben wie in der dortigen Tabelle. Kein sechster Schlüssel ohne zweiten Anwendungsfall
 # (dokumentation.md §4 Regel 14) — Kartenrichtung und Wortobergrenze bleiben Aufrufargumente
-# beziehungsweise feste Zahlen, siehe cli/interaction.py und cli/main.py.
+# beziehungsweise feste Zahlen, siehe cli/interaction.py und cli/main.py. `triage.order`
+# ist am 25.08.2026 als fünfter Schlüssel dazugekommen: Regel 14 verlangt einen zweiten
+# Anwendungsfall, und der liegt vor — der Nutzer will die teilweise bekannten Wörter
+# wahlweise gleichberechtigt neben den neuen sehen, statt sie grundsätzlich zurückzustellen.
 _TEMPLATE = """\
 # LibreVerbum — Einstellungen (technik.md §9)
 #
@@ -55,9 +58,26 @@ name = ""
 # Leer lassen, um die Dateien im selben Verzeichnis wie diese Einstellungen abzulegen.
 dictionary = ""
 profile = ""
+
+[triage]
+# "new_words_first": zuerst Wörter, von denen noch keine Bedeutung bekannt ist —
+#   schnell, rund 25 Modellaufrufe je Kapitel.
+# "frequency": streng nach Häufigkeit, einschließlich der Wörter, von denen schon eine
+#   andere Bedeutung bekannt ist. Findet mehr neue Bedeutungen bekannter Wörter, kann
+#   bei reifem Profil aber viele Hundert Modellaufrufe kosten (Größenordnung: eine
+#   halbe Stunde je Kapitel).
+order = "new_words_first"
 """
 
 _CONFIG_FILE_NAME = "config.toml"
+
+# REGEL (dokumentation.md §4 Regel 13): Ein unbekannter Wert bricht sichtbar ab und nennt
+# die zulässigen Werte — nicht stillschweigend auf die Vorgabe zurückfallen. Als Tupel und
+# nicht als Aufzählung aus libreverbum: Dieses Modul importiert laut Moduldocstring nichts
+# aus libreverbum („reine Pfad- und Dateiverwaltung"), `libreverbum.pipeline.
+# resolve_triage_entries` validiert denselben Wert deshalb ein zweites Mal, unabhängig von
+# dieser Stelle.
+_VALID_TRIAGE_ORDERS = ("new_words_first", "frequency")
 
 
 @dataclass(frozen=True)
@@ -69,6 +89,7 @@ class Config:
     model_name: str
     dictionary_path: Path
     profile_path: Path
+    triage_order: str
 
 
 def default_data_dir() -> Path:
@@ -108,7 +129,12 @@ def load_config(data_dir: Path) -> tuple[Config, bool]:
 
     `paths.dictionary` und `paths.profile` bleiben leer in der Vorlage; leer bedeutet
     „im Datenverzeichnis" (technik.md §9, Tabelle „Einstellungen: config.toml").
-    """
+
+    Bricht sichtbar ab (dokumentation.md §4 Regel 13), wenn `triage.order` einen anderen
+    Wert als `"new_words_first"` oder `"frequency"` trägt — ein Tippfehler in `config.toml`
+    soll nicht stillschweigend auf die Vorgabe zurückfallen, sondern sofort auffallen,
+    bevor der Lauf beginnt (nicht erst, wenn `pipeline.resolve_triage_entries` denselben
+    Wert ein zweites Mal prüft)."""
     config_path = data_dir / _CONFIG_FILE_NAME
     just_created = not config_path.is_file()
     if just_created:
@@ -119,6 +145,7 @@ def load_config(data_dir: Path) -> tuple[Config, bool]:
 
     model = raw.get("model", {})
     paths = raw.get("paths", {})
+    triage = raw.get("triage", {})
 
     model_url = str(model.get("url") or "http://localhost:11434/v1")
     model_name = str(model.get("name") or "")
@@ -128,10 +155,19 @@ def load_config(data_dir: Path) -> tuple[Config, bool]:
     dictionary_path = Path(dictionary_raw) if dictionary_raw else data_dir / "en-de.sqlite3"
     profile_path = Path(profile_raw) if profile_raw else data_dir / "profil.sqlite3"
 
+    triage_order = str(triage.get("order") or "new_words_first")
+    if triage_order not in _VALID_TRIAGE_ORDERS:
+        erlaubt = " oder ".join(f'"{wert}"' for wert in _VALID_TRIAGE_ORDERS)
+        raise ValueError(
+            f'[triage] order = "{triage_order}" in {config_path} ist unzulässig — '
+            f"erlaubt sind {erlaubt}."
+        )
+
     config = Config(
         model_url=model_url,
         model_name=model_name,
         dictionary_path=dictionary_path,
         profile_path=profile_path,
+        triage_order=triage_order,
     )
     return config, just_created

@@ -30,12 +30,17 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from cli import config, export, interaction, model
-from cli.display import safe_print
+from cli.display import finish_progress_line, safe_print, safe_print_progress
 from cli.interaction import ReadLine, WriteLine
 from libreverbum import epub, extraction, pipeline, profile
 from libreverbum.entities import CardDirection
+
+if TYPE_CHECKING:
+    import sqlite3
+    from collections.abc import Callable
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -124,6 +129,47 @@ def _choose_chapter(
         write_line("Diese Kapitelnummer gibt es nicht.")
 
 
+def _resolve_with_progress(
+    *,
+    con: sqlite3.Connection,
+    entries: Sequence[pipeline.VocabularyEntry],
+    limit: int,
+    url: str,
+    get_model_name: Callable[[], str],
+    order: str,
+) -> pipeline.TriageResolution:
+    """Ruft `pipeline.resolve_triage_entries` mit einer Fortschrittsanzeige auf
+    (Auftragstext vom 25.08.2026, Abschnitt 3): Ohne Ausgabe wäre ein Lauf bei `[triage]
+    order = "frequency"` und reifem Profil minutenlang stumm — der stille Fehlschlag, den
+    Regel 13 (dokumentation.md §4) verbietet. Der Kern gibt selbst nichts aus (technik.md
+    §7); die Zeile schreibt sich über `cli.display.safe_print_progress` per Wagenrücklauf
+    fort und wird nur dann abgeschlossen (`finish_progress_line`), wenn tatsächlich
+    mindestens einmal berichtet wurde — ein Decksel ohne zu prüfende Einträge (etwa
+    „Wendungen" in einem Kapitel ohne Wendungen) soll keine leere Zeile hinterlassen."""
+    started = False
+
+    def _on_progress(examined: int, total: int, kept: int, limit_: int) -> None:
+        nonlocal started
+        started = True
+        safe_print_progress(
+            f"Bedeutungen werden aufgelöst: {examined} von {total} geprüft, "
+            f"{kept} von {limit_} behalten."
+        )
+
+    resolution = pipeline.resolve_triage_entries(
+        con=con,
+        entries=entries,
+        limit=limit,
+        url=url,
+        get_model_name=get_model_name,
+        order=order,
+        on_progress=_on_progress,
+    )
+    if started:
+        finish_progress_line()
+    return resolution
+
+
 def _run(args: argparse.Namespace, *, read_line: ReadLine, write_line: WriteLine) -> int:
     data_dir = args.data_dir or config.default_data_dir()
     cfg, just_created = config.load_config(data_dir)
@@ -184,12 +230,13 @@ def _run(args: argparse.Namespace, *, read_line: ReadLine, write_line: WriteLine
         # Wendungen bleiben dabei getrennte Durchläufe mit eigener Obergrenze (`cli.
         # interaction`, „Festlegung: getrennte Decksel").
         write_line("== Wörter ==")
-        word_resolution = pipeline.resolve_triage_entries(
+        word_resolution = _resolve_with_progress(
             con=con,
             entries=result.entries,
             limit=interaction.WORD_LIMIT,
             url=cfg.model_url,
             get_model_name=get_model_name,
+            order=cfg.triage_order,
         )
         word_cards = interaction.run_triage_pass(
             con=con,
@@ -202,12 +249,13 @@ def _run(args: argparse.Namespace, *, read_line: ReadLine, write_line: WriteLine
             write_line=write_line,
         )
         write_line("== Wendungen ==")
-        expression_resolution = pipeline.resolve_triage_entries(
+        expression_resolution = _resolve_with_progress(
             con=con,
             entries=result.expressions,
             limit=interaction.EXPRESSION_LIMIT,
             url=cfg.model_url,
             get_model_name=get_model_name,
+            order=cfg.triage_order,
         )
         expression_cards = interaction.run_triage_pass(
             con=con,
