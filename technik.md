@@ -592,6 +592,77 @@ die die Tabelle oben „übervorsichtig" nennt; festgehalten, weil es genau die 
 denen eine lange Auswahlliste auf viele blasse Bedeutungen führt — derselbe Verdacht, dem der
 offene Punkt „Sehr lange Auswahllisten" unten nachgeht.
 
+### Nachtrag 26.08.2026: was der Wortartfilter kürzt — und was er kostet
+
+Der Messauftrag aus T18: Bis hierher stand über die Wortart als Vorfilter eine Vermutung
+(„halbiert lange Listen"), gestützt auf zwei Einzelwerte. Gemessen wurde sie am
+26.08.2026 am Stand `87b0bbf` über `tools/en-de.sqlite3`, `tools/dorian_gray.epub` (22
+Kapitel) und `tools/sherlock.epub` (13 Kapitel mit Fließtext), gelesen über
+`epub.read_structure`/`read_chapter` und ausgewertet über
+`extraction.extract_vocabulary` (mit buchweitem Eigennamenanteil wie
+`pipeline.run_chapter`) gegen `dictionary` — **32.549 Vorkommen** (16.122 Dorian Gray,
+16.427 Sherlock Holmes) über 35 Kapitel. Kreuzprobe gegen die bereits hier stehenden
+Zahlen: `run` (48 ohne, 25 mit Filter) und die Mehrdeutigkeitsquote (65,8/66,0 % mit
+Filter gegen 75,3/76,9 % ohne) reproduzieren sich exakt. Gerechnet hat ein Wegwerfskript
+nach demselben Verfahren wie `tools/ambiguity_check.py`, nur je Vorkommen statt je
+Kapitel — aus `tools/` reproduzierbar ist diese Messung damit **nicht**, dieselbe Lücke,
+die Abschnitt 8c für die Druckkapazität festhält.
+
+**Länge der Auswahlliste je Vorkommen** (Mittel / Median):
+
+| | mit Filter | ohne Filter |
+|---|---|---|
+| Dorian Gray (16.122 Vorkommen) | 3,31 / 2 | 4,64 / 3 |
+| Sherlock Holmes (16.427 Vorkommen) | 3,19 / 2 | 4,41 / 3 |
+| **beide (32.549 Vorkommen)** | **3,25 / 2** | **4,53 / 3** |
+
+| Verteilung, beide Bücher | kein Eintrag | eindeutig | 2 | 3–5 | 6–10 | über 10 |
+|---|---|---|---|---|---|---|
+| mit Filter | 7,4 % | 26,7 % | 21,1 % | 31,4 % | 11,0 % | 2,5 % |
+| ohne Filter | 4,1 % | 19,8 % | 16,4 % | 32,5 % | 19,4 % | 7,8 % |
+
+**Die Kürzung reicht von 0 % bis 48 %, nicht „halbiert".** Die sechs längsten Listen aus
+dem Nachtrag 18.08.2026 oben, wörterbuchseitig und damit buchunabhängig:
+
+| Wort | mit Filter | ohne Filter | WikDict nach Wortart |
+|---|---|---|---|
+| `break` (VERB) | 31 | 43 | Verb 31, Noun 12 |
+| `run` (VERB) | 25 | 48 | Verb 25, Noun 23 |
+| `right` (ADJ) | 23 | 24 | Adjective 23, Verb 1 |
+| `get` (VERB) | 20 | 20 | Verb 20, keine andere Wortart |
+| `line` (NOUN) | 19 | 21 | Noun 19, Verb 2 |
+| `head` (NOUN) | 17 | 30 | Noun 17, Verb 11, Adjective 2 |
+
+`get` kürzt um nichts, weil WikDict es nur als Verb führt; `run` um 48 %. Wo der Filter
+greift, greift er auf den langen Listen am stärksten: Bei 2–5 Bedeutungen ohne Filter
+(15.922 Vorkommen) bleibt der Median unverändert bei 3, bei über 10 Bedeutungen (2.525
+Vorkommen) sinkt er von 13 auf 8 — auf 61 %.
+
+**Der Modellaufruf entfällt dabei selten.** Von den 24.759 Vorkommen, die ohne Filter
+mehrdeutig wären, werden durch ihn **2.618 (10,6 %)** eindeutig; die übrigen 21.460
+bleiben mehrdeutig und brauchen die Auswahl durch das Modell weiterhin.
+
+**Und der Filter kostet etwas: 1.076 von 32.549 Vorkommen (3,3 %)** bekommen eine
+**leere** Auswahlliste, obwohl ihr Stichwort im Wörterbuch steht — nur unter einer
+anderen Wortart als der von spaCy gewählten (`right` als NOUN oder ADV: 0 statt 24
+Treffer, weil WikDict `right` als Adjective und Verb führt). Das deckt sich mit der
+Differenz „kein Eintrag" 7,4 % gegen 4,1 % oben und bestätigt die Messung vom 17.08.2026
+(3,3 % über ganz `tools/sherlock.txt`, siehe „Offene Punkte" unten) an einer anderen
+Stichprobe.
+
+> **Diese 3,3 % sind eine Untergrenze, kein Gesamtpreis.** Gezählt sind nur die *leeren*
+> Listen. Der teurere Fall — eine nicht-leere, aber falsch-wortartige Liste, aus der das
+> Modell dann eine falsche Bedeutung wählt, ohne dass eine Wörterbuchlücke sichtbar wird
+> — lässt sich ohne Goldstandard je Beleg nicht seriös beziffern und **bleibt
+> ausdrücklich offen**. Wer die Zahl zitiert, zitiert die billige Hälfte.
+
+**Warum die Kapitelzahlen von der Messung vom 18.08.2026 abweichen** (22/13 statt 20/12,
+32.549 statt 32.409 Vorkommen): Diese Messung liest die EPUBs über
+`epub.read_structure`/`read_chapter` wie `pipeline.run_chapter`, die frühere über die
+`.txt`-Fassungen mit einer Kapitelgrenze per regulärem Ausdruck. Dieselbe Größenordnung,
+alle Kreuzproben stimmen — die Zahlen der beiden Messungen sind vergleichbar, aber nicht
+deckungsgleich, und das liegt an der Kapitelaufteilung, nicht am Gemessenen.
+
 ### Zwingende Einstellung: Denkschritt abschalten
 
 Qwen 3.5 denkt in Ollama standardmäßig mit. Ohne Gegenmaßnahme verbraucht das Modell
@@ -721,12 +792,18 @@ Siehe Abschnitt „Warum die Reihenfolge zwingend ist".
   Möglichkeit wird aus einem stillen Fehler ein markierter Eintrag — das Konzept sieht
   Markierung bei Unsicherheit ohnehin vor
 - **Sehr lange Auswahllisten**: `run` hat 48 Bedeutungen, `draw` 16, `light` 14. Ob das
-  die Trefferquote drückt, ist noch nicht gemessen — das bleibt der Messauftrag aus T18 und
-  braucht den Modellserver. Die **Verkürzung** durch den Wortartfilter ist es dagegen seit
-  dem Nachtrag 18.08.2026 oben: `run` fällt von 48 auf 25, und über 32 Kapitel sinkt der
-  Anteil mehrdeutiger Grundformen von 75,4 % auf 65,8 % (Sherlock) beziehungsweise von
-  76,7 % auf 66,0 % (Dorian). Der Filter halbiert also einzelne lange Listen, verschiebt
-  aber die Verteilung im Ganzen nur um rund zehn Punkte
+  die Trefferquote drückt, ist noch nicht gemessen — das braucht den Modellserver und einen
+  Goldstandard je Beleg. Die **Verkürzung** durch den Wortartfilter ist dagegen seit dem
+  Nachtrag 26.08.2026 oben gemessen und keine Vermutung mehr: Sie reicht von 0 % (`get`) bis
+  48 % (`run`), wirkt auf den langen Listen am stärksten (Median über 10 Bedeutungen: 13 auf
+  8) und macht nur **10,6 %** der ohne Filter mehrdeutigen Vorkommen eindeutig. Der
+  Modellaufruf entfällt also selten
+- **Was der Wortartfilter jenseits der 3,3 % kostet, ist nicht beziffert.** Die 3,3 % leere
+  Auswahllisten aus dem Nachtrag 26.08.2026 oben sind eine Untergrenze; der Fall einer
+  nicht-leeren, aber falsch-wortartigen Liste — das Modell wählt daraus eine falsche
+  Bedeutung, ohne dass eine Wörterbuchlücke sichtbar wird — ist darin **nicht** enthalten
+  und ohne Goldstandard je Beleg nicht seriös zu messen. Der Punkt bleibt offen; erledigt ist
+  er erst, wenn diese zweite Hälfte eine Zahl hat
 - **Die Wortart als Filter schließt mehr aus als gedacht.** Gemessen am 17.08.2026 über
   ganz `tools/sherlock.txt` (5.544 Grundformen): **181 (3,3 %)** bekommen eine leere
   Auswahlliste, obwohl ihr Stichwort im Wörterbuch steht — gegenüber 480 Grundformen, die
@@ -737,8 +814,10 @@ Siehe Abschnitt „Warum die Reihenfolge zwingend ist".
   dort keine Verbzeile) oder die spaCy anders bestimmt hat als das Wörterbuch (`summon`,
   `clothe` als `NOUN`). Der Nutzer sieht in allen Fällen „kein Wörterbucheintrag" bei einem
   Wort, das drinsteht, und T11 markiert es `uncertain` — **eine Modellunsicherheit verdeckt
-  dann einen Zuordnungsfehler**. Bei T11 zu entscheiden: ob vor dem Markieren einmal ohne
-  Wortartfilter nachgeschlagen und das Ergebnis als solches gekennzeichnet wird
+  dann einen Zuordnungsfehler**. T11 hat den zweiten Versuch ohne Wortartfilter bewusst
+  **nicht** gebaut (`translation.choose_sense`, Regel 14: kein Mechanismus ohne gemessenen
+  Anlass). Der Anlass liegt seit dem Nachtrag 26.08.2026 oben vor — **1.076 Vorkommen** über
+  35 Kapitel, an einer zweiten Stichprobe wieder 3,3 % —, die Entscheidung darüber steht aus
 - **Redewendungserkennung** über Textfenster ist noch nicht geprüft. Der bisherige Test
   betrifft nur die Bedeutungsauswahl bei Einzelwörtern
 - Ob **Ollama** dauerhaft die richtige Wahl ist oder `llama-server` mit Vulkan direkt.
@@ -1153,8 +1232,10 @@ reinen Bildband — ganz ohne Fließtext besteht, trägt nichts zur Statistik be
   Buch im Profil zu halten (`book`-Tabelle, Abschnitt 4) — zu entscheiden ist dabei vor
   allem, **wann er verfällt**: bei geänderter Datei und bei neuer spaCy- oder
   Modellfassung, denn beide ändern die Vertaggung, aus der der Anteil entsteht
-- Ob die Wortart als Vorfilter für lange Auswahllisten taugt (Abschnitt 3, `run` mit 48
-  Bedeutungen) — die Wortart liegt jetzt vor, gemessen ist die Wirkung noch nicht
+- ~~Ob die Wortart als Vorfilter für lange Auswahllisten taugt~~ — **gemessen am
+  26.08.2026** (Abschnitt 3, „Nachtrag 26.08.2026: was der Wortartfilter kürzt — und was er
+  kostet"): Sie taugt dafür, aber schwächer als angenommen. Was daran offen bleibt, steht in
+  den Offenen Punkten von Abschnitt 3, nicht mehr hier
 
 ---
 

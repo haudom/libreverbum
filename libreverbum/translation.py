@@ -328,11 +328,12 @@ def choose_sense(
 
     Ist `sense_candidates` leer, wird **nicht** angefragt, sondern unmittelbar `uncertain`
     zurückgegeben (Regel 11: „Kandidaten ohne Wörterbucheintrag werden uncertain
-    markiert"). Ein zweiter Versuch ohne Wortartfilter ist bewusst nicht gebaut: Der
-    Anteil betroffener Grundformen ist mit 3,3 % gemessen, die Wirkung des Filters auf
-    lange Auswahllisten aber nicht — das misst erst T18 (technik.md §3, offener Punkt
-    „Die Wortart als Filter"). Regel 14 verbietet den Mechanismus ohne gemessenen Anlass;
-    der offene Punkt bleibt hier als Verweis stehen, nicht als Code.
+    markiert"). Ein zweiter Versuch ohne Wortartfilter ist bewusst nicht gebaut: Regel 14
+    verlangt dafür einen gemessenen Anlass. Der liegt seit dem 26.08.2026 vor — 1.076 von
+    32.549 Vorkommen (3,3 %) bekommen eine leere Auswahlliste, obwohl das Stichwort im
+    Wörterbuch steht (technik.md §3, „Nachtrag 26.08.2026: was der Wortartfilter kürzt — und
+    was er kostet") —, entschieden ist er nicht: technik.md §3, offener Punkt „Die Wortart
+    als Filter schließt mehr aus als gedacht". Der Punkt bleibt hier ein Verweis, kein Code.
     """
     if not sense_candidates:
         return Sense(lemma=occurrence.lemma, uncertain=True)
