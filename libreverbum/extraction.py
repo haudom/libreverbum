@@ -463,7 +463,9 @@ def extract_vocabulary(
                 lemma=Lemma(text=lemma_text, pos=chosen_pos),
                 word_form=representative.word_form,
                 example_sentence=representative.example_sentence,
-                frequency=len(candidates),
+                # (T17-Nachbesserung, mittel 1, 26.08.2026): frequency zählt nur die
+                # nicht-eigennamigen Vorkommen — siehe REGEL bei `Occurrence.frequency`.
+                frequency=len(non_proper),
                 proper_noun_frequency=len(candidates) - len(non_proper),
             )
         )

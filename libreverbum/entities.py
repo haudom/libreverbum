@@ -150,8 +150,10 @@ class Sense:
 
 @dataclass(frozen=True)
 class Occurrence:
-    """Vorkommen einer Grundform in einem Kapitel: Belegsatz, Häufigkeit und wie oft davon
-    ein Eigenname war.
+    """Vorkommen einer Grundform in einem Kapitel: Belegsatz, Häufigkeit als Lernvokabel
+    (`frequency`, ohne eigennamige Vorkommen) und daneben eigens, wie oft ein Vorkommen
+    dieser Grundform ein Eigenname war (`proper_noun_frequency`, mittel 1, Abnahme T17,
+    26.08.2026).
 
     Ein Eintrag je Kapitel und Grundform — dasselbe Wort hat in Kapitel 2 einen anderen
     Belegsatz als in Kapitel 9 (technik.md §4, „Tabellen im Überblick"). `word_form` ist die
@@ -164,16 +166,34 @@ class Occurrence:
     lemma: Lemma
     word_form: str
     example_sentence: str
+
+    # (T17-Nachbesserung, mittel 1, 26.08.2026): Häufigkeit **als Lernvokabel** — gezählt
+    # sind nur die nicht-eigennamigen Vorkommen dieser Grundform in diesem Kapitel. Wer
+    # nur „Miss" in „Miss Stoner" gebraucht (18 von 19 Vorkommen in `tools/sherlock.epub`
+    # Kapitel 9), lernt dabei keine 19 Verwendungen von „miss" als Wort — die angezeigte
+    # Anzahl und die Wortobergrenze (`triage.sort_by_frequency`, `WORD_LIMIT`) setzen
+    # beide hier auf. Vor dieser Behebung zählte `frequency` alle Vorkommen einschließlich
+    # der eigennamigen mit; drei Belege aus dem Abnahmelauf (`miss`, Sherlock K9: 19 statt
+    # 1; `lady`, Dorian K17: 30 statt 6; `king`, Sherlock K2: 18 statt 1) zeigten dieselbe
+    # falsche Zahl an zwei Stellen — Anzeige und Rangfolge.
     frequency: int
 
     # REGEL (technik.md §5, „Neuer Befund: der Eigennamenfilter muss pro Vorkommen
     # greifen"): Deshalb eine Zahl hier und kein Kennzeichen am Lemma. 216 Wortformen gelten
     # manchmal als Eigenname und kommen daneben gewöhnlich vor; wer pro Grundform filtert,
     # verliert `red`, `orange` und `street` ganz aus der Triage. Lernvokabel bleibt, was
-    # `proper_noun_frequency / frequency < extraction._PROPER_NOUN_RATIO_THRESHOLD`
-    # erfüllt (0,90, T17-Nachbesserung 25.08.2026) — das frühere strikte Kleiner-Zeichen
-    # (mindestens ein nicht-eigennamiges Vorkommen genügte) ließ Titelfiguren wie „Dorian"
-    # durch, deren Grundform fast, aber nicht ganz nur als Name auftritt.
+    # `proper_noun_frequency / (proper_noun_frequency + frequency) <
+    # extraction._PROPER_NOUN_RATIO_THRESHOLD` erfüllt (0,90, T17-Nachbesserung
+    # 25.08.2026) — das frühere strikte Kleiner-Zeichen (mindestens ein
+    # nicht-eigennamiges Vorkommen genügte) ließ Titelfiguren wie „Dorian" durch, deren
+    # Grundform fast, aber nicht ganz nur als Name auftritt.
+    #
+    # (T17-Nachbesserung, mittel 1, 26.08.2026): Die Formel steht bewusst weiter in
+    # `frequency` und `proper_noun_frequency` statt in den lokalen Zählgrößen aus
+    # `extraction.extract_vocabulary`, die die Entscheidung tatsächlich treffen — beide
+    # Felder tragen nach außen genau diese Bedeutung, und `frequency` ist seit dieser
+    # Behebung schon um die eigennamigen Vorkommen bereinigt, nicht mehr die Summe mit
+    # `proper_noun_frequency`.
     proper_noun_frequency: int
 
 

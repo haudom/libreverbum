@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from libreverbum import epub
+from libreverbum import epub, triage
 from libreverbum.entities import Book, Chapter, Occurrence
 from libreverbum.extraction import (
     book_proper_noun_ratios,
@@ -118,9 +118,11 @@ def test_rule_12_red_stays_a_learning_word_despite_appearing_in_a_proper_name(
     occurrences = extract_vocabulary(chapter, nlp)
 
     red = find(occurrences, "red")
-    assert red.frequency == 2
+    # (mittel 1, Abnahme T17, 26.08.2026): frequency zählt nur das eine nicht-eigennamige
+    # Vorkommen („a bright red") — das eigennamige („Mr. Red") steht separat in
+    # proper_noun_frequency und geht in frequency nicht mehr mit ein.
+    assert red.frequency == 1
     assert red.proper_noun_frequency == 1
-    assert red.proper_noun_frequency < red.frequency, "red müsste als Lernvokabel gelten"
 
 
 def test_rule_12_a_name_that_never_occurs_as_an_ordinary_word_is_not_extracted(
@@ -166,8 +168,11 @@ def test_rule_12_proper_noun_ratio_excludes_the_title_character_but_keeps_an_add
     chapter_17 = epub.read_chapter(path, structure.book, reference_17)
     occurrences_17 = extract_vocabulary(chapter_17, nlp)
     lady = find(occurrences_17, "lady")
-    assert lady.proper_noun_frequency > 0
-    assert lady.proper_noun_frequency < lady.frequency
+    # (mittel 1, Abnahme T17, 26.08.2026): frequency zählt nur die 6 nicht-eigennamigen
+    # Vorkommen, proper_noun_frequency die 24 eigennamigen („Lady Narborough") — vor der
+    # Behebung stand hier noch 30 (die Summe beider).
+    assert lady.proper_noun_frequency == 24
+    assert lady.frequency == 6
 
 
 @pytest.mark.needs_epub
@@ -205,8 +210,46 @@ def test_rule_12_book_wide_ratio_excludes_sibyl_in_chapter_10_but_keeps_an_addre
     chapter_17 = next(c for c in chapters if c.number == 17)
     occurrences_17 = extract_vocabulary(chapter_17, nlp, book_proper_noun_ratios=ratios)
     lady = find(occurrences_17, "lady")
-    assert lady.proper_noun_frequency > 0
-    assert lady.proper_noun_frequency < lady.frequency
+    # Dieselben Kapitel-17-Zählungen wie im ersten Test oben — die buchweite statt der
+    # kapitelweiten Ratio entscheidet nur über Aufnahme oder Ausschluss der Grundform,
+    # nicht über frequency/proper_noun_frequency selbst.
+    assert lady.proper_noun_frequency == 24
+    assert lady.frequency == 6
+
+
+def test_mittel_1_frequency_excludes_proper_noun_occurrences_and_reorders_the_ranking(
+    nlp: Language,
+) -> None:
+    """mittel 1 (Abnahme T17, 26.08.2026): `frequency` zählt nur die nicht-eigennamigen
+    Vorkommen — „count" tritt fünfmal als Teil des Anredenamens „Count Olaf" auf (PROPN)
+    und nur einmal als gewöhnliches Verb („count the money"); vor der Behebung ging die
+    Grundform mit `frequency == 6` in die Wortobergrenze ein (`triage.sort_by_frequency`)
+    und verdrängte dabei „shadow" (dreimal, kein Eigennamenanteil) von Platz 1 auf Platz
+    2. Nach der Behebung steht „count" mit `frequency == 1` hinter „shadow" — dieselbe
+    Grundform bleibt Lernvokabel (Eigennamenanteil 5/6 = 0,83 unter der Schwelle 0,90),
+    aber ihre angezeigte und für die Rangfolge verwendete Häufigkeit stimmt jetzt."""
+    chapter = make_chapter(
+        "Count Olaf glared at the children. Count Olaf smiled coldly. "
+        "Count Olaf turned away. Count Olaf laughed once more. Count Olaf left the room. "
+        "She paused to count the money twice before she spoke. "
+        "A long shadow fell across the garden. Another shadow moved past the window. "
+        "The shadow vanished into the dusk."
+    )
+    occurrences = extract_vocabulary(chapter, nlp)
+
+    count = find(occurrences, "count", "VERB")
+    assert count.frequency == 1
+    assert count.proper_noun_frequency == 5
+
+    shadow = find(occurrences, "shadow", "NOUN")
+    assert shadow.frequency == 3
+    assert shadow.proper_noun_frequency == 0
+
+    ordered = triage.sort_by_frequency(occurrences)
+    ranked_lemmas = [o.lemma.text for o in ordered]
+    assert ranked_lemmas.index("shadow") < ranked_lemmas.index("count"), (
+        "shadow (frequency 3) müsste count (frequency 1 nach der Behebung) vorausgehen"
+    )
 
 
 # ------------------------------------------------------------- Inhaltswortfilter
