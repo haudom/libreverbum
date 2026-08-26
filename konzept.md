@@ -67,7 +67,7 @@ EPUB einlesen  →  Kapitel wählen  →  Wortschatz extrahieren
 > voraus und läuft folglich **nach** „Bedeutungen beschaffen", nicht davor, wie es das
 > Diagramm oben suggeriert. Das ist mit dem Nachtrag vom 17.08.2026 verträglich (die
 > Bedeutungen stehen ohnehin vor der Triage fest) und wurde bei dessen Formulierung nicht
-> ausgesprochen; festgehalten bei T9 (bauplan.md), Befund 5, Review T9, damit T15 die
+> ausgesprochen; festgehalten bei T9, Befund 5, Review T9, damit T15 die
 > Reihenfolge nicht neu entscheidet.
 
 ### 1. Buch einlesen
@@ -245,7 +245,18 @@ Sammelaktion → Hybrid-Übersetzung → Anki-Deck **und** Druckseite.
 Fertig, wenn ein echtes Buch von Anfang bis Ende durchläuft und das erzeugte Deck in Anki
 importierbar ist.
 
+> **Abgenommen am 26.08.2026.** Der Durchlauf an einem echten, DRM-freien EPUB hat alle
+> sieben Abnahmekriterien erfüllt — einschließlich des Anki-Imports und des geprüften
+> Ausdrucks. Was die Abnahme an Fragen aufgeworfen hat, steht unter „Bewusst offen"; die
+> Reihenfolge, in der Phase 1 gebaut wurde, hat ihren Zweck erfüllt und steht in `git log`.
+
 ### Phase 2 — Ausbau der Kernidee
+
+Die **Qt-Oberfläche** aus [technik.md](technik.md) §1 gehört hierher und ist der erste
+Schritt: Kapitelauswahl, Triage-Liste, Fortschritt — dieselbe Bedienung, die Phase 1 über
+die Tastatur abgenommen hat ([technik.md](technik.md) §7, „Die Oberfläche liegt neben dem
+Kern, nicht darunter").
+
 - **Ganzes Buch auf einmal** verarbeiten, Kapitel einzeln oder in Blöcken
 - **Abdeckungsanzeige**: „Lerne diese 34 Wörter und du verstehst 97 % von Kapitel 3." Rechnerisch
   einfach, weil alle Häufigkeiten vorliegen — und psychologisch das stärkste Motivationsmittel
@@ -296,8 +307,9 @@ importierbar ist.
   sie in keinem Durchlauf erreicht. Das verletzt kein Abnahmekriterium und trotzdem den
   Zweck aus dem Kontext oben. Vorgesehene Richtung: Beim **Anlegen des Profils** wird
   gefragt, ob leer begonnen wird oder die häufigsten englischen Grundformen einmalig als
-  bekannt eingetragen werden — die Frage füllt zugleich die Lücke, die bauplan.md in der
-  T16-Zeile offen hält. Die Vorbelegung braucht eine eigene `Origin`, damit
+  bekannt eingetragen werden — dieselbe Frage füllt zugleich die Lücke, die T16 offen
+  gelassen hat: ob ein noch nicht vorhandenes Profil bestätigt werden muss, statt wortlos
+  leer angelegt zu werden (`libreverbum.profile.open_profile`). Die Vorbelegung braucht eine eigene `Origin`, damit
   unterscheidbar bleibt, was der Nutzer selbst entschieden hat. Datenquelle ist
   voraussichtlich **kein** fremder Bestand: WikDicts `importance` liegt bereits vor
   ([technik.md](technik.md) §2, „Häufigkeitsdaten — unkritisch"); ob es trägt, ist zu

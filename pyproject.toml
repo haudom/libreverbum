@@ -13,8 +13,8 @@ dependencies = [
     "en_core_web_md @ https://github.com/explosion/spacy-models/releases/download/en_core_web_md-3.8.0/en_core_web_md-3.8.0-py3-none-any.whl#sha256=5e6329fe3fecedb1d1a02c3ea2172ee0fede6cea6e4aefb6a02d832dba78a310",
     # E8b, entschieden 21.08.2026: MIT-lizenziert, dreifach belegt (PyPI-Metadaten,
     # LICENSE.txt im Quellbaum, GitHubs Lizenz-API). Note.guid ist Property mit Getter
-    # und Setter samt Konstruktorparameter — das Ausschlusskriterium aus bauplan.md
-    # Tor 0 (E8b) ist damit erfüllt.
+    # und Setter samt Konstruktorparameter — das Ausschlusskriterium aus Entscheidung 8b
+    # ist damit erfüllt (technik.md §8b, „Das Ausschlusskriterium ist erfüllt").
     "genanki>=0.13,<0.14",
 ]
 
@@ -70,9 +70,9 @@ split-on-trailing-comma = false
 [tool.mypy]
 python_version = "3.12"
 strict = true
-# "cli" seit T16 (bauplan.md): die Kommandozeile liegt bewusst neben dem Kern, nicht
-# darunter (bauplan.md, „Die Kommandozeile ist eine Oberfläche…"), wird aber im selben
-# Tor geprüft wie libreverbum und tests.
+# "cli" seit T16: die Kommandozeile liegt bewusst neben dem Kern, nicht darunter
+# (technik.md §7, „Die Oberfläche liegt neben dem Kern, nicht darunter"), wird aber im
+# selben Tor geprüft wie libreverbum und tests.
 files = ["libreverbum", "tests", "cli"]
 
 # REGEL (technik.md §6, Tor „Prüfen vor »fertig«"): genanki bringt weder Typangaben noch

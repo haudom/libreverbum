@@ -6,8 +6,8 @@ Hintergrund
 Entscheidung 10 (../konzept.md, Nachtrag beim Kernablauf) stellt die Bedeutungen vor die
 Triage. Damit hängt an einer Zahl, *was* die Triage überhaupt anzeigt: Genügt eine
 Entscheidung je Wort, oder muss sie bei einem nennenswerten Teil der Wörter je Bedeutung
-getroffen werden? Die Frage steht wörtlich in ../bauplan.md, Tor 0, unter E10 und sperrt
-dort T11 und T15. Sie lässt sich nicht ausrechnen, nur an echtem Material messen — das
+getroffen werden? Die Frage gehört zu Entscheidung 10 und sperrte dort die Teilaufgaben
+T11 und T15. Sie lässt sich nicht ausrechnen, nur an echtem Material messen — das
 tut dieses Skript.
 
 Verfahren
@@ -134,7 +134,7 @@ def main() -> int:
 
     p = argparse.ArgumentParser(
         description="Zählt, wie viele Grundformen eines Kapitels mehr als eine Bedeutung haben.",
-        epilog="Beantwortet die erste der beiden offenen Zahlen zu E10 in bauplan.md, Tor 0.",
+        epilog="Beantwortet die erste der beiden offenen Zahlen zu Entscheidung 10.",
     )
     p.add_argument("text", help="Buchtext als Textdatei")
     p.add_argument("--db", default=DEFAULT_DB, help="Pfad zur WikDict-Datenbank")

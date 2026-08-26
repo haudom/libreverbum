@@ -43,17 +43,18 @@ Begründung:
 
 - Die Häufigkeitsskalen sind nicht vergleichbar. Ein häufiges Wort kommt im Kapitel
   fünfzigmal vor, eine Wendung ein- bis zweimal. In einer gemeinsamen, nach Häufigkeit
-  sortierten Liste kämen die rund 213 Wendungen je Kapitel (bauplan.md, T16-Zeile) nie
-  unter die ersten 25 — sie fielen still weg, derselbe Befund wie beim T15-Durchstich vor
-  dessen Behebung, bei dem die 213 Wendungen je Kapitel im Ergebnis ganz fehlten
+  sortierten Liste kämen die rund 213 Wendungen je Kapitel nie unter die ersten 25 — sie
+  fielen still weg, derselbe Befund wie beim T15-Durchstich vor dessen Behebung, bei dem
+  sie im Ergebnis ganz fehlten
 - Eine Wendung, die zweimal vorkommt, ist mehr wert als ein Wort, das zweimal vorkommt:
   Sie lässt sich nicht aus ihren Teilen erschließen
 - Abnahmekriterium 3 verlangt zwei Redewendungen in der Handstichprobe (konzept.md).
   Ohne eigenen Deckel wäre das dem Zufall überlassen
 
-Die Wortobergrenze bleibt bei 25 (konzept.md §4, `WORD_LIMIT` unten) — sie wird laut
-bauplan.md, T17-Zeile weder gestrichen noch zur Einstellung gemacht, sondern in der Praxis
-beurteilt. `EXPRESSION_LIMIT` ist daraus **abgeleitet**, siehe der Kommentar dort.
+Die Wortobergrenze bleibt bei 25 (konzept.md §4, `WORD_LIMIT` unten) — die Abnahme T17 hat
+sie weder gestrichen noch zur Einstellung gemacht, sondern in der Praxis beurteilt
+(konzept.md §4, „Nachtrag 26.08.2026 — die Obergrenze bleibt bei 25"). `EXPRESSION_LIMIT`
+ist daraus **abgeleitet**, siehe der Kommentar dort.
 
 Wie die Sammelaktion hier funktioniert
 ---------------------------------------
@@ -110,9 +111,9 @@ from libreverbum.profile import VocabularyStatus
 ReadLine = Callable[[str], str]
 WriteLine = Callable[[str], None]
 
-# konzept.md §4: „Obergrenze pro Kapitel — maximal 25 neue Wörter". Bleibt fest (bauplan.md,
-# T17-Zeile: „erwogen zu streichen und unverändert gelassen … zeigt erst der erste echte
-# Durchlauf") — kein Schalter dafür (dokumentation.md §4 Regel 14).
+# konzept.md §4: „Obergrenze pro Kapitel — maximal 25 neue Wörter". Bleibt fest — die Abnahme
+# T17 hat die Zahl beurteilt und bestätigt (konzept.md §4, „Nachtrag 26.08.2026 — die
+# Obergrenze bleibt bei 25") — kein Schalter dafür (dokumentation.md §4 Regel 14).
 WORD_LIMIT = 25
 
 # Herleitung, nicht geraten: Die Druckseite fasst printout.MAX_ENTRIES Einträge (technik.md

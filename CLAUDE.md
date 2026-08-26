@@ -9,7 +9,7 @@ einlesen → Kapitel wählen → Wortschatz extrahieren → Bedeutungen beschaff
 LLM) → gegen das Nutzerprofil filtern → Triage durch den Nutzer → Export nach Anki und
 Druck. Einzelheiten in [konzept.md](konzept.md).
 
-**Stand:** steht nicht hier, sondern in [bauplan.md](bauplan.md) und in `git log`. Eine
+**Stand:** steht nicht hier, sondern in `git log` und in den drei Dokumenten unten. Eine
 Momentaufnahme in Prosa veraltet mit jeder Teilaufgabe, und diese Datei liest jeder
 Bearbeiter zuerst — sie darf ihn nicht in die Irre führen.
 
@@ -20,7 +20,6 @@ Bearbeiter zuerst — sie darf ihn nicht in die Irre führen.
 | [konzept.md](konzept.md) | **Was** gebaut wird und warum — Kernablauf, Phasenplan, Abnahmekriterien |
 | [technik.md](technik.md) | **Womit** — Sprache, Wörterbuchquelle, Modell, Datenablage, samt Messwerten |
 | [dokumentation.md](dokumentation.md) | **Wie** geschrieben und dokumentiert wird — Sprachregel, Begriffe, Docstrings, Regel-Kommentare |
-| [bauplan.md](bauplan.md) | **In welcher Reihenfolge** — Teilaufgaben der Phase 1, was parallel geht. Auf Phase 1 begrenzt und fällt mit deren Abnahme weg |
 
 > Die Dokumente beantworten **warum**. Der Code beantwortet **was und wie**.
 > Wo der Code das Warum braucht, **verweist** er darauf — er schreibt es nicht ab.
@@ -28,6 +27,12 @@ Bearbeiter zuerst — sie darf ihn nicht in die Irre führen.
 Das gilt auch für diese Datei: Sie navigiert, sie dupliziert keine Begründungen.
 Verweisform ist `technik.md §3, „Datenfalle"` — Nummer und Überschrift, nie eine
 Zeilennummer.
+
+> **`bauplan.md T13` im Quelltext ist eine Herkunftsangabe, kein Verweis.** Der Bauplan
+> hat die Phase 1 in die Teilaufgaben T1 bis T18 geschnitten und ist mit deren Abnahme am
+> 26.08.2026 weggefallen; was daraus dauerhaft gilt, steht in den drei Dokumenten oben.
+> Die Marken bleiben stehen, weil sie sagen, aus welchem Schritt eine Stelle stammt —
+> nachzulesen mit `git show 84c8895:bauplan.md` (der letzte Stand der Datei).
 
 ## Harte Regeln
 
@@ -190,18 +195,19 @@ Testtexte (`*.txt`) und `*.sqlite3` sind bewusst nicht versioniert.
 
 Er steht in drei Quellen, die sich selbst nachführen — nicht hier:
 
-- **Was als Nächstes gebaut wird:** [bauplan.md](bauplan.md). **Vor der ersten Zeile
-  Anwendungscode dort nachsehen**, welche Teilaufgabe an der Reihe ist und welche
-  Vorentscheidung sie blockiert
 - **Was fertig ist:** `git log --oneline`. Jede Teilaufgabe ist ein Commit, der das Tor
   oben bestanden hat
+- **Was als Nächstes gebaut wird:** [konzept.md](konzept.md), „Phasenplan" — welche Phase
+  an der Reihe ist und was zu ihr gehört. **Vor der ersten Zeile Anwendungscode** dazu die
+  offenen Punkte: konzept.md, „Bewusst offen" für die inhaltlichen, die Abschnitte „Offene
+  Punkte" in [technik.md](technik.md) für die technischen. Was dort steht, wird erst
+  entschieden, dann gebaut
 - **Was gerade jemand anderes bearbeitet:** `git status`. Es laufen regelmäßig zwei
   Bearbeiter gleichzeitig — fremde Änderungen im Arbeitsbaum sind kein Fehler und werden
   weder repariert noch mitcommittet
 
 Die technischen Entscheidungen stehen sämtlich in technik.md — auch die zuletzt gefallenen
-E8b (Anki-Erzeugung, §8b) und E8c (Druckausgabe, §8c). Tor 0 in bauplan.md ist damit
-vollständig; es blockiert keine Teilaufgabe mehr.
+E8b (Anki-Erzeugung, §8b) und E8c (Druckausgabe, §8c).
 
 Nicht im Repository, aber zur Arbeit vorhanden: die Umgebung `.venv/` (spaCy mit
 `en_core_web_md` und `en_core_web_sm`), das Wörterbuch `tools/en-de.sqlite3`, die
@@ -230,7 +236,7 @@ Testtexte `tools/*.txt` und die EPUBs `tools/*.epub`. Tests, die davon abhängen
     das zu melden und nicht zu verbuchen
 - **Jeder Auftrag endet mit „Beobachtungen zum Ablauf"** (dokumentation.md §9), jeder
   Bericht beantwortet ihn. Das ist der einzige Rückweg für das, was einen Bearbeiter
-  aufgehalten hat; eingefaltet wird an den Toren aus bauplan.md, nicht nebenbei
+  aufgehalten hat; eingefaltet wird an den Toren einer Phase, nicht nebenbei
 - **Korrigieren: Nachtrag oder überschreiben** (dokumentation.md §7). Eine widerlegte,
   aber plausible Annahme bekommt einen datierten Nachtrag — so wie in konzept.md §5,
   wo die Wendungsmessung eine Konzeptaussage gekippt hat. Ersetzte Festlegungen werden

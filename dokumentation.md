@@ -394,7 +394,8 @@ Reicht das nicht mehr, ist die nächste Stufe ein **Verzeichnis mit einer Datei 
 Beobachtung** — konfliktfrei, weil jeder in seine eigene schreibt — und kein zweiter
 Sammeltext.
 
-**Eingefaltet wird an den Toren** aus bauplan.md: Dort wird die gesammelte Liste
+**Eingefaltet wird an den Toren einer Phase** — dort, wo ein Bündel von Teilaufgaben
+abgeschlossen ist und der nächste Abschnitt beginnt: Die gesammelte Liste wird
 durchgegangen, was ein Dokument berichtigt, wandert hinein, was die Hausordnung ändert,
 wird entschieden. Der Punkt, an dem ein solcher Rückweg gewöhnlich stirbt, ist nicht das
 Sammeln, sondern das Einfalten — dieselbe Vorsichtsmaßnahme wie „Am Phasenende einfalten"
@@ -440,6 +441,17 @@ eine der beiden je rot gewesen wäre.
 Ein Dokument schließt die Lücke nicht: Die Modulkarte (technik.md §7, „Warum eine Karte und
 nicht mehr") nennt Zuständigkeiten und ausdrücklich keine Entwürfe, und Regel 14 verbietet
 Vorratsarbeit. Die Lücke ist gewollt — sie gehört deshalb in den Auftrag.
+
+### Verlangt eine Teilaufgabe zwei Wege, nennt die Prüfung beide
+
+Aus Phase 1, an T4 gelernt: Was der Auftrag als Prüfung nennt, wird als **Auftragsumfang**
+gelesen. Das ist die naheliegende Lesart und keine Nachlässigkeit — nennt die Prüfung nur
+einen von zwei verlangten Wegen, entsteht folgerichtig die Hälfte, ohne Fehler und ohne
+Meldung. Bei T4 (zusammenhängende Kandidatenfolgen **und** getrennte Verb-Partikel-Paare)
+ist genau das passiert.
+
+> **Regel:** Verlangt eine Teilaufgabe zwei Wege, nennt die Prüfung **beide** — je einen
+> Fall, an dem der eine ohne den anderen rot wird.
 
 **Abgearbeitet werden `schwer` und `mittel`.** `leicht` bleibt liegen und wird von Hand
 angestoßen, wo es sich lohnt — **spätestens am Phasenende** wird jeder verbliebene Punkt

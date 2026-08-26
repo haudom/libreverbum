@@ -5,8 +5,8 @@ Hintergrund
 -----------
 technik.md §3, „Beurteilen statt erzeugen" hat gemessen: 16 Urteile in einer einzigen
 Anfrage brauchen 12 Sekunden. Ob das auch für 32 und 64 gilt, ist offen (technik.md §3,
-„Offene Punkte", „Skaliert das Bündeln beim Modell?") und sperrt laut bauplan.md, Tor 0,
-unter E10 die Teilaufgabe **T11**: Ohne die Zahl müsste T11 raten, ob es je Wort einzeln
+„Offene Punkte", „Skaliert das Bündeln beim Modell?") und sperrte unter Entscheidung 10
+die Teilaufgabe **T11**: Ohne die Zahl müsste T11 raten, ob es je Wort einzeln
 oder gebündelt beim Modell nachfragt. Dieses Skript liefert die Zahl.
 
 Zweiter Zweck derselben Messung: `tools/sense_check.py` ist gesättigt (vier von fünf
@@ -681,7 +681,7 @@ def main() -> int:
 
     p = argparse.ArgumentParser(
         description="Misst, ob das Bündeln mehrerer Bedeutungsurteile in einer Anfrage skaliert.",
-        epilog="Beantwortet die zweite der beiden offenen Zahlen zu E10 in bauplan.md, Tor 0.",
+        epilog="Beantwortet die zweite der beiden offenen Zahlen zu Entscheidung 10.",
     )
     p.add_argument("text", help="Buchtext als Textdatei")
     p.add_argument("--db", default=DEFAULT_DB, help="Pfad zur WikDict-Datenbank")

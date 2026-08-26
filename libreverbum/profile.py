@@ -189,7 +189,8 @@ def open_profile(path: Path) -> sqlite3.Connection:
     Verzeichnis, die Profildatei selbst aber noch nicht, legt der Aufruf weiterhin
     wortlos eine neue, leere Profildatei an — das ist gewolltes Verhalten. Ob ein
     noch nicht vorhandenes Profil bestätigt werden muss, entscheidet der Aufrufer
-    (technik.md §9, der Kern kennt keine Vorgabe; bauplan.md, T16).
+    (technik.md §9, der Kern kennt keine Vorgabe); offen ist die Frage weiterhin —
+    konzept.md, „Bewusst offen", „Woher der Nutzer seinen Grundwortschatz bekommt".
     """
     if not path.parent.is_dir():
         raise ValueError(

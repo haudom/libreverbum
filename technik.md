@@ -34,8 +34,8 @@ maschinell entsteht. Siehe Abschnitt 6.
 
 Die Fragen 8b und 8c sind aus Frage 8 hervorgegangen — dieselbe Lizenzprüfung, aber für die
 Ausgabe statt für die Eingabe. Sie sind zuletzt gefallen, weil erst mit T13 und T14
-feststand, welche Felder eine Karte und eine Druckseite wirklich tragen. bauplan.md führt
-die drei als E8a, E8b und E8c.
+feststand, welche Felder eine Karte und eine Druckseite wirklich tragen. Der Bauplan der
+Phase 1 führte die drei als E8a, E8b und E8c.
 
 Frage 7 gehört zu 6 und steht unmittelbar vor der ersten Zeile Anwendungscode: nicht
 womit gebaut wird, sondern wohin das Gebaute kommt. Sie wird vorab entschieden, weil eine
@@ -395,7 +395,7 @@ Datenbestand.
 
 ### Nachtrag 18.08.2026: zwei Drittel der Grundformen eines Kapitels sind mehrdeutig
 
-Die erste der beiden Zahlen, die bauplan.md unter E10 offen hielt. Gemessen mit
+Die erste der beiden Zahlen, die Entscheidung 10 offen hielt. Gemessen mit
 [`tools/ambiguity_check.py`](tools/ambiguity_check.py) an beiden Romanen, jedes Kapitel
 einzeln — 32 Kapitel, 32.409 Grundformen — über `extraction.extract_vocabulary` (T3) und
 `dictionary.candidates` (T5), also nach den dort geltenden Regeln samt Regel 1:
@@ -449,7 +449,7 @@ Wortes" (Abnahmekriterium 6).
 
 ### Nachtrag 19.08.2026: Bündeln lohnt nicht — T11 fragt je Wort einzeln
 
-Die zweite der beiden Zahlen, die bauplan.md unter E10 offen hielt, und damit die Sperre
+Die zweite der beiden Zahlen, die Entscheidung 10 offen hielt, und damit die Sperre
 auf T11. Gemessen mit [`tools/bundle_check.py`](tools/bundle_check.py) an
 `tools/sherlock.txt`: 64 mehrdeutige Grundformen über `extraction.extract_vocabulary` und
 `dictionary.candidates`, dieselbe Stichprobe für jedes Modell und jede Bündelgröße,
@@ -1380,7 +1380,7 @@ liefen sonst ungeprüft.
 ### Nachtrag 17.08.2026: `mypy --strict` trägt die spaCy-Typen
 
 Ob die strenge Typprüfung mit spaCy im Spiel noch trägt, stand hier als offener Punkt und
-war der Grund, warum bauplan.md mit den Strängen A und B beginnt. Mit dem ersten Modul ist
+war der Grund, warum Phase 1 mit `extraction` und `dictionary` begonnen hat. Mit dem ersten Modul ist
 die Frage beantwortet: **ja**. spaCy liefert `py.typed` mit, mypy löst `token.pos_`,
 `token.lemma_` und `sent.text` zu `str` auf und `token.is_alpha` zu `bool`;
 `extraction.py` besteht `strict` ohne eine einzige Ausnahme.
@@ -1493,6 +1493,25 @@ Die äußere Hälfte der Regel setzt `pyproject.toml` bereits durch (Abschnitt 6
 Architekturregel steht jetzt in der Umgebung"). Geprüft wird sie in
 `tests/test_architecture.py`; damit verlässt Regel 9 zur Hälfte die Liste der
 Bauentscheidungen ohne Testpunkt (dokumentation.md §5).
+
+### Die Oberfläche liegt neben dem Kern, nicht darunter
+
+Die Karte oben beschreibt **nur den Kern**. Eine Oberfläche steht nicht darin, und zwar
+absichtlich: Sie ruft ihn auf, er kennt sie nicht (Abschnitt 1, „Architekturregel"). Die
+Kommandozeile ist eine Oberfläche wie jede andere — der Zugang, über den Phase 1
+abgenommen wurde, weil er nach Abschnitt 1 „praktisch geschenkt" ist, sobald der Kern die
+Oberfläche nicht kennt.
+
+Sie liegt deshalb als eigenes Paket `cli/` **neben** `libreverbum/`, nicht darunter
+(entschieden bei T16, 21.08.2026; die erwogene Alternative war ein dünnes
+`libreverbum/__main__.py`, das die Oberfläche in den Kern gelegt hätte). Die Importregel
+gilt nur innerhalb von `libreverbum/`: `cli` darf beliebig viele Kernmodule zugleich
+importieren, der Kern importiert `cli` nie — `tests/test_architecture.py` prüft die
+Richtung.
+
+**Für die Qt-Oberfläche gilt dasselbe** — und dort gilt Regel 9 zum ersten Mal in ihrer
+nicht prüfbaren Hälfte: NLP- und Modellaufrufe nie im Oberflächen-Thread. Bei der
+Kommandozeile war das gegenstandslos, weil sie keinen hat.
 
 ### Warum `entities` und nicht `model`
 
@@ -1686,7 +1705,7 @@ ausgeschlossen (dokumentation.md §4, „Zu Regel 15: die Rohquelle entscheidet"
 
 ### Das Ausschlusskriterium ist erfüllt
 
-bauplan.md verlangt unter E8b eine zugängliche GUID, sonst ist Regel 6 nicht erfüllbar. Am
+Entscheidung 8b verlangt eine zugängliche GUID, sonst ist Regel 6 nicht erfüllbar. Am
 Quelltext geprüft: `Note.guid` ist eine Property mit Getter **und** Setter, dazu ein
 Konstruktorparameter.
 
@@ -1768,7 +1787,8 @@ Maximum 199.
 
 > **Damit trägt Abnahmekriterium 5 eine Messung.** Bis hierher war „passt auf ein Blatt"
 > eine Ableitung aus der Wortobergrenze von 25 Wörtern (konzept.md, Schritt 4). Die Grenze
-> trägt das Kriterium weiterhin — beurteilt wird sie bei T17 (bauplan.md, Tor 4).
+> trägt das Kriterium weiterhin — beurteilt wurde sie bei der Abnahme T17 (konzept.md,
+> Schritt 4, Nachtrag 26.08.2026: sie bleibt bei 25).
 
 ### Eine direkte PDF-Ausgabe ist Phase 2
 
