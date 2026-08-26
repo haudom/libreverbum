@@ -5,6 +5,11 @@
 name = "libreverbum"
 version = "0.1.0"
 description = "Bereitet den Wortschatz eines Buchkapitels vor dem Lesen auf"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "haudom" }]
+keywords = ["epub", "anki", "vocabulary", "spaced-repetition", "spacy", "language-learning"]
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "spacy>=3.8,<3.9",
@@ -17,6 +22,9 @@ dependencies = [
     # ist damit erfüllt (technik.md §8b, „Das Ausschlusskriterium ist erfüllt").
     "genanki>=0.13,<0.14",
 ]
+
+[project.urls]
+Repository = "https://github.com/haudom/libreverbum"
 
 # REGEL (technik.md §1, „Architekturregel"): Der Kern kennt die Oberfläche nicht.
 # Deshalb steht PySide6 nicht bei dependencies, sondern in einer eigenen Gruppe. Wer den

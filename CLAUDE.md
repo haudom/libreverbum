@@ -24,6 +24,12 @@ Bearbeiter zuerst — sie darf ihn nicht in die Irre führen.
 > Die Dokumente beantworten **warum**. Der Code beantwortet **was und wie**.
 > Wo der Code das Warum braucht, **verweist** er darauf — er schreibt es nicht ab.
 
+Daneben steht [README.md](README.md) — kein viertes Dokument, sondern das Schaufenster: Sie
+richtet sich an Fremde auf GitHub, erklärt Zweck, Einrichtung und Bedienung und verweist für
+jedes Warum nach innen. Sie begründet nichts selbst. **Ihr Abschnitt „Stand" ist die einzige
+Momentaufnahme im Bestand** und deshalb an den Toren einer Phase nachzuziehen — überall sonst
+gilt weiter, dass der Stand in `git log` und im Phasenplan steht.
+
 Das gilt auch für diese Datei: Sie navigiert, sie dupliziert keine Begründungen.
 Verweisform ist `technik.md §3, „Datenfalle"` — Nummer und Überschrift, nie eine
 Zeilennummer.
