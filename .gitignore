@@ -6,6 +6,9 @@ tools/en-de.sqlite3
 # Nutzerprofil — persönliche Daten, gehören nie ins Repository
 profil.sqlite3
 
+# Binäre Sicherungen beider Datenbanken (technik.md §4, „Sichern und Ausleiten").
+*.sqlite3.backup
+
 # Testtexte und Testbücher (Project Gutenberg u. a.)
 tools/*.txt
 tools/*.epub
@@ -17,7 +20,10 @@ __pycache__/
 venv/
 
 # Eigenes Werkzeug des Bearbeiters, kein Projektbestandteil.
-autoresume/
+claude-auto-resume.ps1
+
+# Zwischenstand eines Subagenten — gehört zur Sitzung, nicht zum Projekt.
+agent_status.json
 
 # Zwischenstände der Prüfwerkzeuge — siehe technik.md, Abschnitt 6.
 # uv.lock gehört ausdrücklich **nicht** hierher: Sie hält die Messgrundlage fest.
