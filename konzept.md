@@ -289,10 +289,13 @@ importierbar ist.
 - **Fortsetzungsfrage nach der Wortobergrenze** — aufgeworfen am 26.08.2026: Nach 25
   Wörtern wird gefragt, ob weitergemacht oder aufgehört wird. Das ist die menschliche
   Bremse für das Nachrücken und legt die Entscheidung dorthin, wo die Information ist.
-  Zu klären ist die Verzahnung mit Abnahmekriterium 5: Die Druckseite fasst gemessen 36
-  Einträge ([technik.md](technik.md) §8c), „weiter" sprengt sie irgendwann — entweder
-  darf sie ein zweites Blatt bekommen, oder sie nimmt weiterhin die ersten 36, während
-  die Karten darüber hinauswachsen
+  Die Verzahnung mit Abnahmekriterium 5 ist **entschieden am 26.08.2026**: Die Druckseite
+  fasst gemessen 36 Einträge ([technik.md](technik.md) §8c) und **darf im Zweifel mehrere
+  Blätter belegen**. Solange Nachrücken und Fortsetzungsfrage nicht gebaut sind, ändert
+  das nichts — die Wortobergrenze hält die Ausgabe unter der Kapazität eines Blattes, und
+  Abnahmekriterium 5 gilt unverändert. **Mit** ihnen ist der Kriterientext nachzuziehen:
+  „passt auf ein Blatt" wird dann zu „bricht sauber auf so viele Blätter um, wie nötig" —
+  lesbar ohne Nachbearbeitung bleibt die Anforderung
 
 **Die vier ursprünglichen Fragen sind entschieden**; die technischen Festlegungen samt
 Begründung und Messwerten stehen in [technik.md](technik.md). Die drei Punkte darüber sind
