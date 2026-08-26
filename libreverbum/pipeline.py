@@ -48,22 +48,29 @@ Zusammenführung fehlten die Wendungen im Ergebnis aber vollständig, nicht nur 
 zu verschweigen. Was zu tun bleibt, steht in `nacharbeit.md`. Ein reiner Lesezugriff, es
 wird kein Ereignis in das Profil geschrieben.
 
-**`run_chapter` bleibt der netzlose Teil.** Sie schlägt im Wörterbuch nach und gleicht
-gegen das Profil ab (rund 1,1 s, technik.md §3, „Nachtrag 17.08.2026") — die Liste der
-möglichen Bedeutungen je Vorkommen, ohne dass dafür ein Modellserver erreichbar sein
-müsste. Was daraus für die Triage wird, macht seit der zweiten T16-Durchsicht (Befund
-schwer 1) eine zweite Funktion, `resolve_triage_entries`: Sie ruft `translation.
-choose_sense` auf — den einzigen Ort mit Modellzugriff (technik.md §7) — und ist deshalb
-bewusst **nicht** Teil von `run_chapter`. Zwei Gründe:
+**`run_chapter` bleibt der netzlose Teil**, auch wenn ihre Laufzeit das seit der
+T17-Nachbesserung (schwer 1, zweiter Anlauf, 26.08.2026) nicht mehr vermuten lässt: Sie
+liest inzwischen **das ganze Buch** ein, um den buchweiten Eigennamenanteil vorzuberechnen
+(`extraction.book_proper_noun_ratios`, technik.md §5, REGEL bei `extraction.
+_PROPER_NOUN_RATIO_THRESHOLD`) — ein voller spaCy-Lauf je Kapitel, rund 22 respektive 29 s
+für die beiden EPUBs unter `tools/` (siehe Bericht zur Abnahme), statt der zuvor rund 1,1 s
+(technik.md §3, „Nachtrag 17.08.2026") für Nachschlagen und Profilabgleich allein. Ohne
+diese Vorarbeit ließe sich der `Sibyl`-Fall aus Kapitel 10 nicht auflösen: Ein Tagger-Fehler
+in drei Vorkommen eines einzelnen Kapitels verfälscht dessen eigenen Anteil, der buchweite
+Anteil bleibt davon unberührt. **Netzlos** bleibt sie trotzdem — kein Modellserver ist dafür
+nötig, nur spaCy und die beiden lokalen Dateien. Was aus der Auswahlliste für die Triage
+wird, macht seit der zweiten T16-Durchsicht (Befund schwer 1) eine zweite Funktion,
+`resolve_triage_entries`: Sie ruft `translation.choose_sense` auf — den einzigen Ort mit
+Modellzugriff (technik.md §7) — und ist deshalb bewusst **nicht** Teil von `run_chapter`.
+Zwei Gründe:
 
-1. `run_chapter`s Kosten (rund 1,1 s) bleiben unverändert und ohne Netzabhängigkeit, statt
-   für jeden Aufrufer verbindlich Modellanfragen mitzubringen — bei `[triage] order =
-   "new_words_first"` (technik.md §9, Vorgabe) rund `limit` Stück, bei `"frequency"` unter
-   Umständen mehrere Hundert (Auftragstext vom 25.08.2026, „Der Anlass": acht Messungen
-   desselben Kapitels ergaben 36 bis 206 Aufrufe, weil ein als `KNOWN` aufgelöster Eintrag
-   zwar einen Aufruf kostet, aber keinen Platz von `limit` belegt). Ein künftiger Aufrufer,
-   der nur die Auswahllisten braucht (etwa ein Messwerkzeug), bekommt sie weiterhin ohne
-   Modellserver
+1. `run_chapter` bleibt ohne Netzabhängigkeit, statt für jeden Aufrufer verbindlich
+   Modellanfragen mitzubringen — bei `[triage] order = "new_words_first"` (technik.md §9,
+   Vorgabe) rund `limit` Stück, bei `"frequency"` unter Umständen mehrere Hundert
+   (Auftragstext vom 25.08.2026, „Der Anlass": acht Messungen desselben Kapitels ergaben 36
+   bis 206 Aufrufe, weil ein als `KNOWN` aufgelöster Eintrag zwar einen Aufruf kostet, aber
+   keinen Platz von `limit` belegt). Ein künftiger Aufrufer, der nur die Auswahllisten
+   braucht (etwa ein Messwerkzeug), bekommt sie weiterhin ohne Modellserver
 2. `resolve_triage_entries` bekommt `limit` **je Decksel** (`cli.interaction.WORD_LIMIT` für
    `entries`, `EXPRESSION_LIMIT` für `expressions`, „Festlegung: getrennte Decksel",
    `cli/interaction.py`) — zwei verschiedene Aufrufe mit zwei verschiedenen Obergrenzen. In
@@ -151,6 +158,37 @@ class ChapterVocabulary:
     expressions: list[VocabularyEntry]
 
 
+def _drop_prefix_dominated_expressions(
+    pairs: list[tuple[Occurrence, list[Sense]]],
+) -> list[tuple[Occurrence, list[Sense]]]:
+    """Entdoppelt Wendungspaare, bei denen die kürzere Wortfolge ein echtes Wortpräfix der
+    längeren ist **und** dieselben Textstellen deckt (mittel 4, Abnahme T17, zweiter
+    Anlauf, 26.08.2026) — siehe die Erläuterung am Aufrufer in `run_chapter`.
+
+    „Dieselben Textstellen" wird über gleiche Häufigkeit geprüft, nicht über eine eigene
+    Positionsspur (die dieses Modul nicht führt, `entities.Occurrence` trägt nur Häufigkeit
+    und einen Belegsatz): `extraction.extract_contiguous_candidates` bildet jedes n-Gramm
+    eines Laufs, jedes Vorkommen der längeren Wendung erzeugt also notwendig auch ein
+    Vorkommen ihres Präfixes an derselben Stelle. Gleiche Häufigkeit heißt deshalb, dass die
+    kürzere Fassung **kein** Vorkommen außerhalb der längeren hat — ungleiche Häufigkeit
+    heißt, sie hat eigene, unabhängige Vorkommen und bleibt bestehen."""
+    dominated: set[int] = set()
+    for index, (occurrence, _) in enumerate(pairs):
+        words = occurrence.lemma.text.split()
+        for other_index, (other_occurrence, _) in enumerate(pairs):
+            if index == other_index:
+                continue
+            other_words = other_occurrence.lemma.text.split()
+            if (
+                len(other_words) > len(words)
+                and other_words[: len(words)] == words
+                and other_occurrence.frequency == occurrence.frequency
+            ):
+                dominated.add(index)
+                break
+    return [pair for index, pair in enumerate(pairs) if index not in dominated]
+
+
 def run_chapter(
     *,
     epub_path: Path,
@@ -188,7 +226,40 @@ def run_chapter(
         )
     chapter = epub.read_chapter(epub_path, structure.book, reference)
 
-    occurrences = extraction.extract_vocabulary(chapter, nlp)
+    # (T17-Nachbesserung, schwer 1, zweiter Anlauf, 26.08.2026): Der Eigennamenfilter aus
+    # extraction.extract_vocabulary braucht den buchweiten Anteil je Grundform (technik.md
+    # §5, REGEL bei extraction._PROPER_NOUN_RATIO_THRESHOLD) — dafür müssen alle Kapitel des
+    # Buchs gelesen und geparst werden, nicht nur das gewählte. `pipeline` ist nach
+    # technik.md §7 der einzige Ort, der `epub` und `extraction` gemeinsam kennen darf;
+    # die Vorberechnung gehört deshalb hierher, nicht nach `extraction` (das kennt kein
+    # EPUB) und nicht nach `cli` (das läuft nach Regel 9 nie im selben Thread wie die
+    # Oberfläche, hat mit dieser Funktion aber ohnehin keinen eigenen Berührungspunkt).
+    # Kostet einen vollen spaCy-Lauf je Kapitel des Buchs (siehe Bericht zur Abnahme,
+    # rund 22 respektive 29 s für die beiden tools/-EPUBs) — der Preis dafür, dass ein
+    # Tagger-Fehler in drei Vorkommen eines einzelnen Kapitels („Sibyl dead!", „Sibyl!")
+    # den je Kapitel berechneten Anteil nicht mehr verfälschen kann.
+    all_chapters = [chapter]
+    for other_reference in structure.chapters:
+        if other_reference.number == chapter_number:
+            continue
+        try:
+            all_chapters.append(epub.read_chapter(epub_path, structure.book, other_reference))
+        except ValueError as error:
+            # Vorspann-/Impressum- und reine Bildband-Kapitel (epub.read_chapter, „Bricht
+            # mit einer deutschen Meldung ab") tragen keinen Wortschatz bei und dürfen bei
+            # der buchweiten Zählung fehlen — jeder andere ValueError (kaputtes Archiv,
+            # falsche Kodierung, fehlendes Dokument im Archiv) bleibt dagegen sichtbar
+            # (Regel 13) statt die Statistik lautlos zu verfälschen.
+            message = str(error)
+            if "besteht nur aus Vorspann bzw. Impressum" not in message and (
+                "Bildband ohne Text" not in message
+            ):
+                raise
+    book_proper_noun_ratios = extraction.book_proper_noun_ratios(all_chapters, nlp)
+
+    occurrences = extraction.extract_vocabulary(
+        chapter, nlp, book_proper_noun_ratios=book_proper_noun_ratios
+    )
     single_word_candidates = dictionary.candidate_lists(
         dictionary_path, [occurrence.lemma for occurrence in occurrences]
     )
@@ -247,6 +318,18 @@ def run_chapter(
         for occurrence, matches in zip(contiguous_occurrences, contiguous_matches, strict=True)
         if matches and occurrence.lemma.text not in particle_verb_lemma_texts
     ]
+    # (mittel 4, Abnahme T17, zweiter Anlauf, 26.08.2026): Die Entdopplung oben vergleicht
+    # nur identische Wortfolgen — „in front" und „in front of" sind aber verschiedene
+    # Lemmatexte und blieben beide stehen, mit demselben Belegsatz („…curtains … hung in
+    # front of the three tall windows"), weil jedes Vorkommen der längeren Wendung
+    # zugleich ein Vorkommen ihres Präfixes erzeugt (`extraction.extract_contiguous_
+    # candidates`, jedes n-Gramm eines Laufs). Deckt eine längere Wendung dieselben
+    # Textstellen ab wie eine kürzere, deren Wortfolge-Präfix sie ist — erkennbar an
+    # gleicher Häufigkeit, denn dann hat die kürzere Fassung kein einziges Vorkommen
+    # außerhalb der längeren —, gewinnt die längere, genauere Fassung. Bei
+    # unterschiedlicher Häufigkeit hat die kürzere eigenständige Vorkommen und bleibt
+    # erhalten („give up" neben „give up on", siehe Bericht).
+    expression_pairs = _drop_prefix_dominated_expressions(expression_pairs)
 
     all_candidates = [sense for candidates in single_word_candidates for sense in candidates] + [
         sense for _, matches in expression_pairs for sense in matches

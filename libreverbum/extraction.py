@@ -76,7 +76,7 @@ from typing import TYPE_CHECKING, NamedTuple
 from libreverbum.entities import Chapter, Lemma, Occurrence
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Mapping, Sequence
 
     from spacy.language import Language
     from spacy.tokens import Span, Token
@@ -101,22 +101,18 @@ _CONTENT_POS = frozenset({"NOUN", "VERB", "ADJ", "ADV", "INTJ"})
 # unten je Vorkommen bewertet, nicht schon hier verworfen.
 _PROPER_NOUN_POS = "PROPN"
 
-# REGEL (technik.md §5, „Eigennamen"; T17-Nachbesserung, schwer 1, 25.08.2026): Das
-# vormalige strikte Kleiner-Zeichen (mindestens ein nicht-eigennamiges Vorkommen genügte)
-# ließ Titelfiguren durch, deren Grundform fast, aber nicht ganz nur als Name auftritt —
-# „Dorian" in tools/dorian_gray.epub Kapitel 16 mit 25 von 26 Vorkommen als PROPN (Anteil
-# 0,96), „Sibyl" in Kapitel 7 mit 26 von 28 (0,93). Gemessen über alle Kapitel von
-# tools/dorian_gray.epub und tools/sherlock.epub (36 Kapitel, 361 Grundformen mit
-# mindestens einem Eigennamen-Vorkommen): Bei 0,90 fallen zusätzlich sechs Grundformen weg,
-# die in einem einzelnen Kapitel fast nur als Namensbestandteil auftreten — „baker" (Henry
-# Baker, Sherlock Kap. 8, 16/17), „hunter" (Violet Hunter, Kap. 13, 19/21), „king" (King of
-# Bohemia, Kap. 2, 17/18), „league" (Red-Headed League, Kap. 3, 15/16), „lord" (Lord St.
-# Simon, Kap. 11, 36/37), „miss" (Titel vor einem Namen, Kap. 9, 18/19). Echte
-# Anredesubstantive bleiben dabei unberührt — höchster gemessener Anteil je Kapitel über
-# beide Bücher: „lady" 0,88, „sir" 0,86, „street" 0,82, „charming" 0,88, „mother" 0,71,
-# „duchess" 0,35 —, alle unter 0,90. Ein Schwellwert von 0,80 risse zusätzlich „lady"
-# (0,80 in Kapitel 17 erfüllt „≥") mit, 0,95 ließe „Sibyl" in Kapitel 7 (0,93) unberührt —
-# 0,90 ist der gemessene Kompromiss zwischen beidem.
+# REGEL (technik.md §5, „Eigennamen"; T17-Nachbesserung, schwer 1, zweiter Anlauf,
+# 26.08.2026): Der Schwellwert selbst ist unverändert (0,90, siehe unten) — verändert hat
+# sich, **worauf** er angewendet wird. Der erste Anlauf (25.08.2026) wandte ihn je Kapitel
+# an und ließ damit „Sibyl" in tools/dorian_gray.epub Kapitel 10 durch: spaCy vertaggt dort
+# drei elliptische Ausrufe („Sibyl dead!", „Did Sibyl—?", „Sibyl!") als NOUN statt PROPN —
+# Tagger-Fehler in Ein-Wort-Ausrufen, kein Sprachbefund —, der Anteil sinkt dadurch auf
+# 13/16 = 0,81 und bleibt unter der Schwelle, obwohl dieselbe Grundform buchweit fast
+# durchgängig ein Eigenname ist (80/85 = 0,94, `book_proper_noun_ratios`). Angewendet wird
+# der Schwellwert seither auf den **buchweiten** Anteil (über alle Kapitel des Buchs), nicht
+# den Anteil des einzelnen Kapitels — drei fehlgetaggte Vorkommen in einem Kapitel fallen
+# dann nicht mehr ins Gewicht. Siehe `book_proper_noun_ratios` und die Anwendung in
+# `extract_vocabulary`.
 _PROPER_NOUN_RATIO_THRESHOLD = 0.90
 
 # REGEL (bauplan.md T4, technik.md „Messung: Mehrwortausdrücke", „Grenze: rund ein
@@ -177,6 +173,49 @@ def _collapse_whitespace(text: str) -> str:
     einen Zeilenumbruch aus dem Buchsatz enthalten (`'throwing himself\\ndown'`). Ohne
     diesen Schritt stünde das rohe `\\n` später unverändert auf der Karte (T13)."""
     return _WHITESPACE.sub(" ", text).strip()
+
+
+def book_proper_noun_ratios(chapters: Sequence[Chapter], nlp: Language) -> dict[str, float]:
+    """Anteil eigennamiger Belege am Gesamtvorkommen je Grundform, gezählt über **alle**
+    übergebenen Kapitel hinweg (T17-Nachbesserung, schwer 1, zweiter Anlauf, 26.08.2026 —
+    siehe die REGEL bei `_PROPER_NOUN_RATIO_THRESHOLD`). `chapters` ist üblicherweise das
+    ganze Buch; diese Funktion trifft dazu keine Annahme und liest selbst kein EPUB — das
+    Zusammenstellen der Kapitelliste bleibt Sache des Aufrufers (`pipeline.run_chapter`),
+    genau wie es die Importregel aus technik.md §7 verlangt (`extraction` kennt nur
+    `entities`, nicht `epub`).
+
+    Dasselbe Universum an Vorkommen wie beim Einsammeln in `extract_vocabulary`
+    (`_CONTENT_POS` ∪ `_PROPER_NOUN_POS`, `token.is_alpha`) — sonst zählte die buchweite
+    Statistik andere Vorkommen als die Stelle, die sie anwendet.
+
+    Liefert nur Grundformen mit mindestens einem Vorkommen im übergebenen Ausschnitt; eine
+    Grundform ganz ohne Eigennamen-Vorkommen bliebe ohnehin unter jedem sinnvollen
+    Schwellwert, eine eigene Nullzeile dafür lohnt sich nicht.
+
+    Kosten: ein voller spaCy-Lauf je Kapitel (technik.md §5, rund eine Sekunde) — bei einem
+    ganzen Buch also im Bereich von dessen Kapitelzahl in Sekunden, einmal je Aufruf von
+    `pipeline.run_chapter`. Gemessen an `tools/dorian_gray.epub` (22 Kapitel) und
+    `tools/sherlock.epub` (13 Kapitel mit Fließtext): rund 22 s beziehungsweise 29 s. Das
+    ist der Preis der buchweiten Betrachtung — mit ihm entfällt der stille Fehlschlag aus
+    dem ersten Anlauf, ohne ihn ließe sich der `Sibyl`-Fall aus Kapitel 10 nicht auflösen
+    (siehe Bericht zur Abnahme)."""
+    _require_lemmatizer(nlp)
+
+    counts: dict[str, list[int]] = collections.defaultdict(lambda: [0, 0])
+    for chapter in chapters:
+        doc = nlp(chapter.text)
+        for token in doc:
+            if not token.is_alpha:
+                continue
+            pos = token.pos_
+            if pos not in _CONTENT_POS and pos != _PROPER_NOUN_POS:
+                continue
+            entry = counts[token.lemma_.lower()]
+            entry[1] += 1
+            if pos == _PROPER_NOUN_POS:
+                entry[0] += 1
+
+    return {lemma: proper / total for lemma, (proper, total) in counts.items()}
 
 
 # REGEL (technik.md, „Warum die Wortart trotzdem nicht genügt", „Nur der Belegsatz klärt
@@ -242,6 +281,21 @@ def _is_bare(token: Token) -> bool:
     return next(token.children, None) is None
 
 
+def _has_only_a_bare_pronoun_object(token: Token) -> bool:
+    """`token`s einziges Kind ist ein unmodifiziertes Personalpronomen (T17-Nachbesserung,
+    mittel 3, zweiter Anlauf, 26.08.2026): „to" in „came to him" und „at" in „looked at
+    him" haben mit `him` ein eigenes Kind-Token und bestehen `_is_bare` deshalb nicht,
+    obwohl ein bloßes Pronomen den idiomatischen Charakter der Wortfolge nicht ändert —
+    anders als ein echtes Objekt mit eigenem Inhalt („into the **library**", Kind „the" an
+    „library"). Geprüft an `en_core_web_md`: das Pronomen trägt dabei stets `dep_ ==
+    "pobj"` und selbst keine weiteren Kinder."""
+    children = list(token.children)
+    if len(children) != 1:
+        return False
+    (child,) = children
+    return child.dep_ == "pobj" and child.pos_ == "PRON" and _is_bare(child)
+
+
 def _is_expression_satellite(verb: Token, satellite: Token) -> bool:
     """Bildet `satellite` mit `verb` eher eine Wendung als eine gewöhnliche Wortfolge?
     Siehe die REGEL bei `_EXPRESSION_PARTICLE_WORDS`.
@@ -252,14 +306,31 @@ def _is_expression_satellite(verb: Token, satellite: Token) -> bool:
     eine Wendung. Beim Bau dieser Funktion tatsächlich mit `is` versucht: die eigens dafür
     geschriebenen Tests (`test_expression_free_occurrence_is_preferred_for_the_example_
     sentence`, `test_falls_back_to_a_wendung_occurrence_when_none_is_free`) fielen beide
-    sofort rot, weil „taken part" nie als Wendung erkannt wurde."""
-    if satellite.head != verb or verb.pos_ != "VERB" or not _is_bare(satellite):
+    sofort rot, weil „taken part" nie als Wendung erkannt wurde.
+
+    T17-Nachbesserung (mittel 3, zweiter Anlauf, 26.08.2026): Die Bareness-Prüfung galt
+    bisher pauschal für alle vier Satellitenarten und ließ „came **to him**" und „looked
+    **at him**" durch, weil das Objekt „him" ein eigenes Kind-Token ist. Beide Wortfolgen
+    stehen im selben Kapitel (`tools/dorian_gray.epub` Kapitel 10) als eigener
+    Wendungskandidat mit anderer Bedeutung (`extract_particle_verb_candidates`,
+    `extract_contiguous_candidates`) — der Belegsatz des Einzelworts „came"/„looked" zeigte
+    also dieselbe Wendung wie beim `taken part`-Fall oben, nur über ein anderes
+    syntaktisches Muster. Die Bareness-Prüfung ist deshalb jetzt je Satellitenart einzeln
+    formuliert: Partikel, `advmod` und das unbestimmte Akkusativobjekt bleiben strikt bare
+    (unverändert), eine Präposition gilt zusätzlich als Wendungssatellit, wenn ihr einziges
+    Kind ein bloßes Personalpronomen ist (`_has_only_a_bare_pronoun_object`) — „went into
+    **the library**" bleibt dagegen unberührt, weil „library" kein Pronomen ist."""
+    if satellite.head != verb or verb.pos_ != "VERB":
         return False
     if satellite.dep_ == _PARTICLE_DEP:
-        return True
+        return _is_bare(satellite)
     if satellite.dep_ == "advmod":
-        return satellite.lemma_.lower() in _EXPRESSION_PARTICLE_WORDS
-    return satellite.dep_ == "prep" or (satellite.dep_ == "dobj" and satellite.pos_ == "NOUN")
+        return _is_bare(satellite) and satellite.lemma_.lower() in _EXPRESSION_PARTICLE_WORDS
+    if satellite.dep_ == "dobj":
+        return _is_bare(satellite) and satellite.pos_ == "NOUN"
+    if satellite.dep_ == "prep":
+        return _is_bare(satellite) or _has_only_a_bare_pronoun_object(satellite)
+    return False
 
 
 def _is_expression_member(token: Token) -> bool:
@@ -289,13 +360,25 @@ class _CandidateOccurrence(NamedTuple):
     in_expression: bool = False
 
 
-def extract_vocabulary(chapter: Chapter, nlp: Language) -> list[Occurrence]:
+def extract_vocabulary(
+    chapter: Chapter, nlp: Language, *, book_proper_noun_ratios: Mapping[str, float] | None = None
+) -> list[Occurrence]:
     """Extrahiert die Grundformen eines Kapitels (bauplan.md T3).
 
     Reihenfolge je Token: Wortart und Grundform kommen beide von spaCy, bevor dieses
     Modul irgendeine Entscheidung trifft — Nachschlagen findet an keiner Stelle statt
     (Regel 2). Die Rückgabe ist in der Reihenfolge des ersten Vorkommens im Kapitel,
     unsortiert: Häufigkeitssortierung ist Aufgabe von `triage`, nicht von diesem Modul.
+
+    `book_proper_noun_ratios` (T17-Nachbesserung, schwer 1, zweiter Anlauf, 26.08.2026):
+    das Ergebnis von `book_proper_noun_ratios()` über das ganze Buch, von
+    `pipeline.run_chapter` vorberechnet und hier nur angewendet — siehe die REGEL bei
+    `_PROPER_NOUN_RATIO_THRESHOLD`. Fehlt der Wert (`None`, die Vorgabe) oder führt er
+    eine Grundform nicht, weicht die Prüfung auf den Anteil **dieses** Kapitels aus — den
+    einzigen Wert, der ohne Buchkenntnis zur Verfügung steht. Das hält die Funktion
+    rückwärts kompatibel für einen Aufruf mit einem einzelnen, erfundenen Kapitel (etwa in
+    Unit-Tests) und ist zugleich der frühere, jetzt nur noch als Rückfall geltende
+    Rechenweg.
     """
     _require_lemmatizer(nlp)
 
@@ -323,13 +406,38 @@ def extract_vocabulary(chapter: Chapter, nlp: Language) -> list[Occurrence]:
     occurrences: list[Occurrence] = []
     for lemma_text, candidates in candidates_by_lemma.items():
         proper_count = sum(1 for c in candidates if c.pos == _PROPER_NOUN_POS)
-        if proper_count / len(candidates) >= _PROPER_NOUN_RATIO_THRESHOLD:
-            # Ganz oder weit überwiegend eigennamige Vorkommen (Regel 12,
-            # _PROPER_NOUN_RATIO_THRESHOLD): Kein Vorkommen dieser Grundform in diesem
-            # Kapitel taugt noch als Lernkontext für die gewöhnliche Bedeutung — schließt
-            # den reinen Namensfall (proper_count == len(candidates)) mit ein, dafür
-            # bräuchte es keine eigene Prüfung mehr.
+        # (T17-Nachbesserung, schwer 1, zweiter Anlauf, 26.08.2026): `proper_count`-Wächter
+        # zuerst — bei 0 ist der Anteil ohnehin 0 und die Grundform bleibt so oder so
+        # erhalten. Zugleich die notwendige Bedingung, die den `frank`-Fall verhindert
+        # (siehe Bericht): Hat **dieses** Kapitel kein einziges PROPN-Vorkommen dieser
+        # Grundform, gibt es hier keinen Namensbeleg, der buchweit bestätigt werden
+        # könnte — ein Kapitel, in dem ein sonst meist eigennamiges Wort ausnahmsweise
+        # ganz gewöhnlich vorkommt, verliert es dadurch nicht.
+        #
+        # (Nachbesserung am eigenen Fund, 26.08.2026): Sind **alle** Vorkommen dieses
+        # Kapitels eigennamig (proper_count == len(candidates)), gibt es in diesem Kapitel
+        # keinen einzigen Beleg für die gewöhnliche Verwendung — unabhängig vom buchweiten
+        # Anteil, der anderswo im Buch gemessen sein mag. Ohne diese Prüfung stürzte
+        # `min(pos_counts, ...)` weiter unten auf einer leeren Liste ab, sobald der
+        # buchweite Anteil unter der Schwelle blieb (etwa „march", „duke" in
+        # tools/sherlock.epub Kapitel 2: dort ausschließlich als PROPN vertaggt, buchweit
+        # aber überwiegend gewöhnliche Wörter) — Regel 13 verbietet, das als Absturz statt
+        # als erkannten Fall zu behandeln.
+        if proper_count == len(candidates):
             continue
+        if proper_count:
+            ratio = (
+                book_proper_noun_ratios[lemma_text]
+                if book_proper_noun_ratios is not None and lemma_text in book_proper_noun_ratios
+                else proper_count / len(candidates)
+            )
+            if ratio >= _PROPER_NOUN_RATIO_THRESHOLD:
+                # Ganz oder weit überwiegend eigennamige Vorkommen (Regel 12,
+                # _PROPER_NOUN_RATIO_THRESHOLD): Bleibt trotzdem mindestens ein
+                # nicht-eigennamiges Vorkommen übrig (sonst hätte der Zweig oben schon
+                # eingegriffen), taugt es allein noch nicht als Lernkontext, wenn Buch oder
+                # Kapitel überwiegend den Namen meinen.
+                continue
 
         non_proper = [c for c in candidates if c.pos != _PROPER_NOUN_POS]
         pos_counts: collections.Counter[str] = collections.Counter()

@@ -11,6 +11,7 @@ import pytest
 from libreverbum import epub
 from libreverbum.entities import Book, Chapter, Occurrence
 from libreverbum.extraction import (
+    book_proper_noun_ratios,
     extract_contiguous_candidates,
     extract_particle_verb_candidates,
     extract_vocabulary,
@@ -169,6 +170,45 @@ def test_rule_12_proper_noun_ratio_excludes_the_title_character_but_keeps_an_add
     assert lady.proper_noun_frequency < lady.frequency
 
 
+@pytest.mark.needs_epub
+def test_rule_12_book_wide_ratio_excludes_sibyl_in_chapter_10_but_keeps_an_address_noun(
+    nlp: Language, real_epub_paths: dict[str, Path]
+) -> None:
+    """schwer 1, zweiter Anlauf (Abnahme T17, 26.08.2026): In `tools/dorian_gray.epub`
+    Kapitel 10 vertaggt spaCy drei elliptische Ausrufe („Sibyl dead!", „Did Sibyl—?",
+    „Sibyl!") als NOUN statt PROPN — Tagger-Fehler in Ein-Wort-Ausrufen, kein
+    Sprachbefund. Der Anteil **dieses** Kapitels sinkt dadurch auf 13/16 = 0,81, unter die
+    Schwelle aus dem ersten Anlauf (25.08.2026) — „Sibyl" blieb dort trotzdem Lernvokabel,
+    mit ausgerechnet einem der drei Fehltaggings als Belegsatz. Der **buchweite** Anteil
+    (`book_proper_noun_ratios`, über alle Kapitel von `tools/dorian_gray.epub`) liegt bei
+    80/85 = 0,94 und hält „Sibyl" jetzt auch in Kapitel 10 draußen, ohne ein echtes
+    Anredesubstantiv mitzureißen — geprüft an der echten Datei, nicht an einer
+    nachgebauten Vorrichtung (dokumentation.md §5, „Woran geprüft wird")."""
+    path = real_epub_paths["dorian_gray"]
+    structure = epub.read_structure(path)
+
+    chapters = []
+    for reference in structure.chapters:
+        try:
+            chapters.append(epub.read_chapter(path, structure.book, reference))
+        except ValueError:
+            continue
+    ratios = book_proper_noun_ratios(chapters, nlp)
+
+    chapter_10 = next(c for c in chapters if c.number == 10)
+    occurrences_10 = extract_vocabulary(chapter_10, nlp, book_proper_noun_ratios=ratios)
+    assert not has_lemma(occurrences_10, "sibyl")
+
+    # Gegenprobe im selben Buch, mit denselben buchweiten Werten angewendet: „lady" in
+    # Kapitel 17 bleibt Lernvokabel — ihr buchweiter Anteil (60/74 = 0,81) liegt wie ihr
+    # Anteil je Kapitel unter der Schwelle von 0,90.
+    chapter_17 = next(c for c in chapters if c.number == 17)
+    occurrences_17 = extract_vocabulary(chapter_17, nlp, book_proper_noun_ratios=ratios)
+    lady = find(occurrences_17, "lady")
+    assert lady.proper_noun_frequency > 0
+    assert lady.proper_noun_frequency < lady.frequency
+
+
 # ------------------------------------------------------------- Inhaltswortfilter
 
 
@@ -306,6 +346,52 @@ def test_running_late_keeps_its_belegsatz(nlp: Language) -> None:
     run = find(occurrences, "run", "VERB")
     assert run.word_form == "running"
     assert run.example_sentence == "She was running late."
+
+
+def test_preposition_with_a_bare_pronoun_object_counts_as_an_expression(nlp: Language) -> None:
+    """T17-Nachbesserung (mittel 3, zweiter Anlauf, 26.08.2026): „to" in „came to him" hat
+    mit „him" ein eigenes Kind-Token und bestand die alte, pauschale Bareness-Prüfung
+    deshalb nicht (`_is_bare`), obwohl ein bloßes Personalpronomen den idiomatischen
+    Charakter der Wortfolge nicht ändert — „come to" (zu sich kommen) ist eine andere
+    Bedeutung als das bloße Verb „come". Von zwei Vorkommen wird das wendungsfreie für den
+    Belegsatz gewählt, obwohl das wendungsbeteiligte zuerst im Kapitel steht (wie bei
+    `test_expression_free_occurrence_is_preferred_for_the_example_sentence`)."""
+    chapter = make_chapter(
+        "A dim sense of the danger came to him once or twice. "
+        "Yesterday she decided to come early instead."
+    )
+    occurrences = extract_vocabulary(chapter, nlp)
+
+    come = find(occurrences, "come", "VERB")
+    assert come.example_sentence == "Yesterday she decided to come early instead."
+
+
+def test_preposition_with_a_real_noun_object_is_not_mistaken_for_an_expression(
+    nlp: Language,
+) -> None:
+    """Gegenprobe: Ein echtes Objekt mit eigenem Inhalt ändert daran nichts — „into" in
+    „went into the library" bleibt frei, weil „library" kein bloßes Personalpronomen ist
+    (Kind „the" an „library"). Erste Vorkommen ist das wendungsbeteiligte („into it"),
+    zweites das freie — die Wahl muss also tatsächlich unterscheiden, nicht einfach das
+    erste Vorkommen nehmen."""
+    chapter = make_chapter("He went into it. He also went into the library.")
+    occurrences = extract_vocabulary(chapter, nlp)
+
+    go = find(occurrences, "go", "VERB")
+    assert go.example_sentence == "He also went into the library."
+
+
+def test_looked_at_him_is_an_expression_but_looked_at_the_painting_is_not(nlp: Language) -> None:
+    """Zweites Beispiel aus dem Auftrag: „at" in „looked at him" — dieselbe
+    Pronomen-Ausnahme wie bei „come to him" oben, an einer anderen Präposition und einem
+    anderen Verb geprüft."""
+    chapter = make_chapter(
+        "Dorian looked at him for a moment. Later she looked at the old painting."
+    )
+    occurrences = extract_vocabulary(chapter, nlp)
+
+    look = find(occurrences, "look", "VERB")
+    assert look.example_sentence == "Later she looked at the old painting."
 
 
 # ---------------------------------------------------------- Häufigkeit und Belegsatz

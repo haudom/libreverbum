@@ -939,10 +939,58 @@ Schwelle), „mother" 0,71, „duchess" 0,35 —, alle unter 0,90.
 
 Zwei Nachbarwerte wurden mitgemessen: 0,80 risse zusätzlich „lady" mit (0,80 in Kapitel 17
 erfüllt „≥"), 0,95 ließe „Sibyl" in Kapitel 7 (0,93) unberührt. 0,90 ist der Kompromiss,
-den keiner der beiden Nachbarwerte bietet. Sibyls zweites Vorkommen (Kapitel 10, 13 von
-16, Anteil 0,81) bleibt dabei unter der Schwelle und damit Lernvokabel — der Filter wirkt
-je Kapitel, nicht auf die Grundform über das ganze Buch (Regel oben); ein Wert, der auch
-diesen Fall träfe, risse „lady" mit herein.
+den keiner der beiden Nachbarwerte bietet. **Der Filter wirkt seit dem 26.08.2026 auf den
+buchweiten Anteil** (Nachtrag unten), nicht mehr auf den Anteil des einzelnen Kapitels —
+die Vermutung, ein buchweiter Wert risse „lady" mit herein, hat sich beim Nachmessen nicht
+bestätigt.
+
+### Nachtrag 26.08.2026: Buchweiter Anteil statt je Kapitel angewendet
+
+Sibyls zweites Vorkommen (Kapitel 10, 13 von 16, Anteil 0,81) blieb unter der Schwelle und
+damit Lernvokabel, mit dem Belegsatz „Sibyl dead!" — spaCy vertaggt drei elliptische
+Ausrufe dieses Kapitels („Sibyl dead!", „Did Sibyl—?", „Sibyl!") als NOUN statt PROPN,
+Tagger-Fehler in Ein-Wort-Ausrufen, kein Sprachbefund. Der Anteil **je Kapitel** kann
+diesen Fall nicht lösen: Ein einzelnes Kapitel mit wenigen Vorkommen kippt durch drei
+Fehltaggings vollständig.
+
+**Regel 12 wendet den Schwellwert jetzt auf den Anteil über das ganze Buch an**
+(`extraction.book_proper_noun_ratios`, angewendet in `extract_vocabulary`), nicht mehr auf
+den Anteil des einzelnen Kapitels — der Schwellwert selbst bleibt 0,90. Gemessen an
+`tools/dorian_gray.epub` und `tools/sherlock.epub` (36 Kapitel, mit `extract_vocabulary`
+selbst statt einer nachgebauten Näherung, 26.08.2026): Buchweit steht „Sibyl" bei 80 von 85
+Vorkommen als PROPN (0,94) und fällt jetzt in **jedem** Kapitel weg, auch in Kapitel 10.
+Über beide Bücher hinweg fällt **sonst kein einziges** zusätzliches Wort weg, das unter der
+Je-Kapitel-Regel noch Lernvokabel war — insbesondere bleiben „lady" (60/74 = 0,81
+buchweit), „sir" (0,55 Dorian / 0,49 Sherlock), „street", „mother", „duchess", „uncle" in
+jedem Kapitel erhalten, in dem sie keine Namensbestandteile sind. Zwei Wörter werden durch
+den buchweiten Wert sogar **zusätzlich** als Lernvokabel gehalten, die die Je-Kapitel-Regel
+verloren hatte: „king" (Sherlock Kap. 2, „A Scandal in Bohemia", 17 von 18 Vorkommen lokal
+PROPN, buchweit aber nur 24 von 27 = 0,89, unter der Schwelle) und „miss" (Sherlock Kap. 9,
+18 von 19 lokal, buchweit 79 von 101 = 0,78) — beides Wörter mit echter, wenn auch seltener
+gewöhnlicher Verwendung im jeweiligen Kapitel, die vorher hinter der Namenshäufung
+verschwand.
+
+Notwendige Zusatzbedingung, ohne die die Prüfung selbst fehlschlägt: Der buchweite Wert
+wird nur angewendet, wenn das **Kapitel selbst** mindestens ein PROPN-Vorkommen der
+Grundform hat (`proper_count`), und **nie**, wenn im Kapitel ausschließlich
+eigennamige Vorkommen stehen (`proper_count == frequency`) — dann gibt es keinen Beleg für
+die gewöhnliche Verwendung, den ein buchweiter Wert rechtfertigen könnte. Ohne diese zweite
+Bedingung hätte ein Wort wie „frank" (Sherlock, in einer Kurzgeschichte fast nur der Name
+„Frank Moulton", buchweit 19 von 20 = 0,95) auch in Kapitel 5 verloren gehen können, wo es
+ausschließlich als gewöhnliches Adjektiv vorkommt („His frank acceptance…", 0 von 1 lokal
+PROPN) — genau der Fall, den die Prüfung an beiden Büchern verhindern soll. An zwölf
+gezielt beobachteten Wörtern über beide Bücher (`lady`, `sir`, `street`, `mother`,
+`duchess`, `uncle`, `king`, `miss`, `lord`, `baker`, `hunter`, `league`) und an der
+vollständigen Differenz aller 36 Kapitel geprüft (Bericht zur Abnahme T17, zweiter Anlauf).
+
+Kosten: Der buchweite Wert braucht einen vollen spaCy-Lauf über **jedes** Kapitel des
+Buchs, nicht nur das gewählte — `pipeline.run_chapter` liest dafür alle Kapitel des Buchs
+vorab ein. Gemessen an den beiden EPUBs unter `tools/`: rund 22 s (`dorian_gray.epub`, 22
+Kapitel) beziehungsweise 29 s (`sherlock.epub`, 13 Kapitel mit Fließtext) — gegenüber den
+rund 1,1 s, die `run_chapter` zuvor für Nachschlagen und Profilabgleich allein brauchte
+(„Nachtrag 17.08.2026" oben). Ein Kapitel, das nur aus Vorspann, Impressum oder — bei einem
+reinen Bildband — ganz ohne Fließtext besteht, trägt nichts zur Statistik bei und wird
+übersprungen (dieselbe Meldung, die `epub.read_chapter` dafür schon liefert).
 
 ### Offene Punkte
 

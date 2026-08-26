@@ -451,6 +451,151 @@ def test_run_chapter_attaches_dictionary_matches_to_expression_candidates(
     assert all(status == profile.VocabularyStatus.UNKNOWN for status in entry.status.values())
 
 
+def _build_prefix_test_epub(path: Path, *, text: str) -> None:
+    """Ein-Kapitel-EPUB für `test_run_chapter_drops_a_shorter_expression_dominated_by_a_
+    longer_one` — eigens aufgebaut statt über `_build_pipeline_epub`, weil dessen Text und
+    `mini_dictionary_db` auf einen anderen Fall abgestimmt sind (mittel 4, Abnahme T17,
+    zweiter Anlauf, 26.08.2026)."""
+    container_xml = _CONTAINER_XML
+    opf = """<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="bookid">urn:uuid:prefix-test</dc:identifier>
+    <dc:title>Präfix-Testbuch</dc:title>
+    <dc:creator>Testautorin</dc:creator>
+  </metadata>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="chap1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine><itemref idref="chap1"/></spine>
+</package>"""
+    nav = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>Navigation</title></head>
+<body>
+  <nav epub:type="toc"><ol><li><a href="chapter1.xhtml">Erstes Kapitel</a></li></ol></nav>
+</body>
+</html>"""
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        archive.writestr("META-INF/container.xml", container_xml)
+        archive.writestr("OEBPS/content.opf", opf)
+        archive.writestr("OEBPS/chapter1.xhtml", _chapter_xhtml("Erstes Kapitel", text))
+        archive.writestr("OEBPS/nav.xhtml", nav)
+
+
+def _build_prefix_test_dictionary(path: Path) -> None:
+    """Wörterbuch für denselben Test: „in front" und „in front of" mit `score ≥ 50`
+    (bauplan.md T7), Werte aus `tools/en-de.sqlite3` abgelesen (dort 60,0 respektive
+    90,4) — „give up" und „give up on" wie in `mini_dictionary_db`, ergänzt um „give up
+    on"."""
+    con = sqlite3.connect(path)
+    try:
+        con.execute(
+            "CREATE TABLE translation("
+            "lexentry, sense_num, sense, written_rep TEXT, trans_list, score, is_good, importance"
+            ")"
+        )
+        con.executemany(
+            "INSERT INTO translation VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    "eng/in_front_of__Prepositional_phrase__1",
+                    None,
+                    "positioned ahead of",
+                    "in front of",
+                    "vor",
+                    90.4,
+                    1,
+                    1.0,
+                ),
+                (
+                    "eng/in_front__Phrase__1",
+                    None,
+                    "in a position ahead",
+                    "in front",
+                    "vorne",
+                    60.0,
+                    1,
+                    1.0,
+                ),
+                (
+                    "eng/give_up__Verb__1",
+                    None,
+                    "admit defeat",
+                    "give up",
+                    "aufgeben",
+                    120.0,
+                    1,
+                    1.73,
+                ),
+                (
+                    "eng/give_up_on__Verb__1",
+                    None,
+                    "stop believing in",
+                    "give up on",
+                    "aufgeben",
+                    100.0,
+                    1,
+                    1.0,
+                ),
+            ],
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def test_run_chapter_drops_a_shorter_expression_dominated_by_a_longer_one(
+    tmp_path: Path, nlp: Language
+) -> None:
+    """mittel 4 (Abnahme T17, zweiter Anlauf, 26.08.2026): „in front" und „in front of"
+    trugen bislang denselben Belegsatz und standen beide in `expressions`, weil die
+    Entdopplung aus mittel 5 (07be96c) nur identische Wortfolgen vergleicht — jedes
+    Vorkommen von „in front of" erzeugt in `extraction.extract_contiguous_candidates`
+    zugleich ein Vorkommen seines Präfixes „in front", beide also mit derselben Häufigkeit
+    und denselben Textstellen. `pipeline._drop_prefix_dominated_expressions` lässt die
+    kürzere Fassung jetzt fallen, wenn eine längere Wendung ihr Wortfolge-Präfix ist und
+    dieselbe Häufigkeit trägt.
+
+    Gegenprobe im selben Durchlauf: „give up" (dreimal, davon einmal als „give up on")
+    bleibt neben „give up on" (einmal) bestehen — unterschiedliche Häufigkeit heißt, „give
+    up" hat eigenständige Vorkommen außerhalb von „give up on" und darf nicht verschwinden
+    (Auftragstext, „give up gegen give up on wäre so ein Fall")."""
+    text = (
+        "The heavy curtains hung in front of the window. A tall vase stood in front of "
+        "the door. He walked in front of the mirror without looking. He finally gave up. "
+        "She tried hard, but she also gave up. In the end, she gave up on the whole idea."
+    )
+    epub_path = tmp_path / "prefix.epub"
+    _build_prefix_test_epub(epub_path, text=text)
+    dictionary_path = tmp_path / "en-de.sqlite3"
+    _build_prefix_test_dictionary(dictionary_path)
+    dictionary.ensure_index(dictionary_path)
+
+    result = pipeline.run_chapter(
+        epub_path=epub_path,
+        chapter_number=1,
+        dictionary_path=dictionary_path,
+        profile_path=tmp_path / "profil.sqlite3",
+        nlp=nlp,
+    )
+
+    lemma_texts = {e.occurrence.lemma.text for e in result.expressions}
+    assert "in front" not in lemma_texts
+    in_front_of = _expressions(result, "in front of")
+    assert len(in_front_of) == 1
+    assert in_front_of[0].occurrence.frequency == 3
+
+    give_up = _expressions(result, "give up")
+    give_up_on = _expressions(result, "give up on")
+    assert len(give_up) == 1
+    assert len(give_up_on) == 1
+    assert give_up[0].occurrence.frequency == 3
+    assert give_up_on[0].occurrence.frequency == 1
+
+
 def test_run_chapter_checks_the_dictionary_file_before_extracting_any_vocabulary(
     pipeline_epub: Path,
     profile_path: Path,
