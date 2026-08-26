@@ -916,8 +916,7 @@ vergessen".
 book ──< chapter ──< occurrence >── lemma ──< sense
                           │                     │
                      (Belegsatz,           (Momentaufnahme aus
-                      Häufigkeit)           dem Wörterbuch,
-                                            eigene Korrektur)
+                      Häufigkeit)           dem Wörterbuch)
                                                 │
                          event ─────────────────┤   Verlauf: kennt / lernt /
                                                 │   zurückgestellt / vergessen
@@ -928,7 +927,7 @@ book ──< chapter ──< occurrence >── lemma ──< sense
 | Tabelle | Zweck |
 |---|---|
 | `lemma` | Grundform + Wortart. Die Klammer, nicht die Kenntniseinheit |
-| `sense` | Eine Bedeutung eines Lemmas. Trägt die Wörterbuch-Momentaufnahme und die eigene Korrektur |
+| `sense` | Eine Bedeutung eines Lemmas. Trägt die Wörterbuch-Momentaufnahme |
 | `event` | Der Verlauf. Art, Herkunft, Zeitpunkt, Bezug auf Buch/Kapitel |
 | `occurrence` | Belegsatz und Häufigkeit je Kapitel — dasselbe Wort hat in Kapitel 2 einen anderen Belegsatz als in Kapitel 9 |
 | `book`, `chapter` | Was bereits verarbeitet wurde |
@@ -936,6 +935,38 @@ book ──< chapter ──< occurrence >── lemma ──< sense
 
 Die Namen sind englisch, die Prosa bleibt deutsch — Zuordnung und Begründung in
 [dokumentation.md](dokumentation.md), Abschnitt 1.
+
+#### Die Spalten, wie sie seit T8 stehen
+
+Festgehalten am 26.08.2026 nach der Abnahme; verbindlich ist `libreverbum/profile.py`,
+`_SCHEMA`, nicht diese Tabelle. Jede Tabelle trägt zusätzlich `id INTEGER PRIMARY KEY`.
+Die dritte Spalte nennt, **was eine Zeile identifiziert** — dort stecken die
+Entwurfsentscheidungen, nicht in den Datentypen (alle Spalten `TEXT` oder `INTEGER`, alle
+`NOT NULL` außer den drei `wikdict_`-Feldern).
+
+| Tabelle | weitere Spalten | eine Zeile ist eindeutig über |
+|---|---|---|
+| `book` | `title`, `author` | `UNIQUE (title, author)` — ein Buch ist Titel und Autor, keine Datei und keine ISBN |
+| `chapter` | `book_id`, `number`, `title` | `UNIQUE (book_id, number)` — die Nummer im Buch, nicht der Titel: „Chapter One" gibt es in jedem zweiten Buch |
+| `lemma` | `text`, `pos` | `UNIQUE (text, pos)` — dieselbe Schreibung unter zwei Wortarten sind **zwei** Zeilen (der `saw`-Fall, „Warum die Reihenfolge zwingend ist") |
+| `sense` | `lemma_id`, `wikdict_lexentry`, `wikdict_sense`, `wikdict_trans_list` | `UNIQUE INDEX sense_identity` über `lemma_id` und alle drei `wikdict_`-Felder, jedes durch `ifnull(…, '')` — ein gewöhnliches `UNIQUE` griffe nicht, weil SQLite jedes `NULL` von jedem anderen unterscheidet und `wikdict_sense` bei 36 % der Zeilen fehlt (Regel 1) |
+| `occurrence` | `book_id`, `chapter_number`, `lemma_id`, `word_form`, `example_sentence`, `frequency`, `proper_noun_frequency` | `UNIQUE (book_id, chapter_number, lemma_id)` — je Kapitel **eine** Zeile je Grundform, mit eigenem Belegsatz |
+| `event` | `sense_id`, `knowledge_state`, `origin`, `timestamp`, `book_id`, `chapter_number` | **keine** UNIQUE-Bedingung, und das ist die Entscheidung: Zeilen werden angehängt, nie geändert („Kernentscheidung: Ereignisfolge statt überschreibbarem Zustand" unten) |
+| `card` | `sense_id`, `occurrence_id`, `card_direction`, `guid` | `UNIQUE (guid)` — die Anki-Kennung, an der der Rückkanal aus Phase 3 hängt („Jetzt billig, später teuer" unten) |
+
+- **Die `wikdict_`-Momentaufnahme steht ausschließlich in `sense`**, in genau diesen drei
+  Spalten, und ist reiner Zeileninhalt zum Zeitpunkt der Abfrage — kein `rowid`, kein
+  anderer Verweis in `en-de.sqlite3` (Regel 4, „Getrennte Datei" unten)
+- **Eine eigene Korrektur der Übersetzung hat das Schema nicht.** `entities.Sense.translation`
+  ist ein Ergebnisfeld des Durchlaufs und wird nicht geschrieben; die Karte trägt die
+  Übersetzung, das Profil die Kenntnis
+- Alle Fremdschlüssel zeigen innerhalb der Profildatei. `occurrence` und `event` verweisen
+  zusätzlich als Paar auf `chapter(book_id, number)`; `open_profile` schaltet
+  `PRAGMA foreign_keys = ON`
+- `PRAGMA user_version` steht auf `profile.SCHEMA_VERSION`, heute **1**. `open_profile`
+  prüft beim Öffnen zusätzlich, dass genau diese sieben Tabellen vorhanden sind —
+  `user_version = 0` ist bei SQLite auch der Wert jeder fremden Datei
+  („Schemaversion von Anfang an" unten)
 
 > **Achtung, zwei Dinge namens `sense`:** Die eigene Tabelle ist die **Bedeutung als
 > Gegenstand** — mit Verlauf, eigener Korrektur und Kartenbezug. WikDicts `sense` ist
@@ -992,7 +1023,8 @@ Migrationen wird es geben, weil Phase 2 und 3 neue Felder brauchen.
 
 ### Offene Punkte
 
-- Genaue Spalten und Datentypen — beim Bau festzulegen, nicht vorab
+- ~~Genaue Spalten und Datentypen~~ — beim Bau festgelegt (T8) und am 26.08.2026 oben unter
+  „Die Spalten, wie sie seit T8 stehen" festgehalten
 - Umgang mit gleichzeitigem Zugriff, falls später eine Weboberfläche hinzukommt
   (siehe Architekturregel in Abschnitt 1)
 - **Der Regel-Kommentar über `profile.record_card` begründet falsch.** Er nennt als Grund,
