@@ -312,6 +312,23 @@ nicht zurück. Sie wird deshalb vorher **binär** gesichert und die Wiederherste
 
 ---
 
+### Hängt ein Ergebnis an einem Modell, wird derselbe Lauf zweimal gefahren
+
+Eine Abnahme, die einen Modellaufruf enthält, prüft zuerst, ob sie **überhaupt etwas
+prüft**: derselbe Lauf, frisches Profil, gleiche Argumente, zweimal — und die Protokolle
+müssen sich nach Abzug von Zeitstempeln und Pfaden zu **nichts** unterscheiden.
+
+Der Grund steht in technik.md §3, „Zwingende Einstellung: Temperatur auf 0". Bevor die
+Temperatur festgelegt war, lieferte dieselbe Eingabe in 9 von 40 Fällen eine andere
+Antwort. Zwei Abnahmeläufe sind daran gescheitert, ohne dass es jemandem auffiel: Ein
+Kriterium, das in etwa jedem fünften Lauf reißt, sieht in einem einzelnen Lauf entweder
+erfüllt oder gefallen aus — beides überzeugend, beides wertlos. Erst zehn Wiederholungen
+desselben Aufrufs machten daraus eine Aussage (8/10 gegen 2/10).
+
+Die Probe kostet einen zweiten Lauf und ist die billigste Zusicherung im Bestand: Sie
+bewacht die Temperaturfestlegung von außen, ohne etwas über sie zu wissen. Schlägt sie an,
+ist **nicht** das Ergebnis der Befund, sondern dass es keines gibt.
+
 ## 6. Nicht dokumentiert wird
 
 Keine erzeugte Schnittstellenreferenz (Sphinx, pdoc) — Pflege ohne Leser. Keine
@@ -358,6 +375,20 @@ Nachträge in den Fließtext, der Rest fällt weg. Sonst wird aus einzelnen Nach
 zwanzig Entscheidungen hinweg eine Sedimentschicht.
 
 ---
+
+### Vor dem Löschen einer Datei: nachsehen, wer auf sie zeigt
+
+Eine Datei, die planmäßig wegfällt — `bauplan.md` mit der Abnahme der Phase 1,
+`nacharbeit.md` mit ihrer Auflösung —, hinterlässt Verweise, die ins Leere zeigen. Am
+26.08.2026 waren es sieben im Quelltext auf `nacharbeit.md` und rund 140 auf `bauplan.md`.
+Kein Prüfbefehl merkt das: Ein toter Verweis in einem Docstring ist syntaktisch tadellos.
+
+Also `grep -rn <dateiname> .` **vor** dem Löschen, und je Treffer entscheiden. Dabei sind
+zweierlei zu unterscheiden: ein **Wegweiser**, dem ein Leser folgen soll — der wird auf das
+Dokument umgebogen, das die Sache jetzt trägt —, und eine **Herkunftsangabe** wie
+`bauplan.md T13`, die nur sagt, woher eine Zeile stammt. Die bleibt stehen: Sie ist über
+`git show <commit>:<datei>` weiterhin auflösbar, und verkürzt man sie auf `T13`, geht genau
+diese Spur verloren.
 
 ## 8. Kleinigkeiten
 
