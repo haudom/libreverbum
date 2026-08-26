@@ -22,6 +22,7 @@ am saubersten auf:
 | 8b | Anki-Erzeugung | **entschieden** (21.08.2026) |
 | 8c | Druckausgabe | **entschieden** (21.08.2026) |
 | 9 | Ablage und Konfiguration zur Laufzeit | **entschieden** (12.08.2026) |
+| 10 | Lizenz des eigenen Codes | **entschieden** (26.08.2026) |
 
 Frage 5 stand anfangs nicht auf der Liste. Sie ist aus Frage 2 entstanden, deren Messung
 mit der Folgerung endete, nicht die Datenquelle sei der Engpass, sondern die
@@ -41,6 +42,10 @@ Frage 7 gehört zu 6 und steht unmittelbar vor der ersten Zeile Anwendungscode: 
 womit gebaut wird, sondern wohin das Gebaute kommt. Sie wird vorab entschieden, weil eine
 Aufteilung, die nebenbei entsteht, in jeder Sitzung neu entsteht — und sich nicht mehr
 ändern lässt, sobald anderer Code auf ihr aufbaut. Siehe Abschnitt 7.
+
+Frage 10 ist die einzige, die nicht vor dem Bauen beantwortet werden musste, sondern vor
+dem **Veröffentlichen**. Sie ist mit dem Aufräumen des öffentlichen Repositoriums gefallen —
+siehe Abschnitt 10.
 
 Frage 2 stand bewusst weit oben, weil sie das Konzept hätte kippen können: Ein freies,
 offline nutzbares EN→DE-Wörterbuch mit sauberer Lizenz **und** Bedeutungsangaben ist
@@ -1912,6 +1917,55 @@ den Fehler deshalb zuerst woanders.
     Eingabe erneut. Für den Nutzer bedeutet der Vertipper 25 Einzelfragen statt eines
     Tastendrucks — und beim ersten Durchlauf je Buch ist genau dieser Tastendruck der ganze
     Zweck (konzept.md, Schritt 4, Nachtrag 26.08.2026)
+
+---
+
+## 10. Lizenz des eigenen Codes — entschieden
+
+**MIT-Lizenz. Rechteinhaber `haudom`, dieselbe Angabe, unter der auch jeder Commit steht.**
+
+### Warum das überhaupt eine Frage war
+
+Das Repository lag öffentlich auf GitHub, ohne `LICENSE`-Datei. Das ist nicht der neutrale
+Zustand, für den man es leicht hält: Ohne ausdrückliche Einräumung gilt das gesetzliche
+Urheberrecht, also **alle Rechte vorbehalten**. Der Code war lesbar, aber niemand durfte ihn
+benutzen, ändern oder weitergeben — bei einem Projekt namens *LibreVerbum* das genaue
+Gegenteil der Absicht. Die Frage war damit nicht, ob eine Lizenz nötig ist, sondern welche.
+
+### Warum MIT und kein Copyleft
+
+Ausschlaggebend ist die Linie, die dieses Dokument an zwei Stellen bereits gezogen hat:
+Ding/FreeDict wurde in Abschnitt 2 unter anderem wegen der GPL verworfen, Anki in Abschnitt
+8b wegen der AGPL, und Regel 15 (dokumentation.md §4) verlangt die Lizenzprüfung **vor** der
+Aufnahme genau deshalb. Wer starkes Copyleft bei Fremdcode zweimal aktiv meidet, sollte es
+seinem eigenen Nachnutzer nicht auferlegen. MIT ist außerdem kurz genug, dass sie tatsächlich
+gelesen wird.
+
+Der Gegengrund — der Name des Projekts legt eine Copyleft-Lizenz nahe — wiegt das nicht auf.
+„Libre" beschreibt hier den Betrieb: offline, ohne Konto, ohne Cloud-Zwang, mit Daten aus
+freien Quellen. Dafür braucht es keinen Weitergabezwang.
+
+### Was die Wahl nicht berührt
+
+- **Die Wörterbuchdaten.** WikDict steht unter CC BY-SA, aber diese Lizenz erfasst die Daten,
+  nicht den Code, der sie liest — und mitgeliefert werden sie ohnehin nicht (Abschnitt 2,
+  „Warum nicht mitgeliefert"). Die Verträglichkeitsfrage aus „Lizenzfalle: nicht
+  verschmelzen" stellt sich hier also nicht: Es wird nichts verschmolzen
+- **PySide6.** Die LGPL verlangt, dass der Nutzer die Bibliothek austauschen kann. Solange
+  Qt über `pip` danebenliegt und dynamisch gebunden wird, ist das erfüllt. Erst eine
+  gebündelte Auslieferung (Nuitka, PyInstaller — Abschnitt 1, „Bekannte Kosten dieser
+  Entscheidung") erzeugt die Pflicht, das Neubinden zu ermöglichen. MIT steht dem nicht im
+  Weg; eine geschlossene Auslieferung täte es
+- **genanki und spaCy** stehen selbst unter MIT (Abschnitte 8b und 5) — keine Auflage, die
+  über den Hinweis auf die Herkunft hinausginge
+
+### Offener Punkt
+
+- **Der Rechteinhaber steht als Handle, nicht als bürgerlicher Name.** Das folgt der
+  bestehenden Wahl, auch in den Commits nur `haudom` und die GitHub-Ersatzadresse zu führen,
+  und ist für die Einräumung von Rechten ausreichend. Sollte die Lizenz je **durchgesetzt**
+  werden — gegen jemanden, der den Vermerk entfernt —, ist ein zurechenbarer Name die
+  belastbarere Angabe. Zu entscheiden erst, wenn dieser Fall absehbar wird
 
 ---
 
