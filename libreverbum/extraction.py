@@ -98,6 +98,24 @@ _CONTENT_POS = frozenset({"NOUN", "VERB", "ADJ", "ADV", "INTJ"})
 # unten je Vorkommen bewertet, nicht schon hier verworfen.
 _PROPER_NOUN_POS = "PROPN"
 
+# REGEL (technik.md §5, „Eigennamen"; T17-Nachbesserung, schwer 1, 25.08.2026): Das
+# vormalige strikte Kleiner-Zeichen (mindestens ein nicht-eigennamiges Vorkommen genügte)
+# ließ Titelfiguren durch, deren Grundform fast, aber nicht ganz nur als Name auftritt —
+# „Dorian" in tools/dorian_gray.epub Kapitel 16 mit 25 von 26 Vorkommen als PROPN (Anteil
+# 0,96), „Sibyl" in Kapitel 7 mit 26 von 28 (0,93). Gemessen über alle Kapitel von
+# tools/dorian_gray.epub und tools/sherlock.epub (36 Kapitel, 361 Grundformen mit
+# mindestens einem Eigennamen-Vorkommen): Bei 0,90 fallen zusätzlich sechs Grundformen weg,
+# die in einem einzelnen Kapitel fast nur als Namensbestandteil auftreten — „baker" (Henry
+# Baker, Sherlock Kap. 8, 16/17), „hunter" (Violet Hunter, Kap. 13, 19/21), „king" (King of
+# Bohemia, Kap. 2, 17/18), „league" (Red-Headed League, Kap. 3, 15/16), „lord" (Lord St.
+# Simon, Kap. 11, 36/37), „miss" (Titel vor einem Namen, Kap. 9, 18/19). Echte
+# Anredesubstantive bleiben dabei unberührt — höchster gemessener Anteil je Kapitel über
+# beide Bücher: „lady" 0,88, „sir" 0,86, „street" 0,82, „charming" 0,88, „mother" 0,71,
+# „duchess" 0,35 —, alle unter 0,90. Ein Schwellwert von 0,80 risse zusätzlich „lady"
+# (0,80 in Kapitel 17 erfüllt „≥") mit, 0,95 ließe „Sibyl" in Kapitel 7 (0,93) unberührt —
+# 0,90 ist der gemessene Kompromiss zwischen beidem.
+_PROPER_NOUN_RATIO_THRESHOLD = 0.90
+
 # REGEL (bauplan.md T4, technik.md „Messung: Mehrwortausdrücke", „Grenze: rund ein
 # Fünftel der Phrasal Verbs steht getrennt"): spaCy zeichnet die Partikel eines Phrasal
 # Verbs eigens als `prt` aus — unabhängig davon, ob sie direkt hinter dem Verb steht
@@ -194,13 +212,16 @@ def extract_vocabulary(chapter: Chapter, nlp: Language) -> list[Occurrence]:
 
     occurrences: list[Occurrence] = []
     for lemma_text, candidates in candidates_by_lemma.items():
-        non_proper = [c for c in candidates if c.pos != _PROPER_NOUN_POS]
-        if not non_proper:
-            # Ausschließlich eigennamige Vorkommen: kein Vorkommen dieser Grundform war
-            # ein gewöhnliches Wort, sie ist damit reiner Name und keine Lernvokabel
-            # (siehe Moduldocstring, Abschnitt „Regeln").
+        proper_count = sum(1 for c in candidates if c.pos == _PROPER_NOUN_POS)
+        if proper_count / len(candidates) >= _PROPER_NOUN_RATIO_THRESHOLD:
+            # Ganz oder weit überwiegend eigennamige Vorkommen (Regel 12,
+            # _PROPER_NOUN_RATIO_THRESHOLD): Kein Vorkommen dieser Grundform in diesem
+            # Kapitel taugt noch als Lernkontext für die gewöhnliche Bedeutung — schließt
+            # den reinen Namensfall (proper_count == len(candidates)) mit ein, dafür
+            # bräuchte es keine eigene Prüfung mehr.
             continue
 
+        non_proper = [c for c in candidates if c.pos != _PROPER_NOUN_POS]
         pos_counts: collections.Counter[str] = collections.Counter()
         first_seen_at: dict[str, int] = {}
         for index, candidate in enumerate(non_proper):

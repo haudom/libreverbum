@@ -913,6 +913,37 @@ Der Filter ist zugleich der Grund, warum **T4 auf der Abhängigkeitsanalyse arbe
 und nicht auf der Wortliste: Die Partikel der getrennten Verb-Partikel-Paare sind `ADP` und
 `PART` — aus der Wortliste sind sie damit verschwunden.
 
+### Nachtrag 25.08.2026: Anteilsschwellwert statt striktem Kleiner-Zeichen
+
+Der Filter aus dem Abschnitt „Neuer Befund" oben wirkt korrekt je Vorkommen, filterte aber
+zu schwach: „Lernvokabel bleibt, was mindestens ein nicht-eigennamiges Vorkommen hat"
+(`proper_noun_frequency < frequency`) ließ Titelfiguren durch, deren Grundform fast, aber
+nicht ganz nur als Name auftritt. In `tools/dorian_gray.epub` Kapitel 16 stehen 25 von 26
+Vorkommen von „Dorian" als PROPN (Anteil 0,96) — das eine übrige Vorkommen genügte, um die
+Titelfigur selbst als Lernvokabel durchzulassen, bis auf Rang 4 der nach Häufigkeit
+sortierten Triage. „Sibyl" in Kapitel 7 traf denselben Fall (26 von 28, 0,93).
+
+**Regel 12 gilt jetzt mit einem Anteilsschwellwert:** Ein Vorkommen bleibt Lernvokabel,
+solange der Anteil eigennamiger Belege am Gesamtvorkommen unter 0,90 bleibt
+(`extraction._PROPER_NOUN_RATIO_THRESHOLD`). Gemessen über alle Kapitel von
+`tools/dorian_gray.epub` und `tools/sherlock.epub` (36 Kapitel, 361 Grundformen mit
+mindestens einem Eigennamen-Vorkommen, 25.08.2026): Bei 0,90 fallen neben „Dorian" und
+„Sibyl" (Kapitel 7) sechs weitere Grundformen weg, die jeweils in einem einzelnen Kapitel
+fast nur als Namensbestandteil auftreten — „baker" (Henry Baker, Sherlock Kap. 8, 16/17),
+„hunter" (Violet Hunter, Kap. 13, 19/21), „king" (King of Bohemia, Kap. 2, 17/18),
+„league" (Red-Headed League, Kap. 3, 15/16), „lord" (Lord St. Simon, Kap. 11, 36/37),
+„miss" (Titel vor einem Namen, Kap. 9, 18/19). Echte Anredesubstantive bleiben davon
+unberührt — höchster gemessener Anteil je Kapitel über beide Bücher: „lady" 0,88, „sir"
+0,86, „street" 0,82, „charming" 0,88 (`Prince Charming`, korrekt kein Fund oberhalb der
+Schwelle), „mother" 0,71, „duchess" 0,35 —, alle unter 0,90.
+
+Zwei Nachbarwerte wurden mitgemessen: 0,80 risse zusätzlich „lady" mit (0,80 in Kapitel 17
+erfüllt „≥"), 0,95 ließe „Sibyl" in Kapitel 7 (0,93) unberührt. 0,90 ist der Kompromiss,
+den keiner der beiden Nachbarwerte bietet. Sibyls zweites Vorkommen (Kapitel 10, 13 von
+16, Anteil 0,81) bleibt dabei unter der Schwelle und damit Lernvokabel — der Filter wirkt
+je Kapitel, nicht auf die Grundform über das ganze Buch (Regel oben); ein Wert, der auch
+diesen Fall träfe, risse „lady" mit herein.
+
 ### Offene Punkte
 
 - Über-Lemmatisierung von Eigennamen (`Holmes` → `holme`) — harmlos, solange der Filter

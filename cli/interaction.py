@@ -177,7 +177,7 @@ def _entry_lines(entry: pipeline.ResolvedEntry) -> list[str]:
     Bedeutung eines bekannten Wortes" (konzept.md §5, „Mehrdeutigkeit") — ohne sie sähe
     dieser Eintrag wie ein bereits bekanntes Wort aus, das grundlos erneut auftaucht."""
     occurrence = entry.occurrence
-    pos_display = occurrence.lemma.pos or "MWE"
+    pos_display = anki.pos_display(occurrence.lemma.pos)
     lines = [f"{occurrence.word_form} ({pos_display}), {occurrence.frequency}x im Kapitel"]
     lines.append(f"  {occurrence.example_sentence}")
     translation_text = entry.sense.translation or entry.sense.wikdict_trans_list or "?"
@@ -211,7 +211,7 @@ def _bulk_phase(
 
     write_line(f"-- {label}: {len(ordered)} --")
     for number, occurrence in enumerate(ordered, start=1):
-        pos_display = occurrence.lemma.pos or "MWE"
+        pos_display = anki.pos_display(occurrence.lemma.pos)
         write_line(f"  {number}. {occurrence.word_form} ({pos_display})")
 
     answer = read_line(

@@ -145,6 +145,30 @@ def test_export_deck_writes_a_readable_apkg_with_the_given_fields_and_tags(tmp_p
     assert set(note["tags"]) == {"buch::Testbuch", "autor::A._C._Doyle", "kapitel::3"}
 
 
+def test_pos_display_shows_mwe_for_an_empty_word_class() -> None:
+    """`anki.pos_display`: eine leere Wortart (Mehrwortausdruck ohne Einzelwortart,
+    `extraction._NO_SINGLE_POS`) wird als „MWE" angezeigt, eine echte Wortart bleibt
+    unverändert."""
+    assert anki.pos_display("") == "MWE"
+    assert anki.pos_display("VERB") == "VERB"
+
+
+def test_export_deck_shows_mwe_instead_of_an_empty_word_class_field(tmp_path: Path) -> None:
+    """mittel 4 (Abnahme T17, 25.08.2026): Eine Wendung aus
+    `extraction.extract_contiguous_candidates` trägt keine Einzelwortart (leerer String)
+    — das Kartenfeld „Wortart" zeigte dafür bisher ein leeres Feld, die Kartenrückseite
+    („{{Grundform}} ({{Wortart}})") also „… ()". `_fields` verwendet jetzt dieselbe
+    Anzeige wie `cli.interaction` auf dem Bildschirm (`anki.pos_display`, „MWE")."""
+    occurrence = _occurrence(lemma_text="give up", lemma_pos="", word_form="gave up")
+    card = _card(occurrence)
+    path = tmp_path / "deck.apkg"
+
+    anki.export_deck(path, [card], deck_name="Testbuch, Kapitel 3")
+
+    note = _notes(path)[0]
+    assert note["fields"][3] == "MWE"
+
+
 def test_special_characters_in_the_example_sentence_are_html_escaped(tmp_path: Path) -> None:
     """Der Belegsatz kommt aus dem Buchtext (CLAUDE.md) und kann `&`, `<` oder `>`
     enthalten — unescaped bräche das die Feld-Darstellung in Anki."""

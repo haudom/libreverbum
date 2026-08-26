@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from libreverbum import epub
 from libreverbum.entities import Book, Chapter, Occurrence
 from libreverbum.extraction import (
     extract_contiguous_candidates,
@@ -135,6 +136,37 @@ def test_rule_12_a_name_that_never_occurs_as_an_ordinary_word_is_not_extracted(
     # die ursprüngliche Schreibung behält.
     assert not has_lemma(occurrences, "sherlock")
     assert not has_word_form(occurrences, "Sherlock")
+
+
+@pytest.mark.needs_epub
+def test_rule_12_proper_noun_ratio_excludes_the_title_character_but_keeps_an_address_noun(
+    nlp: Language, real_epub_paths: dict[str, Path]
+) -> None:
+    """schwer 1 (Abnahme T17, 25.08.2026): Das vormalige strikte Kleiner-Zeichen
+    (`proper_noun_frequency < frequency`, mindestens ein nicht-eigennamiges Vorkommen
+    genügte) ließ die Titelfigur „Dorian" durch — 25 von 26 Vorkommen in
+    `tools/dorian_gray.epub` Kapitel 16 sind PROPN (Anteil 0,96). Der Anteilsschwellwert
+    (`extraction._PROPER_NOUN_RATIO_THRESHOLD`, 0,90) hält sie draußen, ohne ein echtes
+    Anredesubstantiv mitzureißen — geprüft an echten Kapiteln aus
+    `tools/dorian_gray.epub`, nicht an einer nachgebauten Vorrichtung (dokumentation.md
+    §5, „Woran geprüft wird")."""
+    path = real_epub_paths["dorian_gray"]
+    structure = epub.read_structure(path)
+
+    reference_16 = next(c for c in structure.chapters if c.number == 16)
+    chapter_16 = epub.read_chapter(path, structure.book, reference_16)
+    occurrences_16 = extract_vocabulary(chapter_16, nlp)
+    assert not has_lemma(occurrences_16, "dorian")
+
+    # Gegenprobe im selben Buch: „lady" in Kapitel 17 hat einen Anteil von 0,80 (24 von
+    # 30 Vorkommen PROPN) — als Anredesubstantiv bleibt es trotz des Eigennamenanteils
+    # Lernvokabel, weil 0,80 unter der Schwelle von 0,90 liegt.
+    reference_17 = next(c for c in structure.chapters if c.number == 17)
+    chapter_17 = epub.read_chapter(path, structure.book, reference_17)
+    occurrences_17 = extract_vocabulary(chapter_17, nlp)
+    lady = find(occurrences_17, "lady")
+    assert lady.proper_noun_frequency > 0
+    assert lady.proper_noun_frequency < lady.frequency
 
 
 # ------------------------------------------------------------- Inhaltswortfilter

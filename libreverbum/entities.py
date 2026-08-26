@@ -170,7 +170,10 @@ class Occurrence:
     # greifen"): Deshalb eine Zahl hier und kein Kennzeichen am Lemma. 216 Wortformen gelten
     # manchmal als Eigenname und kommen daneben gewöhnlich vor; wer pro Grundform filtert,
     # verliert `red`, `orange` und `street` ganz aus der Triage. Lernvokabel bleibt, was
-    # `proper_noun_frequency < frequency` erfüllt.
+    # `proper_noun_frequency / frequency < extraction._PROPER_NOUN_RATIO_THRESHOLD`
+    # erfüllt (0,90, T17-Nachbesserung 25.08.2026) — das frühere strikte Kleiner-Zeichen
+    # (mindestens ein nicht-eigennamiges Vorkommen genügte) ließ Titelfiguren wie „Dorian"
+    # durch, deren Grundform fast, aber nicht ganz nur als Name auftritt.
     proper_noun_frequency: int
 
 

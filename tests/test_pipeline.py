@@ -162,10 +162,10 @@ def _entry(result: pipeline.ChapterVocabulary, lemma_text: str) -> pipeline.Voca
 def _expressions(
     result: pipeline.ChapterVocabulary, lemma_text: str
 ) -> list[pipeline.VocabularyEntry]:
-    """`expressions` enthält denselben Wortlaut über zwei Wege zugleich (Befund 1, Review
-    T15): den Verb-Partikel-Weg (`Lemma.pos == "VERB"`) und den n-Gramm-Weg
-    (`Lemma.pos == ""`) — beide sind nicht zusammengeführt, deshalb keine Eindeutigkeit
-    wie bei `_entry`."""
+    """Filtert `expressions` nach der Wortfolge. Seit der Entdopplung (mittel 5, Abnahme
+    T17, 25.08.2026) liefert das für eine Wortfolge, die beide Wege aus T4 finden — den
+    Verb-Partikel-Weg (`Lemma.pos == "VERB"`) und den n-Gramm-Weg (`Lemma.pos == ""`) —,
+    genau einen Eintrag (die Partikelverb-Fassung, `pipeline.run_chapter`, „Regeln")."""
     return [e for e in result.expressions if e.occurrence.lemma.text == lemma_text]
 
 
@@ -422,9 +422,13 @@ def test_run_chapter_attaches_dictionary_matches_to_expression_candidates(
     (`extraction.extract_particle_verb_candidates`, `extract_contiguous_candidates`)
     werden gegen das Wörterbuch abgeglichen, nicht nur im Docstring erwähnt —
     `ChapterVocabulary.expressions` trägt „gave up" (Mini-Wörterbuch-Stichwort „give up",
-    bauplan.md T2) über beide Wege aus T4 zugleich: den Verb-Partikel-Weg (`Lemma.pos ==
-    "VERB"`) und den n-Gramm-Weg (`Lemma.pos == ""`), beide mit derselben vollen
-    Auswahlliste wie ein einzelner Aufruf von `dictionary.particle_verb_candidates`."""
+    bauplan.md T2) mit der vollen Auswahlliste wie ein einzelner Aufruf von
+    `dictionary.particle_verb_candidates`.
+
+    mittel 5 (Abnahme T17, 25.08.2026): Beide Wege aus T4 finden dieselbe Wortfolge — den
+    Verb-Partikel-Weg (`Lemma.pos == "VERB"`) und den n-Gramm-Weg (`Lemma.pos == ""`) —,
+    „gave up" steht danach aber nur **einmal** in `expressions`, mit der informativeren
+    Partikelverb-Fassung (`Lemma.pos == "VERB"`), nicht zweimal wie vor dieser Behebung."""
     result = pipeline.run_chapter(
         epub_path=pipeline_epub,
         chapter_number=1,
@@ -434,17 +438,17 @@ def test_run_chapter_attaches_dictionary_matches_to_expression_candidates(
     )
 
     give_up_entries = _expressions(result, "give up")
-    assert len(give_up_entries) == 2
-    assert {e.occurrence.lemma.pos for e in give_up_entries} == {"VERB", ""}
-    for entry in give_up_entries:
-        assert {s.wikdict_trans_list for s in entry.candidates} == {
-            "aufgeben | kapitulieren",
-            "aufgeben | ergeben",
-        }
-        assert all(sense.uncertain is False for sense in entry.candidates)
-        # Wie bei entries: der Kenntnisstand jeder Bedeutung ist gegen das Profil
-        # abgeglichen, nicht nur die Auswahlliste beschafft.
-        assert all(status == profile.VocabularyStatus.UNKNOWN for status in entry.status.values())
+    assert len(give_up_entries) == 1
+    entry = give_up_entries[0]
+    assert entry.occurrence.lemma.pos == "VERB"
+    assert {s.wikdict_trans_list for s in entry.candidates} == {
+        "aufgeben | kapitulieren",
+        "aufgeben | ergeben",
+    }
+    assert all(sense.uncertain is False for sense in entry.candidates)
+    # Wie bei entries: der Kenntnisstand jeder Bedeutung ist gegen das Profil
+    # abgeglichen, nicht nur die Auswahlliste beschafft.
+    assert all(status == profile.VocabularyStatus.UNKNOWN for status in entry.status.values())
 
 
 def test_run_chapter_checks_the_dictionary_file_before_extracting_any_vocabulary(

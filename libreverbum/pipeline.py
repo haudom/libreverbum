@@ -224,10 +224,28 @@ def run_chapter(
     # die Aufnahme in `expressions`: Ein Vorkommen ohne jede Bedeutung bleibt draußen,
     # anders als bei `particle_verb_candidates`, das für einen solchen Fall stets einen
     # `uncertain`-Platzhalter liefert und deshalb ungefiltert übernommen wird.
+    #
+    # (mittel 5, Abnahme T17, 25.08.2026): Beide Wege können dieselbe Wortfolge liefern —
+    # ein Verb-Partikel-Paar, das im Satz nicht getrennt steht („sat down"), ist zugleich
+    # ein zusammenhängendes 2-Gramm und trifft, sofern die Wendung im Wörterbuch steht, in
+    # beiden Kandidatenlisten. Gemessen an tools/dorian_gray.epub Kapitel 10 mit dem echten
+    # tools/en-de.sqlite3 (der im Auftrag genannte Fall, 25.08.2026): 19 von 139 Wendungen
+    # kamen doppelt vor, und in allen 19 war die Häufigkeit aus
+    # `particle_verb_occurrences` mindestens so hoch wie die aus `contiguous_occurrences`
+    # (18-mal gleich, einmal höher — „find out": 2 gegen 1, weil die Abhängigkeitsanalyse
+    # die Wendung auch dann noch findet, wenn sie ausnahmsweise getrennt geschrieben ist,
+    # der n-Gramm-Weg dagegen nur bei zusammenhängender Schreibung überhaupt einen
+    # Kandidaten bildet, `extraction.py`, „extract_particle_verb_candidates"). Beide Wege
+    # zählen für dieselbe Wortfolge also dieselben Textstellen, nicht verschiedene —
+    # zusammenzuzählen buchte sie doppelt, statt fehlende Information zu ergänzen. Gewinnt
+    # deshalb die Partikelverb-Fassung: Sie trägt zusätzlich die Wortart (`VERB` statt
+    # `extraction._NO_SINGLE_POS`, mehr Information für die Anzeige, siehe `anki.
+    # pos_display`) und ihre Häufigkeit ist die vollständigere der beiden.
+    particle_verb_lemma_texts = {occurrence.lemma.text for occurrence in particle_verb_occurrences}
     expression_pairs = list(zip(particle_verb_occurrences, particle_verb_matches, strict=True)) + [
         (occurrence, matches)
         for occurrence, matches in zip(contiguous_occurrences, contiguous_matches, strict=True)
-        if matches
+        if matches and occurrence.lemma.text not in particle_verb_lemma_texts
     ]
 
     all_candidates = [sense for candidates in single_word_candidates for sense in candidates] + [

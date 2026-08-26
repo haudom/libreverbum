@@ -34,7 +34,11 @@ Belegsatz, Buch, Kapitel — beim Lückentext ersetzt die Cloze-Markierung im Be
 eigene Wort-Feld; `word_form` kann bei einem Mehrwortausdruck mehrere Wörter umfassen,
 `extraction.py`, Befund 3 Review T4/Befund 8 Review T13 — Wort-Feld und Lückentext
 behandeln es unverändert als eine Zeichenkette) und Verschlagwortung nach Buch, Autor und
-Kapitel, dazu `unsicher` bei einer unbestätigten Bedeutung. Eine leere Kartenliste, zwei
+Kapitel, dazu `unsicher` bei einer unbestätigten Bedeutung. Das Feld „Wortart" zeigt bei
+einer Wendung ohne Einzelwortart „MWE" statt eines leeren Felds (`pos_display`, mittel 4,
+Abnahme T17) — dieselbe Angabe wie `cli.interaction` auf dem Bildschirm.
+
+Eine leere Kartenliste, zwei
 Karten mit derselben GUID innerhalb desselben Exports (Befund 2, Review T13), eine
 unaufgelöste Übersetzung oder ein Lückentext, dessen Wortform an keiner Wortgrenze im
 Belegsatz steht (Befund 4, Review T13), sind sichtbare Fehlschläge (Regel 13), keine
@@ -275,6 +279,20 @@ def _cloze_text(occurrence: Occurrence) -> str:
     return f"{_escaped(before)}{{{{c1::{_escaped(word)}}}}}{_escaped(after)}"
 
 
+# (mittel 4, Abnahme T17, 25.08.2026): `occurrence.lemma.pos` ist bei einem Kandidaten aus
+# `extraction.extract_contiguous_candidates` leer (`extraction._NO_SINGLE_POS`) — eine
+# Wendung ohne syntaktischen Kopf hat keine einzelne Wortart (`extraction.py`,
+# „extract_contiguous_candidates"). `_fields` trug das bisher unverändert ins Kartenfeld
+# „Wortart", die Kartenrückseite zeigte dann „… ({{Wortart}})" als sichtbar leere Klammer.
+# `cli.interaction` zeigte an derselben Stelle bereits „MWE" (`_entry_lines`,
+# `_bulk_phase`) — diese Funktion ist der eine Ort für beide Aufrufer, damit Karte und
+# Bildschirm dieselbe Angabe zeigen, statt sie an zwei Stellen gepflegt zu haben.
+def pos_display(pos: str) -> str:
+    """Wortart-Anzeige für Karte und Bildschirm: „MWE" bei leerem `pos` (Mehrwortausdruck
+    ohne Einzelwortart), sonst `pos` unverändert."""
+    return pos or "MWE"
+
+
 def _fields(card: Card) -> list[str]:
     """Feldwerte in der Reihenfolge der jeweiligen Kartenvorlage — `_SHARED_FIELDS` für
     `EN_DE`/`DE_EN`, `_CLOZE_FIELDS` für `CLOZE`."""
@@ -286,7 +304,7 @@ def _fields(card: Card) -> list[str]:
             _cloze_text(occurrence),
             _escaped(translation),
             _escaped(occurrence.lemma.text),
-            _escaped(occurrence.lemma.pos),
+            _escaped(pos_display(occurrence.lemma.pos)),
             _escaped(occurrence.book.title),
             chapter,
         ]
@@ -294,7 +312,7 @@ def _fields(card: Card) -> list[str]:
         _escaped(occurrence.word_form),
         _escaped(translation),
         _escaped(occurrence.lemma.text),
-        _escaped(occurrence.lemma.pos),
+        _escaped(pos_display(occurrence.lemma.pos)),
         _escaped(occurrence.example_sentence),
         _escaped(occurrence.book.title),
         chapter,
