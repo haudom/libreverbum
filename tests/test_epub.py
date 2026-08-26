@@ -192,7 +192,7 @@ _EMPTY_FIRST_METADATA_CONTAINER_XML = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 # Manche Konvertate stellen ein leeres dc:title voran und führen den echten Titel erst als
-# zweites — genau der Fall aus A11 (nacharbeit.md). Das erste dc:title trägt reinen
+# zweites. Das erste dc:title trägt reinen
 # Leerraum statt gar keines Textes: Nur so deckt der Test beide Hälften von `if
 # found.text and found.text.strip():` ab, nicht nur die erste (found.text is None wäre
 # von `if found.text:` allein schon abgefangen). dc:creator trägt zusätzlich zwei
@@ -226,7 +226,7 @@ _EMPTY_FIRST_METADATA_CHAPTER_XHTML = """<?xml version="1.0" encoding="UTF-8"?>
 
 def _write_empty_first_metadata_epub(path: Path) -> None:
     """Baut ein Mini-EPUB ohne Navigation, dessen `dc:title` erst im zweiten, nichtleeren
-    Element den echten Titel trägt (A11, nacharbeit.md)."""
+    Element den echten Titel trägt."""
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
         archive.writestr("META-INF/container.xml", _EMPTY_FIRST_METADATA_CONTAINER_XML)
@@ -237,7 +237,7 @@ def _write_empty_first_metadata_epub(path: Path) -> None:
 def test_read_structure_uses_the_first_nonempty_title_when_an_earlier_one_is_empty(
     tmp_path: Path,
 ) -> None:
-    """A11 (nacharbeit.md): Ist das erste `dc:title` leer, wird das zweite, nichtleere
+    """Ist das erste `dc:title` leer, wird das zweite, nichtleere
     Element gelesen, statt die Datei fälschlich als titellos abzulehnen. Mehrere
     `dc:creator` werden dabei nicht zusammengeführt — `book.author` bleibt der erste
     nichtleere Wert."""

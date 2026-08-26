@@ -87,7 +87,7 @@ def test_rule_5_schema_version_is_set_on_a_fresh_profile(tmp_path: Path) -> None
 def test_missing_profile_directory_is_a_visible_failure_with_a_german_message(
     tmp_path: Path,
 ) -> None:
-    """A15 (nacharbeit.md): Liegt der Profilpfad in einem nicht vorhandenen Verzeichnis,
+    """Liegt der Profilpfad in einem nicht vorhandenen Verzeichnis,
     bricht `open_profile` mit einer deutschen Meldung ab, die den Pfad nennt — statt
     sqlite3s englische Fremdmeldung `unable to open database file` unverändert
     durchzureichen (Regel 13, dokumentation.md §1)."""

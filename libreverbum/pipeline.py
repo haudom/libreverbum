@@ -45,8 +45,11 @@ Beide Felder stehen **nebeneinander**, nicht zu einer gemeinsamen Liste zusammen
 Verkettungsfrage, und Regel 14 entscheidet sie hier nicht auf Vorrat. Ohne diese
 Zusammenführung fehlten die Wendungen im Ergebnis aber vollständig, nicht nur unsortiert
 — deshalb liefert der Durchstich sie ab dieser Behebung als eigenes Feld, statt sie ganz
-zu verschweigen. Was zu tun bleibt, steht in `nacharbeit.md`. Ein reiner Lesezugriff, es
-wird kein Ereignis in das Profil geschrieben.
+zu verschweigen. Beantwortet ist die inhaltliche Frage seit T16: Beide Listen laufen als
+**zwei getrennte Durchläufe** mit je eigenem Deckel (`cli/interaction.py`, „Festlegung:
+getrennte Decksel für Wörter und Wendungen"). Was an `pipeline` darüber hinaus offen
+bleibt, steht in technik.md §7, „Offene Punkte". Ein reiner Lesezugriff, es wird kein
+Ereignis in das Profil geschrieben.
 
 **`run_chapter` bleibt der netzlose Teil**, auch wenn ihre Laufzeit das seit der
 T17-Nachbesserung (schwer 1, zweiter Anlauf, 26.08.2026) nicht mehr vermuten lässt: Sie
@@ -150,7 +153,7 @@ class ChapterVocabulary:
     n-Gramm-Weg ohne bestandenen Filter erscheint hier nicht, wie `dictionary.
     contiguous_candidates` es für ihn selbst schon vorsieht (`dictionary.py`, „Liefert").
     `entries` und `expressions` stehen **nebeneinander**, nicht zu einer gemeinsamen Liste
-    zusammengeführt — siehe Moduldocstring, Abschnitt „Liefert", und `nacharbeit.md`."""
+    zusammengeführt — siehe Moduldocstring, Abschnitt „Liefert"."""
 
     chapter: Chapter
     notice: str | None

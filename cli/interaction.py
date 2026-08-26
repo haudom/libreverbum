@@ -45,7 +45,7 @@ Begründung:
   fünfzigmal vor, eine Wendung ein- bis zweimal. In einer gemeinsamen, nach Häufigkeit
   sortierten Liste kämen die rund 213 Wendungen je Kapitel (bauplan.md, T16-Zeile) nie
   unter die ersten 25 — sie fielen still weg, derselbe Befund wie beim T15-Durchstich vor
-  dessen Behebung (nacharbeit.md, A19: „213 Wendungen je Kapitel fehlten im Ergebnis")
+  dessen Behebung, bei dem die 213 Wendungen je Kapitel im Ergebnis ganz fehlten
 - Eine Wendung, die zweimal vorkommt, ist mehr wert als ein Wort, das zweimal vorkommt:
   Sie lässt sich nicht aus ihren Teilen erschließen
 - Abnahmekriterium 3 verlangt zwei Redewendungen in der Handstichprobe (konzept.md).
