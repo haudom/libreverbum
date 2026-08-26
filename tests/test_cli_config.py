@@ -33,12 +33,13 @@ def test_load_config_does_not_report_creation_on_a_second_call(tmp_path: Path) -
 
 def test_template_defaults_match_technik_md_9(tmp_path: Path) -> None:
     """technik.md §9, Tabelle „Einstellungen: config.toml": `model.url` ist
-    standardmäßig `http://localhost:11434/v1`, leere Pfade bedeuten „im
-    Datenverzeichnis", `triage.order` standardmäßig `"new_words_first"`."""
+    standardmäßig `http://localhost:11434/v1`, `model.name` die Empfehlung aus §3,
+    Entscheidung 3 (`gemma4:e4b`), leere Pfade bedeuten „im Datenverzeichnis",
+    `triage.order` standardmäßig `"new_words_first"`."""
     cfg, _ = config.load_config(tmp_path)
 
     assert cfg.model_url == "http://localhost:11434/v1"
-    assert cfg.model_name == ""
+    assert cfg.model_name == "gemma4:e4b"
     assert cfg.dictionary_path == tmp_path / "en-de.sqlite3"
     assert cfg.profile_path == tmp_path / "profil.sqlite3"
     assert cfg.triage_order == "new_words_first"

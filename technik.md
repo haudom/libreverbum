@@ -328,11 +328,13 @@ den Buch-Schwierigkeitscheck in Phase 2 gebraucht. Zwei Punkte dazu:
 
 ## 3. Lokales Modell und Betriebsart — entschieden
 
-**Granite 4.1 8B über Ollama, angesprochen über die OpenAI-kompatible Schnittstelle.
-Denkschritt abgeschaltet. Antwortform per JSON-Schema erzwungen. Eine Anfrage je Wort.**
+**Gemma 4 E4B über Ollama, angesprochen über die OpenAI-kompatible Schnittstelle.
+Denkschritt abgeschaltet, Temperatur auf 0. Antwortform per JSON-Schema erzwungen. Eine
+Anfrage je Wort.**
 
-Bis zum 19.08.2026 stand hier Qwen 3.5 9B; der Wechsel ist im Nachtrag vom 19.08.2026
-begründet. Betriebsart und Einstellungen bleiben unverändert.
+Bis zum 26.08.2026 stand hier Granite 4.1 8B; der Wechsel samt der neuen
+Temperaturfestlegung ist im Nachtrag vom 26.08.2026 begründet. Betriebsart und übrige
+Einstellungen bleiben unverändert.
 
 ### Hardware
 
@@ -505,7 +507,73 @@ Gutenberg-Lizenzkopf als Wendungen ausgibt.
 > **`sense_check.py` trennt nicht mehr.** Vier von fünf geprüften Modellen erreichen dort
 > 11/11 — der Test ist zum Rauchtest geworden. Eine Aussage über die Trefferqualität
 > zwischen Granite und Gemma braucht eine größere Stichprobe, sinnvollerweise **nach T11
-> und über dessen echten Prompt**, nicht über einen nachgebauten.
+> und über dessen echten Prompt**, nicht über einen nachgebauten. **Erledigt am
+> 26.08.2026** — siehe unten, „Nachtrag 26.08.2026: Trefferquote und Zeit bei fester
+> Temperatur, 40 echte Einträge über `pipeline.run_chapter`".
+
+### Nachtrag 26.08.2026: Trefferquote und Zeit bei fester Temperatur, 40 echte Einträge über `pipeline.run_chapter`
+
+Gemessen am 26.08.2026 an `tools/dorian_gray.epub` Kapitel 10 über `pipeline.run_chapter`:
+40 echte Einträge (26 Wörter, 14 Wendungen), das Urteil richtig / falsche Bedeutung /
+übervorsichtig einmal von Hand gefällt und unverändert auf alle Einstellungen unten
+angewandt. Vergleichswert „immer die erste Bedeutung": 27/40. Die Wiederholbarkeitszahlen,
+die zur Temperaturfestlegung geführt haben, stehen unten unter „Zwingende Einstellung:
+Temperatur auf 0"; hier folgen Trefferquote, Zeit und die Modellempfehlung, die auf
+derselben Stichprobe beruhen.
+
+Median warmer Aufrufe, Kaltstart getrennt ausgewiesen:
+
+| Einstellung | Treffer | falsche Bedeutung | übervorsichtig | s/Wort | Kaltstart |
+|---|---|---|---|---|---|
+| `granite4.1:8b` Vorgabe | 33–34/40 | 5 | 1–2 | 0,21 | ~15 s |
+| `granite4.1:8b` T = 0 | 36/40 | 3 | 1 | 0,24 | ~15 s |
+| **`gemma4:e4b` T = 0** | **37/40** | **1** | 2 | 0,48 | 28 s |
+| `gemma4:26b` T = 0 | 36/40 | 4 | 0 | 1,28 | **61 s** |
+| `qwen3.5:9b` T = 0 | 34/40 | 6 | 0 | 3,01 | 25 s |
+
+„falsche Bedeutung" heißt: eine unpassende Zeile wird gebucht — die teure Fehlerrichtung.
+„übervorsichtig" heißt: das Modell antwortet „keine passt", obwohl eine Zeile gepasst
+hätte — der Eintrag wird dadurch nur übersprungen, nicht falsch gefüllt (die billige
+Fehlerrichtung, `pipeline._resolve_sense`).
+
+#### Warum die Empfehlung von Granite 4.1 auf Gemma 4 E4B wechselt
+
+Bei fester Temperatur erreicht `gemma4:e4b` 37 von 40 Einträgen gegenüber 36/40 bei
+`granite4.1:8b` — knapp, aber die Fehlerart wiegt schwerer als die Zahl: Von Gemmas drei
+Fehlern ist nur **einer** eine falsch gebuchte Bedeutung, die übrigen zwei sind
+übervorsichtige Auslassungen; bei Granite sind es **drei** falsch gebuchte Bedeutungen
+gegenüber nur einer Auslassung. Der Preis ist gering: 0,48 statt 0,24 Sekunden je Wort —
+bei höchstens 25 neuen Wörtern pro Kapitel (konzept.md, Schritt 4) also rund 12 statt 6
+Sekunden, weit unter jedem Zeitbudget. `gemma4:26b` scheidet trotz derselben Trefferquote
+wie Granite (36/40) aus: 1,28 s/Wort, 61 s Kaltstart — siehe unten zu
+`translation.DEFAULT_TIMEOUT` — und mit 4 falsch gebuchten Bedeutungen die schlechteste
+Fehlerart im ganzen Feld. `qwen3.5:9b` scheidet mit der niedrigsten Trefferquote (34/40)
+bei gleichzeitig höchster Zeit (3,01 s/Wort) aus.
+
+> **Damit ist Entscheidung 3 überarbeitet: `gemma4:e4b` statt `granite4.1:8b`.** Die
+> vorherige Fassung stand oben unter „Warum die Festlegung von Qwen 3.5 auf Granite 4.1
+> wechselt" und beruhte auf `sense_check.py` (11/11, keine Trennung mehr möglich); diese
+> Messung liefert die dort angemahnte größere Stichprobe über den echten T11-Prompt.
+
+#### Zeit: Nachtrag zu „rund eine Sekunde je Wort"
+
+Die Messung unter „Gemessene Ergebnisse" oben datiert vom 11.08.2026 und lief nur an
+wenigen bewertbaren Einzelfällen, ohne Kaltstart und Modell getrennt auszuweisen. Die
+Tabelle oben ersetzt das für die vier hier verglichenen Einstellungen: 0,24 s/Wort
+(`granite4.1:8b` T=0), 0,48 s/Wort (`gemma4:e4b` T=0), 1,28 s/Wort (`gemma4:26b` T=0),
+3,01 s/Wort (`qwen3.5:9b` T=0), Kaltstart 15 bis 61 Sekunden je nach Modell.
+`translation.DEFAULT_TIMEOUT` steht auf 120 s; bei `gemma4:26b` verbraucht allein der
+Kaltstart mit rund 61 s bereits die halbe Frist, bevor die erste Antwort überhaupt
+ankommt — ein weiterer Grund neben der Trefferquote, dieses Modell nicht zu empfehlen.
+
+#### Die „keine passt"-Quote bei Wendungen misst die Kandidatenbildung, nicht das Modell
+
+Die im Abnahmebericht zu T17 schwankende Überspringquote bei Wendungen (21 % bis 40 %) ist
+damit erklärt: reines Temperaturrauschen. Bei `temperature: 0` liegt sie fest bei 43 %
+(6 von 14 Wendungen) — und das ist fast richtig: 7 der 14 Wendungen im gemessenen Kapitel
+haben tatsächlich keine passende Wörterbuchbedeutung. Die Quote misst also die
+**Kandidatenbildung aus T4** (welche Wendungen überhaupt eine Auswahlliste bekommen),
+nicht die Qualität des Modells.
 
 ### Zwingende Einstellung: Denkschritt abschalten
 
@@ -530,6 +598,27 @@ Am 18.08.2026 an fünf Modellen nachgeprüft: `granite4.1:8b`, `gemma4:e2b`, `ge
 `ornith:9b` und `qwen3.5:9b` denken alle standardmäßig mit (6 bis 42 s je Antwort) und
 gehorchen alle `reasoning_effort: "none"` (0,2 bis 1,2 s). Die Einstellung überlebt einen
 Modellwechsel also — nachzuprüfen ist sie trotzdem.
+
+### Zwingende Einstellung: Temperatur auf 0
+
+`translation._request_body` setzte bis zum 26.08.2026 keine Temperatur. Serverseitig
+bringt `granite4.1:8b` dafür gar keine Modelfile-Parameter mit — Ollamas Vorgabe 0,8
+greift bei diesem Modell unverändert; `gemma4:e4b`, `gemma4:26b` und `qwen3.5:9b` bringen
+dagegen `temperature 1` mit. Dieselbe Auswahl aus derselben nummerierten Liste lief also
+je nach Modell zwischen 0,8 und 1,0 — und die Abnahme zu T17 ist zweimal genau daran
+gescheitert (oben, „Nachtrag 26.08.2026", „Die «keine passt»-Quote…").
+
+Wiederholbarkeit gemessen am 26.08.2026 an `dorian_gray.epub` Kapitel 10
+(`granite4.1:8b`, 8 Einträge × 10 Wiederholungen): Bei Ollamas Vorgabe blieben 4 von 8
+Einträgen über alle zehn Wiederholungen stabil, bei `temperature: 0` **8 von 8**. Über die
+volle Stichprobe von 40 Einträgen, drei Läufe: Vorgabe 31/40 stabil, `temperature: 0`
+**40/40** — auch über einen Modellneuladevorgang hinweg.
+
+> **Regel:** Jeder Modellaufruf setzt `temperature: 0`, neben `reasoning_effort: "none"`
+> (Regel 7). Ohne diese Festlegung liefert dieselbe Eingabe verschiedene Antworten, und
+> jede Messung an diesem Prompt — Trefferquote, Bündelvergleich, Reihenfolge — wird
+> unbrauchbar, weil sich Modellwechsel und Zufallsstreuung nicht mehr auseinanderhalten
+> lassen.
 
 ### Datenfalle: Einträge ohne Bedeutungstext
 
@@ -1527,7 +1616,7 @@ Oberfläche muss die Vorgabe später nicht beim Kern erfragen, sondern setzt ihr
 | Schlüssel | Zweck | Vorgabe |
 |---|---|---|
 | `model.url` | Adresse des Modellservers | `http://localhost:11434/v1` |
-| `model.name` | Modellname | leer — dann das erste, das der Server nennt |
+| `model.name` | Modellname | `gemma4:e4b` — die Empfehlung aus Abschnitt 3, Entscheidung 3 (Nachtrag 26.08.2026); leer lassen nimmt stattdessen das erste, das der Server nennt |
 | `paths.dictionary`, `paths.profile` | abweichende Ablage | leer — dann das Verzeichnis oben |
 | `triage.order` | Reihenfolge, in der `pipeline.resolve_triage_entries` Einträge vor der Triage auflöst (`"new_words_first"` oder `"frequency"`) — seit dem 25.08.2026, weil Regel 14 (dokumentation.md §4) einen zweiten Anwendungsfall verlangt und der vorliegt: Der Nutzer will die teilweise bekannten Wörter wahlweise gleichberechtigt neben den neuen sehen, statt sie grundsätzlich zurückzustellen. Gemessen am echten Server (`granite4.1:8b`, `sherlock.epub` Kapitel 2, 1410 Wort- und 212 Wendungseinträge, vier Durchläufe je Einstellung, wachsendes Profil, 25.08.2026): `new_words_first` 39 bis 44 Modellaufrufe je Kapitel (44 bis 64 s), `frequency` 39 bis 112 (21 bis 37 s). Bei 1410 Worteinträgen und `limit = 25` erreicht `new_words_first` die Gruppe der teilweise bekannten Einträge dabei praktisch nie — „neue Bedeutung eines bekannten Wortes" (konzept.md §5) erschien in den vier Läufen 0-mal, unter `frequency` 0-, 5-, 1- und 8-mal. Wer die Vorgabe belässt, schaltet den `bank`-Fall aus konzept.md §5 also faktisch ab | `new_words_first` |
 

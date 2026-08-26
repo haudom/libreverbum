@@ -7,7 +7,8 @@ Schritt 5 des Kernablaufs (konzept.md §5), zweite Hälfte: der einzige Ort, an 
 Modell angesprochen wird (technik.md §7, Modulkarte). Das Modell **wählt** aus der von
 `dictionary` gelieferten Auswahlliste, es erzeugt nie frei (Regel 11) — je Wort eine
 Anfrage über die OpenAI-kompatible Schnittstelle, `/v1/chat/completions`, mit
-`reasoning_effort: "none"` (Regel 7) und der Antwortform per JSON-Schema erzwungen. Ein
+`reasoning_effort: "none"` (Regel 7), `temperature: 0` (technik.md §3, „Zwingende
+Einstellung: Temperatur auf 0") und der Antwortform per JSON-Schema erzwungen. Ein
 Bündelmechanismus ist bewusst nicht gebaut: Er wählt bei 23 bis 37 % der Wörter eine
 andere Bedeutung als der Einzellauf und entfällt deshalb ersatzlos (technik.md §3,
 Nachtrag 19.08.2026; bauplan.md, Tor 0, E10).
@@ -169,9 +170,9 @@ def _estimate_prompt_tokens(prompt: str) -> int:
 
 
 def _request_body(model_name: str, prompt: str, option_count: int) -> dict[str, Any]:
-    """Der Anfragekörper für `/v1/chat/completions`: `reasoning_effort: "none"` (Regel 7)
-    und die Antwortform per JSON-Schema auf eine Zahl zwischen 1 und `option_count`
-    (die Ausweichantwort eingeschlossen) erzwungen."""
+    """Der Anfragekörper für `/v1/chat/completions`: `reasoning_effort: "none"` (Regel 7),
+    `temperature: 0` und die Antwortform per JSON-Schema auf eine Zahl zwischen 1 und
+    `option_count` (die Ausweichantwort eingeschlossen) erzwungen."""
     return {
         "model": model_name,  # Ollama verlangt das Feld (tools/sense_check.py, „send")
         "messages": [{"role": "user", "content": prompt}],
@@ -180,6 +181,15 @@ def _request_body(model_name: str, prompt: str, option_count: int) -> dict[str, 
         # Nachdenken und liefert keine Antwort (finish_reason "length"). Gemessen:
         # 1,0 s statt 28,3 s bei gleichem Ergebnis, an fünf Modellen nachgeprüft.
         "reasoning_effort": "none",
+        # REGEL (technik.md §3, „Zwingende Einstellung: Temperatur auf 0"): Ohne diese
+        # Festlegung liefert derselbe Prompt verschiedene Antworten desselben Modells —
+        # granite4.1:8b bringt serverseitig keine Modelfile-Parameter mit (Ollamas Vorgabe
+        # 0,8), gemma4:e4b, gemma4:26b und qwen3.5:9b je temperature 1. Gemessen an 40
+        # echten Einträgen aus dorian_gray.epub Kapitel 10 (26.08.2026): Vorgabetemperatur
+        # 31/40 über drei Läufe stabil, temperature: 0 40/40 — auch über einen
+        # Modellneuladevorgang hinweg. Die zweimal gescheiterte Abnahme zu T17 hing genau
+        # an dieser Streuung.
+        "temperature": 0,
         "response_format": {
             "type": "json_schema",
             "json_schema": {

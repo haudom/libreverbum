@@ -51,8 +51,10 @@ _TEMPLATE = """\
 
 [model]
 url = "http://localhost:11434/v1"
-# Leer lassen, um das erste vom Server genannte Modell zu verwenden.
-name = ""
+# Empfehlung aus der Messung (technik.md §3, Entscheidung 3): gemma4:e4b mit
+# temperature: 0 — beste Trefferquote bei vertretbarer Zeit (0,48 s/Wort). Ein anderer
+# Modellname ist möglich; leer lassen nimmt das erste vom Server genannte Modell.
+name = "gemma4:e4b"
 
 [paths]
 # Leer lassen, um die Dateien im selben Verzeichnis wie diese Einstellungen abzulegen.

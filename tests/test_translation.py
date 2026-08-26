@@ -114,6 +114,24 @@ def test_rule_7_reasoning_effort_none_is_sent_with_every_model_call(
     assert model_server_double.requests[-1]["reasoning_effort"] == "none"
 
 
+def test_temperature_zero_is_sent_with_every_model_call(
+    model_server_double: ModelServerDouble,
+) -> None:
+    """technik.md §3, „Zwingende Einstellung: Temperatur auf 0": Bei jedem Modellaufruf
+    wird temperature: 0 gesetzt — ohne diese Festlegung liefert derselbe Prompt
+    verschiedene Antworten, und jede Messung an diesem Prompt wird unbrauchbar."""
+    model_server_double.choice = 1
+
+    translation.choose_sense(
+        url=model_server_double.url,
+        model_name=model_server_double.model_name,
+        occurrence=_occurrence(),
+        sense_candidates=_BANK_CANDIDATES,
+    )
+
+    assert model_server_double.requests[-1]["temperature"] == 0
+
+
 def test_rule_11_the_answer_is_always_an_entry_of_the_supplied_list(
     model_server_double: ModelServerDouble,
 ) -> None:
