@@ -265,8 +265,39 @@ importierbar ist.
 - ~~Ablage des Profils (Datenbankform)~~ — **entschieden am 11.08.2026**,
   siehe [technik.md](technik.md)
 
-**Alle unter „bewusst offen" gestellten Fragen sind entschieden.** Die technischen
-Festlegungen samt Begründung und Messwerten stehen in [technik.md](technik.md).
+- **Woher der Nutzer seinen Grundwortschatz bekommt** — aufgeworfen am 26.08.2026 durch
+  die Abnahme T17: Bei 941 Worteinträgen und 25 Plätzen zeigt die Triage ausschließlich
+  Kernwortschatz (`life`, `had`, `said`, `made`, `things`), während der Wortschatz, der
+  das Kapitel tatsächlich schwer macht (`listlessly`, `tawdry`, `lurid`, `courteously`),
+  sie in keinem Durchlauf erreicht. Das verletzt kein Abnahmekriterium und trotzdem den
+  Zweck aus dem Kontext oben. Vorgesehene Richtung: Beim **Anlegen des Profils** wird
+  gefragt, ob leer begonnen wird oder die häufigsten englischen Grundformen einmalig als
+  bekannt eingetragen werden — die Frage füllt zugleich die Lücke, die bauplan.md in der
+  T16-Zeile offen hält. Die Vorbelegung braucht eine eigene `Origin`, damit
+  unterscheidbar bleibt, was der Nutzer selbst entschieden hat. Datenquelle ist
+  voraussichtlich **kein** fremder Bestand: WikDicts `importance` liegt bereits vor
+  ([technik.md](technik.md) §2, „Häufigkeitsdaten — unkritisch"); ob es trägt, ist zu
+  messen, Rückfall wäre `wordfreq`
+- **Nachrücken in der Triage** — aufgeworfen am 26.08.2026: Wird ein Wort als bekannt
+  gebucht, rückt das nächsthäufigste Wort des Kapitels nach, statt den Platz verfallen zu
+  lassen. Technisch heißt das, den Auflöser als Iterator zu führen, aus dem die Oberfläche
+  nachzieht, statt eine fertige Liste zu übergeben; ein Modellaufruf je Nachrücker fällt in
+  die Zeit, in der der Nutzer ohnehin liest. **Ändert die Bedeutung der Wortobergrenze**
+  von „25 gezeigte" zu „25 nicht abgelehnte" und braucht deshalb eine Bremse — sonst
+  entsteht mit der Sammelaktion ein Laufband. Kein Ersatz für die Vorbelegung, sondern
+  deren Ergänzung
+- **Fortsetzungsfrage nach der Wortobergrenze** — aufgeworfen am 26.08.2026: Nach 25
+  Wörtern wird gefragt, ob weitergemacht oder aufgehört wird. Das ist die menschliche
+  Bremse für das Nachrücken und legt die Entscheidung dorthin, wo die Information ist.
+  Zu klären ist die Verzahnung mit Abnahmekriterium 5: Die Druckseite fasst gemessen 36
+  Einträge ([technik.md](technik.md) §8c), „weiter" sprengt sie irgendwann — entweder
+  darf sie ein zweites Blatt bekommen, oder sie nimmt weiterhin die ersten 36, während
+  die Karten darüber hinauswachsen
+
+**Die vier ursprünglichen Fragen sind entschieden**; die technischen Festlegungen samt
+Begründung und Messwerten stehen in [technik.md](technik.md). Die drei Punkte darüber sind
+am 26.08.2026 aus der Abnahme T17 und dem Gespräch darüber neu hinzugekommen und **nicht**
+entschieden — sie werden erst besprochen, dann gebaut.
 
 ---
 
