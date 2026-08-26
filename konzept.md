@@ -119,23 +119,36 @@ zu verpassen.
 - **Sammelaktion „ab hier kenne ich alles"** — markiert alle häufigeren Wörter auf einen Schlag
 - **Obergrenze pro Kapitel** — „maximal 25 neue Wörter", der Rest wird zurückgestellt
 
-**Wie tief vorher angereichert wird, ist eine Einstellung** (17.08.2026), weil die zwei Stufen
-aus Abschnitt 5 sehr verschieden viel kosten:
+> **Nachtrag 26.08.2026 — die Obergrenze bleibt bei 25.** Beurteilt werden sollte sie beim
+> ersten echten Durchlauf; der hat gezeigt, dass nicht die Zahl das Problem ist, sondern der
+> Anfangszustand des Profils: **Der erste Durchlauf je Buch ist ein Kalibrier-, kein
+> Lerndurchlauf.** Bei leerem Profil sind die 25 häufigsten unbekannten Grundformen
+> ausnahmslos A1/A2-Wortschatz (`life`, `had`, `said`, `made`); erst nach einer Sammelaktion
+> erscheinen `portrait`, `tragedy`, `dreadful`, `lad`, `afraid`. Eine höhere Grenze
+> verlängerte nur diesen Kalibrierdurchlauf — was ihn abkürzt, ist ein Tastendruck und die
+> Vorbelegung des Grundwortschatzes („Bewusst offen" unten).
 
-| Stellung | was in der Triage steht | Kosten je Kapitel |
-|---|---|---|
-| **Wörterbuch** | die Liste der möglichen Bedeutungen — „watch — Uhr / Wache / beobachten" | rund **1,1 s**, kein Modellaufruf |
-| **Wörterbuch + Modell** | zusätzlich ist die im Kontext gemeinte Bedeutung markiert | rund **1 s je Wort** bei 1.592 Grundformen |
+**In der Triage steht die gemeinte Bedeutung**, nicht bloß die Liste der möglichen. Sie wird
+dafür **vor** der Triage aufgelöst, und „kenne ich" bucht auf sie — Kenntnis wird pro
+Bedeutung geführt ([technik.md](technik.md) §4, „Kernentscheidung: Kenntnis pro Bedeutung,
+nicht pro Wort"). Das kostet einen Modellaufruf je gezeigtem Eintrag und ist trotzdem nicht
+verhandelbar: Zwei Drittel der Grundformen eines Kapitels sind mehrdeutig
+([technik.md](technik.md) §3, „Nachtrag 18.08.2026: zwei Drittel der Grundformen eines
+Kapitels sind mehrdeutig"), und wer `watch` ohne Bedeutungsangabe sieht, drückt „kenne ich"
+für die Uhr, während der Text die Wache meint.
 
-Standard ist die erste Stellung, aus demselben Grund, aus dem Abschnitt 5 die Cloud-Gegenstelle
-zuschaltbar statt vorgegeben macht: Der Regelfall läuft schnell und offline, die teurere
-Genauigkeit wird bewusst gewählt. Ein Schalter ist das trotz Regel 14 (dokumentation.md §4)
-zulässig, weil er zwei echte Anwendungsfälle trennt und nicht einen vermuteten zweiten vorbaut.
-
-*Offen:* Was „kenne ich" in der ersten Stellung bei einem **mehrdeutigen** Wort bucht — dort
-steht eine Liste, keine einzelne Bedeutung. Ob das ein Randfall oder der Normalfall ist,
-entscheidet die Messung, wie viele Grundformen eines Kapitels überhaupt mehr als eine
-Bedeutung haben; ebenso offen ist, wie stark **Bündeln** die zweite Stellung verbilligt.
+> **Nachtrag 26.08.2026 — hier stand eine Einstellung für die Anreicherungstiefe.** Am
+> 17.08.2026 waren zwei Stellungen vorgesehen: „Wörterbuch" (rund 1,1 s je Kapitel, kein
+> Modellaufruf, in der Triage die Liste der möglichen Bedeutungen) und „Wörterbuch + Modell"
+> (zusätzlich die im Kontext gemeinte markiert), Standard die erste. Der Umbau vom
+> 25.08.2026 hat die erste Stellung ersatzlos gestrichen: Sie zeigt eine Liste statt einer
+> Bedeutung, und die Triage-Entscheidung hätte dann keinen Gegenstand, auf den sie buchen
+> kann. Festgehalten, weil die Kostenrechnung der ersten Stellung einleuchtet und sie sonst
+> erneut vorgeschlagen wird — gemessen sind die Kosten inzwischen klein: rund 0,48 s je Wort
+> bei höchstens 25 Wörtern ([technik.md](technik.md) §3, „Nachtrag 26.08.2026"). Die beiden
+> Fragen, die hier offen standen, sind damit beantwortet: Mehrdeutigkeit ist der Normalfall
+> (65,8 %), und **Bündeln** lohnt nicht ([technik.md](technik.md) §3, „Nachtrag 19.08.2026:
+> Bündeln lohnt nicht").
 
 *Später erweiterbar durch:* adaptiven Vokabeltest zur Erstschätzung, Import bestehender
 Anki-Decks, Angabe des Sprachniveaus (A1–C2). Die Datenstruktur muss diese Quellen aufnehmen
@@ -192,6 +205,17 @@ Verschlagwortung nach Buch, Autor und Kapitel, damit sich in Anki später sauber
 - **Lesezeichen-Format**: schmaler Streifen im Buchformat mit den Vokabeln des aktuellen
   Kapitels, der physisch im Buch liegt — genau dort, wo er gebraucht wird
 - Optionaler Anhang **„Figuren & Orte"** aus den aussortierten Eigennamen
+
+Die Kapitelliste trägt je Zeile **Wortform, Wortart und Übersetzung** (Wendungen haben keine
+Einzelwortart und bekommen keine), Buch und Kapitel stehen als Überschrift darüber. Die
+Wortart ist dort kein Beiwerk, sondern der Grund, warum die Felder hier ebenso benannt sind
+wie die der Karte: Zwei Drittel der Grundformen eines Kapitels sind mehrdeutig
+([technik.md](technik.md) §3, „Nachtrag 18.08.2026: zwei Drittel der Grundformen eines
+Kapitels sind mehrdeutig"), und wer auf dem Blatt eine Grundform ohne Wortart liest, hängt die
+Übersetzung an die falsche Lesart — der stille Fehler, gegen den Abschnitt 5 gebaut ist, und
+bemerken kann der Leser ihn nicht. Belegsatz und Verschlagwortung bleiben dagegen der Karte
+vorbehalten: Auf das Blatt kommt, was in eine 85-mm-Spalte passt
+([technik.md](technik.md) §8c).
 
 ---
 
@@ -296,11 +320,28 @@ importierbar ist.
   Abnahmekriterium 5 gilt unverändert. **Mit** ihnen ist der Kriterientext nachzuziehen:
   „passt auf ein Blatt" wird dann zu „bricht sauber auf so viele Blätter um, wie nötig" —
   lesbar ohne Nachbearbeitung bleibt die Anforderung
+- **Ob jenseits der Wortobergrenze etwas ins Profil geschrieben wird** — `Origin.WORD_LIMIT`
+  und `KnowledgeState.DEFERRED` stehen für genau diesen Fall im Schema
+  ([technik.md](technik.md) §4), gebucht wird heute nichts: Die Obergrenze wirkt allein
+  lesend in `pipeline.resolve_triage_entries`, `triage.defer_beyond_word_limit` hat außerhalb
+  der Tests keinen Aufrufer. Beides ist vertretbar — ein Vermerk „diesmal nicht gezeigt"
+  bedeutet etwas anderes als das „Überspringen" aus Schritt 4 —, aber es ist nicht
+  entschieden, sondern nebenbei entstanden. Hängt am Nachrücken oben, das die Bedeutung der
+  Grenze ohnehin verschiebt
+- **Ob Einträge ohne Wörterbucheintrag Vorrang haben sollen** — gemessen an einem echten
+  Kapitel führen 119 von 1.410 Wort- und 33 von 212 Wendungseinträgen **nur** den
+  `uncertain`-Platzhalter. Sie kosten keinen Modellaufruf und stehen unter
+  `[triage] order = "new_words_first"` ([technik.md](technik.md) §9) damit immer vorn: In
+  einem gemessenen Durchlauf waren **5 der 25 gezeigten Wörter** „kein Wörterbucheintrag —
+  unsicher", also eine Frage ohne Bedeutung; unter `frequency` 4 von 25. Die Reihenfolge ist
+  billig zu ändern, die Frage dahinter nicht: Ein Eintrag ohne Bedeutung ist für die Triage
+  weniger wert als einer mit — er kostet aber auch nichts
 
 **Die vier ursprünglichen Fragen sind entschieden**; die technischen Festlegungen samt
-Begründung und Messwerten stehen in [technik.md](technik.md). Die drei Punkte darüber sind
-am 26.08.2026 aus der Abnahme T17 und dem Gespräch darüber neu hinzugekommen und **nicht**
-entschieden — sie werden erst besprochen, dann gebaut.
+Begründung und Messwerten stehen in [technik.md](technik.md). Die fünf Punkte darüber sind
+am 26.08.2026 aus der Abnahme T17, dem Gespräch darüber und der Auflösung der
+Nacharbeitsliste neu hinzugekommen und **nicht** entschieden — sie werden erst besprochen,
+dann gebaut.
 
 ---
 

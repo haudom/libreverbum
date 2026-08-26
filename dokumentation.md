@@ -299,7 +299,11 @@ einen Zeilenumbruch getrennt waren; ein Test, den ein neuer Aufrufpfad wirkungsl
 **Womit zu verfälschen sei, ist eine Vermutung und kein Auftrag** — auch dann nicht, wenn
 der Vorschlag aus einer Durchsicht kommt. Wer verfälscht, prüft zuerst, ob die
 vorgeschlagene Änderung überhaupt etwas bewirkt; sonst prüft er den Vorschlag und nicht den
-Code.
+Code. Der Musterfall stammt aus T13: Für den Lückentext war als Verfälschung ein naiver
+`\b`-Regex vorgesehen, die naheliegendste falsche Umsetzung. Ausgeführt trifft sie `don't`
+**korrekt**, weil Python die Wortgrenze nur an den äußeren Rändern des Treffers prüft — der
+Test wäre gegen sie nie rot geworden. Gefunden allein durch das Ausprobieren; für plausibel
+gehalten hätte man sie ohne Weiteres.
 
 **An einer noch unversionierten Datei gibt es kein Netz.** Git holt den Ausgangsstand dort
 nicht zurück. Sie wird deshalb vorher **binär** gesichert und die Wiederherstellung per
@@ -415,6 +419,28 @@ Stufe beantwortet **eine** Frage: *Was wäre passiert, wenn es niemand bemerkt h
 Dahinter steht `· schnell`, wo ein Punkt in einer Viertelstunde erledigt ist; innerhalb
 einer Stufe wird das Schnelle zuerst gemacht.
 
+### Der Auftrag nennt die Form jeder Schnittstelle, die er berührt
+
+Zwei Teilaufgaben mussten am 21.08.2026 die Datenform ihrer eigenen Eingabe erfinden: Kein
+Dokument legte fest, was `anki` und `printout` bekommen, und T14 entschied sich für
+`Sequence[tuple[Occurrence, Sense]]` statt `Sequence[Card]` — ableitbar war das aus keiner
+Regel und keinem Test. Dieselbe Wurzel bei T13, wo der Auftrag „GUID **zurückgeben**"
+verlangte, während `entities.Card.guid` Pflichtfeld ist: Die Auflösung — die GUID entsteht
+**vor** dem `Card`-Bau — stand nirgends und musste aus der Importregel rückwärts erschlossen
+werden.
+
+Das ist teurer als es aussieht, weil es in beide Richtungen unbemerkt durchgeht: Die
+verkettende Teilaufgabe findet danach zwei Module mit unvereinbaren Eingaben vor, ohne dass
+eine der beiden je rot gewesen wäre.
+
+> **Regel:** Berührt eine Teilaufgabe die Grenze zu einer anderen, nennt der Auftrag deren
+> **Form** — oder sagt ausdrücklich, dass die bauende Teilaufgabe sie bestimmt. Beides ist
+> zulässig, das Schweigen nicht.
+
+Ein Dokument schließt die Lücke nicht: Die Modulkarte (technik.md §7, „Warum eine Karte und
+nicht mehr") nennt Zuständigkeiten und ausdrücklich keine Entwürfe, und Regel 14 verbietet
+Vorratsarbeit. Die Lücke ist gewollt — sie gehört deshalb in den Auftrag.
+
 **Abgearbeitet werden `schwer` und `mittel`.** `leicht` bleibt liegen und wird von Hand
 angestoßen, wo es sich lohnt — **spätestens am Phasenende** wird jeder verbliebene Punkt
 eingefaltet oder ersatzlos gestrichen. Streichen ist dort oft die richtige Antwort, weil
@@ -461,6 +487,23 @@ Abnahmekriterium, Regel, Auftrag —, und dem echten Gegenüber (§5, „Woran g
 vergibt hier der Durchsehende selbst** — anders als bei einer Beobachtung: Die Wirkung
 eines Befunds ist örtlich und jetzt sichtbar, sie zeigt sich nicht erst, wenn mehrere
 Berichte nebeneinander liegen.
+
+### Woran sie prüft: gegen den Commit, nicht gegen den Arbeitsbaum
+
+Es laufen regelmäßig zwei Bearbeiter gleichzeitig (CLAUDE.md, „Aktueller Stand"). Wer im
+Arbeitsbaum prüft, sieht deshalb fremde Änderungen mit, und ein rotes Ergebnis lässt sich
+nicht zuordnen — hängt es am durchgesehenen Commit oder an der Arbeit des anderen? „Nur die
+betroffenen Testdateien laufen lassen" verkleinert das Problem, löst es aber nicht.
+
+> **Regel:** Die Durchsicht prüft gegen `git archive <commit>` in einem Wegwerfordner, nicht
+> gegen den Arbeitsbaum. `tools/en-de.sqlite3` und `tools/*.epub` werden dorthin mitkopiert
+> — ohne sie überspringt `pytest` rund zwanzig Tests (`needs_dictionary`, `needs_epub`)
+> stillschweigend, und die Durchsicht hält für grün, was gar nicht gelaufen ist.
+
+Das Vorgehen hat sich in drei Durchsichten und drei Abnahmeläufen im August 2026 bewährt und
+kostet einen Befehl. Es ersetzt nicht das Tor auf der Seite des Bauenden (CLAUDE.md, „Prüfen
+vor »fertig«"), sondern beantwortet dessen offene Frage: woran „grün" bei zwei Bearbeitern
+überhaupt gemessen ist.
 
 ### Befund und Beobachtung sind zweierlei
 

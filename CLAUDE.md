@@ -129,6 +129,11 @@ vollständiger Lauf zeigt Rot, das dem anderen gehört — „grün" ist bei zwe
 je Datei eine Aussage. Den vollständigen Lauf macht die verkettende Stelle zwischen den
 Runden.
 
+**Die Durchsicht prüft gar nicht im Arbeitsbaum**, sondern gegen `git archive <commit>` in
+einem Wegwerfordner — `tools/en-de.sqlite3` und `tools/*.epub` gehören mit hinein, sonst
+überspringt `pytest` rund zwanzig Tests still. Begründung: dokumentation.md §10, „Woran sie
+prüft: gegen den Commit, nicht gegen den Arbeitsbaum".
+
 ## Daten
 
 | Datei | Inhalt |
@@ -170,8 +175,15 @@ die Installationsbefehle in seinem Kopf. **`ambiguity_check.py` verlangt spaCy u
 selbst** (`libreverbum.extraction`, `libreverbum.dictionary`): Gemessen wird, was der Kern
 tatsächlich liefert, nicht eine nachgebaute Näherung.
 
+**Wer ein Skript aufruft, das den Kern importiert, braucht `PYTHONPATH=.`** — das Paket
+`libreverbum` ist in `.venv/` nicht installiert, und ohne die Zuweisung bricht
+`ambiguity_check.py` mit `ModuleNotFoundError` ab. Aufzurufen also aus dem Wurzelverzeichnis
+des Repositoriums.
+
 `sense_check.py` sucht einen lokalen Modellserver auf den üblichen Adressen ab
-(llama-server, LM Studio, Ollama, …) oder nimmt `--url`; `mwe_check.py` verlangt `--url`.
+(llama-server, LM Studio, Ollama, …) oder nimmt `--url` — **ohne** `/v1`, das hängen die
+Skripte selbst an; in `config.toml` steht dieselbe Adresse dagegen **mit** `/v1`
+(technik.md §9, „Zwei Fallen beim Eintragen von Hand"). `mwe_check.py` verlangt `--url`.
 Testtexte (`*.txt`) und `*.sqlite3` sind bewusst nicht versioniert.
 
 ## Aktueller Stand

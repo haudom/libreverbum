@@ -566,6 +566,15 @@ Tabelle oben ersetzt das für die vier hier verglichenen Einstellungen: 0,24 s/W
 Kaltstart mit rund 61 s bereits die halbe Frist, bevor die erste Antwort überhaupt
 ankommt — ein weiterer Grund neben der Trefferquote, dieses Modell nicht zu empfehlen.
 
+**Die Zeit je Aufruf hängt davon ab, wie oft derselbe Systemprompt vorher lief.** Über die
+Abnahmeläufe zu T17 gemessen: **1,65 s** je Wort im allerersten Lauf gegen **0,25 s** in den
+folgenden — Faktor **6,6** bei unverändertem Modell, Prompt und Kapitel. Der Kaltstart oben
+ist davon nur die erste Hälfte; auch danach wird es noch schneller, weil der Server den
+gleichbleibenden Promptkopf wiederverwendet. Folge für jede weitere Messung: **„Sekunden je
+Wort" misst immer auch die Reihenfolge der Läufe.** Vergleichbar sind Zahlen nur, wenn
+dieselbe Einstellung nicht als erste gemessen wurde — oder wenn Kaltstart und erster Lauf
+wie in der Tabelle oben getrennt ausgewiesen sind.
+
 #### Die „keine passt"-Quote bei Wendungen misst die Kandidatenbildung, nicht das Modell
 
 Die im Abnahmebericht zu T17 schwankende Überspringquote bei Wendungen (21 % bis 40 %) ist
@@ -574,6 +583,14 @@ damit erklärt: reines Temperaturrauschen. Bei `temperature: 0` liegt sie fest b
 haben tatsächlich keine passende Wörterbuchbedeutung. Die Quote misst also die
 **Kandidatenbildung aus T4** (welche Wendungen überhaupt eine Auswahlliste bekommen),
 nicht die Qualität des Modells.
+
+**Bekannte Grenze aus der bestandenen Abnahme (26.08.2026):** Bei sehr allgemeinen Verben
+antwortet das Modell auch dann „keine passt", wenn eine Zeile gepasst hätte — beobachtet an
+`make` und `do` mit vorliegenden, passenden Kandidaten. Das ist die billige Fehlerrichtung
+(der Eintrag wird übersprungen, nicht falsch gefüllt, `pipeline._resolve_sense`) — dieselbe,
+die die Tabelle oben „übervorsichtig" nennt; festgehalten, weil es genau die Wörter trifft, bei
+denen eine lange Auswahlliste auf viele blasse Bedeutungen führt — derselbe Verdacht, dem der
+offene Punkt „Sehr lange Auswahllisten" unten nachgeht.
 
 ### Zwingende Einstellung: Denkschritt abschalten
 
@@ -619,6 +636,13 @@ volle Stichprobe von 40 Einträgen, drei Läufe: Vorgabe 31/40 stabil, `temperat
 > jede Messung an diesem Prompt — Trefferquote, Bündelvergleich, Reihenfolge — wird
 > unbrauchbar, weil sich Modellwechsel und Zufallsstreuung nicht mehr auseinanderhalten
 > lassen.
+
+`temperature` ist dabei ein **Standardparameter der OpenAI-Schnittstelle**, keine
+Ollama-Erweiterung — jeder OpenAI-kompatible Server nimmt ihn entgegen. Eine Ausnahme ist
+absehbar: Reasoning-Modelle der o-Reihe und GPT-5 lehnen den Parameter teils ab oder
+erlauben nur ihren Vorgabewert. Da `config.toml` jede Adresse zulässt (Abschnitt 9), wäre
+das dort ein HTTP 400 — ein lauter Fehlschlag, kein stiller, und deshalb heute kein Grund
+für eine Ausweichlösung (Regel 14).
 
 ### Datenfalle: Einträge ohne Bedeutungstext
 
@@ -767,6 +791,25 @@ Frage — nämlich ob mindestens eine seiner Bedeutungen bekannt ist.
 Der Test zu Entscheidung 3 hat gezeigt, warum das nicht theoretisch ist: `watch` hat
 sieben Bedeutungen, von denen *Uhr* und *Wache* nichts miteinander zu tun haben.
 
+#### Wie sich das mit „eine Triage-Entscheidung je Wort genügt" verträgt
+
+Beide Sätze stehen seit dem 18.08.2026 nebeneinander — „eine Triage-Entscheidung je Wort
+genügt" (Abschnitt 3, „Nachtrag 18.08.2026") und „Kenntnis pro Bedeutung" hier —, ohne dass
+gesagt war, wie sie zusammengehen. Sie waren die Bruchstelle, an der der schwere Befund vom
+25.08.2026 lag; **aufgelöst ist sie seit dem Umbau vom selben Tag:**
+
+> Die gemeinte Bedeutung wird **vor** der Triage aufgelöst, und die Entscheidung des Nutzers
+> bucht auf **sie**. Der Nutzer entscheidet einmal je Wort, das Profil vermerkt eine
+> Bedeutung.
+
+Damit ist auch festgelegt, **wann** der Modellaufruf erfolgt — bis dahin stand das nur im
+Moduldocstring: `pipeline.resolve_triage_entries` löst die Einträge auf, die die Triage
+zeigen wird, ruft dafür `translation.choose_sense` (Abschnitt 7, der einzige Ort mit
+Modellzugriff) und ist bewusst **nicht** Teil von `run_chapter`, damit ein Aufrufer, der nur
+Auswahllisten braucht, ohne Modellserver auskommt. Zuvor buchte die Triage auf
+`candidates[0]` — die erste Zeile der Auswahlliste, also die mit dem höchsten `score` und
+nicht die im Kontext gemeinte. Wer die Triage anfasst, entscheidet das nicht neu.
+
 ### Kernentscheidung: Ereignisfolge statt überschreibbarem Zustand
 
 Nicht „Wort X hat Status *bekannt*", sondern „am 11.08.2026 wurde Wort X aus Grund Y
@@ -873,6 +916,22 @@ Migrationen wird es geben, weil Phase 2 und 3 neue Felder brauchen.
 - Genaue Spalten und Datentypen — beim Bau festzulegen, nicht vorab
 - Umgang mit gleichzeitigem Zugriff, falls später eine Weboberfläche hinzukommt
   (siehe Architekturregel in Abschnitt 1)
+- **Der Regel-Kommentar über `profile.record_card` begründet falsch.** Er nennt als Grund,
+  „ein zweiter Lauf erzeugte in Anki stumm eine Doppelnotiz". Das trifft nicht zu und
+  widerspricht Abschnitt 8b: Weil `anki.new_card_guid` stabil ist, aktualisiert Anki dieselbe
+  Notiz. Der echte Grund steht oben unter „Jetzt billig, später teuer: die Anki-Kennung" —
+  der Rückkanal aus Phase 3. Zu berichtigen ist der Kommentar, nicht die Zeile darunter
+- **Die Profil-Identität einer Bedeutung umfasst `wikdict_trans_list`, die Anki-GUID
+  bewusst nicht** (Abschnitt 8b, „Befund: die vorgegebene GUID bindet den Feldinhalt"). Zwei
+  `sense`-Zeilen, die sich nur in der Übersetzungsliste unterscheiden, teilen sich damit
+  still eine `card`-Zeile. Im heutigen Wörterbuch ist der Fall nirgends auslösbar (11.961
+  Bedeutungen über 157.801 Zeilen geprüft); beim nächsten Wörterbuchbezug kann er entstehen,
+  und dann ist er nicht mehr `leicht`
+- **Die beiden Idempotenz-Tests prüfen nicht, was ihr Docstring behauptet**
+  (`tests/test_profile.py`, `tests/test_cli_export.py`): Sie reichen **dasselbe**
+  `Card`-Objekt zweimal hinein und prüfen damit SQLites `UNIQUE(guid)`, nicht die Stabilität
+  von `anki.new_card_guid`. Zwei getrennt erzeugte Karten desselben Eintrags wären die
+  Zusicherung, um die es geht (dokumentation.md §5)
 
 ---
 
@@ -1086,6 +1145,14 @@ reinen Bildband — ganz ohne Fließtext besteht, trägt nichts zur Statistik be
 - Über-Lemmatisierung von Eigennamen (`Holmes` → `holme`) — harmlos, solange der Filter
   aus dem vorigen Abschnitt greift, aber beim Anlegen der Liste „Figuren & Orte" zu
   beachten
+- **Ob der buchweite Eigennamenanteil zwischengespeichert wird.** Er kostet je
+  Kapiteldurchlauf einen vollen spaCy-Lauf über **alle** Kapitel des Buchs — 22 s
+  (`dorian_gray.epub`) beziehungsweise 29 s (`sherlock.epub`) gegenüber rund 1,1 s vorher
+  (Nachtrag 26.08.2026 oben). Regel 14 verlangt für einen Zwischenspeicher einen gemessenen
+  Anlass; der liegt damit vor, und er ist der erste im Projekt. Naheliegend ist, den Wert je
+  Buch im Profil zu halten (`book`-Tabelle, Abschnitt 4) — zu entscheiden ist dabei vor
+  allem, **wann er verfällt**: bei geänderter Datei und bei neuer spaCy- oder
+  Modellfassung, denn beide ändern die Vertaggung, aus der der Anteil entsteht
 - Ob die Wortart als Vorfilter für lange Auswahllisten taugt (Abschnitt 3, `run` mit 48
   Bedeutungen) — die Wortart liegt jetzt vor, gemessen ist die Wirkung noch nicht
 
@@ -1239,6 +1306,15 @@ den Stand in Git geprüft.
 - **`encoding="utf-8"` maschinell erzwingen.** ruff kennt dafür `PLW1514`; ob die Regel
   ohne `preview` verfügbar ist, ist noch nicht geprüft. Gelänge es, wanderte eine
   Kleinigkeit aus dokumentation.md §8 aus der Prosa in das Tor
+- **Ob eine `.gitattributes` die Zeilenenden festnagelt.** Im Index liegt inzwischen jede
+  verfolgte Datei mit LF (geprüft am 26.08.2026 mit `git ls-files --eol`), im **Arbeitsbaum**
+  dagegen 18 mit CRLF und 37 mit LF: `core.autocrlf` steht auf `true` und wandelt beim
+  Auschecken um, während ein Werkzeug, das eine Datei neu schreibt, sie mit LF hinterlässt.
+  Wer für eine Verfälschungsprobe (dokumentation.md §5) einen mehrzeiligen Textanker im
+  Quelltext sucht, findet ihn deshalb in der einen Datei und in der anderen nicht — und
+  deutet den Fehlschlag leicht als „Anker falsch abgeschrieben" statt als
+  Zeilenende-Unterschied. `* text=auto eol=lf` würde das beenden, berührt aber als einmalige
+  Umstellung jede Datei und gehört deshalb entschieden, nicht nebenbei gemacht
 - `tools/` bleibt von der Typprüfung ausgenommen — Messskripte, reine Standardbibliothek.
   Ob das so bleibt, ist offen; berührt wird es erst, wenn ein Messskript in den Kern wandert
 - **Auslieferung** (Nuitka, PyInstaller) bleibt offen wie in Abschnitt 1; sie berührt das
@@ -1332,6 +1408,15 @@ zweite Ausgabeliste daraus ist Ausgabe, keine Extraktion.
   vermutlich; gemessen ist es nicht
 - **Die Oberfläche ist nicht aufgeteilt.** Sie liegt außerhalb des Kernpakets, ihre
   Gliederung wird entschieden, wenn sie gebaut wird
+- **Das Zurückschreiben der Anki-GUID hängt an der Kommandozeile** (`cli/export.py`),
+  obwohl „verkettet wird allein in `pipeline`" oben etwas anderes verlangt. Unter Regel 14
+  ist das heute vertretbar — es gibt genau einen Aufrufer. **Beim Bau der Qt-Oberfläche muss
+  der Schritt mitwandern:** Eine zweite Oberfläche, die exportiert, ohne ihn nachzubauen,
+  verletzt Regel 6 lautlos, und bemerkt wird das erst am Anki-Rückkanal in Phase 3
+  (Abschnitt 4, „Jetzt billig, später teuer")
+- **Der einzige Ende-zu-Ende-Test prüft die Druckseite, nicht das Profil.** Eine Zusicherung
+  auf die `card`-Zeilen war in der Verfälschungsprobe zu T16 der wirksamste fehlende Zusatz:
+  Ein Durchlauf, der exportiert, ohne im Profil etwas zu hinterlassen, kommt heute grün durch
 
 ---
 
@@ -1579,6 +1664,23 @@ einen mitgelieferten Browser. Gebaut wird, was die Phase verlangt (Regel 14); de
 selbst ist als Phase-2-Punkt festgehalten (konzept.md, „Phase 2 — Ausbau der Kernidee"),
 mit dem HTML aus Phase 1 als Quelle.
 
+### Offene Punkte
+
+- **Die Gestaltung der Druckseite.** Funktional ist sie abgenommen (26.08.2026, Ausdruck
+  geprüft, Abnahmekriterium 5 erfüllt), „könnte aber etwas schöner sein" — Gestaltung, nicht
+  Kapazität. Bewusst zurückgestellt, bis eine erste vollständig funktionierende Fassung
+  steht; die steht jetzt
+- **Für die Kapazitätsprüfung fehlt ein Werkzeug in `tools/`.** Die Zahlen oben brauchen
+  echte Schriftmetrik, und in `.venv/` liegt weder PIL noch `fontTools` — gerechnet hat sie
+  ein Wegwerfskript, und **zwei Abnahmeläufe haben dafür je einen minimalen TrueType-Leser
+  neu geschrieben**. Sie sind damit die einzigen Messwerte dieses Dokuments, die sich nicht
+  aus `tools/` reproduzieren lassen, wogegen CLAUDE.md von den Messskripten ausdrücklich
+  sagt, sie reproduzierten die Messungen, auf die sich technik.md stützt. Der dritte
+  Anwendungsfall liegt damit vor, Regel 14 steht also nicht mehr entgegen: Die richtige
+  Ablage wäre ein `tools/print_fit_check.py` derselben Bauart wie die übrigen Messskripte —
+  Standardbibliothek, Schriftdatei aus dem System, Rechnung gegen das Druck-CSS von
+  `printout`
+
 ---
 
 ## 9. Ablage und Konfiguration zur Laufzeit — entschieden
@@ -1635,12 +1737,48 @@ Standardbibliothek reicht.
 **`reasoning_effort` steht nicht darin.** Regel 7 ist eine Regel, keine Einstellung — sie
 gehört nach Abschnitt 7 in `translation` und nirgendwo sonst hin.
 
+### Zwei Fallen beim Eintragen von Hand
+
+**`model.url` trägt `/v1`, die Messskripte in `tools/` nicht.** In `config.toml` steht die
+volle Adresse des OpenAI-Endpunkts (`http://…:11434/v1`), weil `translation` sie unverändert
+verwendet; `tools/sense_check.py` und `tools/mwe_check.py` hängen `/v1` selbst an und
+erwarten deshalb `--url http://…:11434`. Wer dieselbe Adresse von der einen Seite zur anderen
+kopiert, bekommt HTTP 404 aus `…/v1/v1/chat/completions`.
+
+**BOM und einfache Backslashes brechen `tomllib` mit einer englischen Meldung ab**, die die
+Datei nicht nennt — nachgemessen am 26.08.2026:
+
+| in `config.toml` | Meldung von `tomllib` |
+|---|---|
+| UTF-8-BOM am Dateianfang (Windows-Editoren erzeugen ihn) | `Invalid statement (at line 1, column 1)` |
+| `dictionary = "C:\Users\…"` — einfacher Backslash | `Invalid hex value`, weil `\U` in TOML ein Escape ist |
+| `dictionary = "C:\\Users\\…"` oder `'C:\Users\…'` | richtig gelesen |
+
+Beide Meldungen zeigen auf eine Zeile, nicht auf die Datei, und stehen englisch zwischen
+deutschen Ausgaben (dokumentation.md §1). Wer die Datei gerade von Hand angelegt hat, sucht
+den Fehler deshalb zuerst woanders.
+
 ### Offene Punkte
 
 - Ob Kartenrichtung und Wortobergrenze in die Datei gehören oder Aufrufargumente bleiben.
   Erst zu beantworten, wenn die Kommandozeile steht
 - Der Menüpunkt für eine konsistente Sicherung (Abschnitt 4) braucht das Verzeichnis oben,
   ist aber selbst noch nicht gebaut
+- **Ob ein Lesefehler in `config.toml` eine eigene deutsche Meldung samt Dateinamen
+  bekommt** statt der `tomllib`-Meldung aus der Falle oben. Regel 13 ist erfüllt — es bricht
+  laut ab —, die Sprachregel und der Hinweis auf die Datei sind es nicht
+- **Die Eingabeprüfung der Kommandozeile fragt nicht überall nach.** Sie ist in Phase 1 die
+  einzige Oberfläche, und zwei Stellen darin sind still:
+  - Der Triage-Prompt lautet `[k]enne ich  [l]ernen  [s]kip  [q]uit >`, und `_ACTIONS` legt
+    eine **Leereingabe als `skip`** aus. Eine Vorrichtung, die versehentlich leere Zeilen
+    schickt, bucht dadurch nichts und der Lauf sieht trotzdem plausibel aus — **zwei
+    Abnahmeläufe sind daran verlorengegangen**, bevor die Ursache feststand. Das ist der
+    stille Fehlschlag aus Regel 13 an der Eingabe statt an der Ausgabe
+  - Eine vertippte Antwort auf die Sammelaktionsfrage („1O" statt „10") überspringt die
+    Sammelaktion **ganz**, statt nachzufragen; `_ask_action` daneben fragt bei ungültiger
+    Eingabe erneut. Für den Nutzer bedeutet der Vertipper 25 Einzelfragen statt eines
+    Tastendrucks — und beim ersten Durchlauf je Buch ist genau dieser Tastendruck der ganze
+    Zweck (konzept.md, Schritt 4, Nachtrag 26.08.2026)
 
 ---
 
@@ -1905,6 +2043,17 @@ der 232 Sherlock-Treffer, darunter `bring back` (10 Vorkommen), `take up`, `keep
 `light up` — also genau die Einträge, die unten als „394 Vorkommen mit Partikel" nach
 Regel 10 `uncertain` bleiben sollen. Der Filter gehört deshalb zum n-Gramm-Weg, nicht zum
 `prt`-Weg; T7 behandelt die beiden Kandidatenarten seither getrennt.
+
+### Bekannte Grenze: Wortstellungsvarianten belegen zwei Plätze
+
+Aus der bestandenen Abnahme vom 26.08.2026, festgehalten als Grenze und **bewusst nicht
+behoben**: `There was` und `Was there` sind für die Kandidatenbildung zwei verschiedene
+Wendungen und belegen zwei der wenigen Wendungsplätze der Triage; gemessen sind **27 solcher
+Paare** über die beiden EPUBs unter `tools/`. Entdoppelt wird über die **Wortfolge** — das
+fängt die echten Dubletten („clear up", „look up") samt Präfixpaaren. Eine Entdopplung, die
+zusätzlich über die Wortmenge ginge, führe zu weit: In `dorian_gray.epub` Kapitel 17 fielen
+darunter „there is no pleasure" und „was to be there" zusammen, und damit eine echte
+Bedeutung weg. Zwei Plätze für eine Wortstellungsvariante sind der billigere Fehler.
 
 ### Arbeitsteilung nach der Messung
 
