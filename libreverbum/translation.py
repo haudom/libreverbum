@@ -133,16 +133,32 @@ def _sense_line(number: int, sense: Sense) -> str:
 
 def _build_prompt(occurrence: Occurrence, sense_candidates: Sequence[Sense]) -> str:
     """Baut den Prompt: Belegsatz, nummerierte Auswahlliste, Ausweichantwort als Eintrag
-    N+1. Anfrageform an `tools/sense_check.py`, `build_prompt` angelehnt — der Vorlage für
-    Prompt und JSON-Schema (bauplan.md T11), hier um die Ausweichantwort erweitert."""
+    N+1, danach ein Absatz, der sie ausdrücklich zur richtigen Antwort erklärt (siehe
+    REGEL unten). Anfrageform an `tools/sense_check.py`, `build_prompt` angelehnt — der
+    Vorlage für Prompt und JSON-Schema (bauplan.md T11), hier um beides erweitert."""
     lines = [_sense_line(n, sense) for n, sense in enumerate(sense_candidates, 1)]
-    lines.append(f"{len(sense_candidates) + 1}. none of the listed meanings fits")
+    none_fits = len(sense_candidates) + 1
+    lines.append(f"{none_fits}. none of the listed meanings fits")
+    # REGEL (technik.md §3, offener Punkt „Ausweichantwort «keine passt»"; T17-
+    # Nachbesserung, Ursache B, 26.08.2026): Der Absatz nach der Auswahlliste sagt
+    # ausdrücklich, dass Eintrag N+1 die **richtige** Antwort ist, wenn keine Bedeutung
+    # passt — nicht ein Verlegenheitsausweg. Anlass: Bei `came to` und `think of`
+    # (dorian_gray.epub Kapitel 10) fehlte die gemeinte Bedeutung in der Auswahlliste
+    # vollständig, und das Modell wählte trotzdem die am wenigsten falsche Zeile statt
+    # der Ausweichantwort, obwohl dieselbe Ausweichantwort in denselben Läufen bei
+    # Wendungen 4 von 16 Mal ansprang. Eine falsch gebuchte Bedeutung ist teurer als ein
+    # ausgelassenes Wort (Regel 13, `pipeline._resolve_sense`) — der Absatz macht diese
+    # Haltung im Prompt selbst sichtbar, statt sie nur im Code zu halten. Keine Änderung
+    # an Antwortform, JSON-Schema oder `reasoning_effort` (Regel 7 bleibt unberührt).
     return (
         "You are helping a German learner of English.\n"
         f'In the sentence below, which listed meaning does the word "{occurrence.word_form}" '
         "have?\n\n"
         f"Sentence: {occurrence.example_sentence}\n\n"
         "Meanings:\n" + "\n".join(lines) + "\n\n"
+        f"If none of the meanings above truly matches how the word is used in this "
+        f"sentence, answer {none_fits}. That is the correct answer in that case, not a "
+        "fallback — do not pick the closest meaning if it does not actually fit.\n\n"
         'Answer with JSON only: {"choice": <number>}'
     )
 

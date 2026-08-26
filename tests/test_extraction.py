@@ -262,6 +262,52 @@ def test_representative_word_form_and_sentence_match_the_chosen_pos(nlp: Languag
     assert watch.example_sentence == "Then he watched the door."
 
 
+# ------------------------------------------------------ Wendungsbeteiligung im Belegsatz
+
+
+def test_expression_free_occurrence_is_preferred_for_the_example_sentence(nlp: Language) -> None:
+    """T17-Nachbesserung (Ursache A, 26.08.2026): Von zwei Vorkommen derselben Grundform
+    wird das wendungsfreie für Wortform und Belegsatz gewählt, auch wenn das
+    wendungsbeteiligte zuerst im Kapitel steht — sonst zeigt der Belegsatz eine
+    Redewendung („taken part"), während die Auswahlliste nur Bedeutungen des Einzelworts
+    „take" enthält (dorian_gray.epub Kapitel 10, Auftragstext Ursache A)."""
+    chapter = make_chapter(
+        "She had taken part in the play. Yesterday she decided to take a long walk."
+    )
+    occurrences = extract_vocabulary(chapter, nlp)
+
+    take = find(occurrences, "take", "VERB")
+    assert take.word_form == "take"
+    assert take.example_sentence == "Yesterday she decided to take a long walk."
+
+
+def test_falls_back_to_a_wendung_occurrence_when_none_is_free(nlp: Language) -> None:
+    """Gegenprobe: Sind alle Vorkommen einer Grundform wendungsbeteiligt, weicht die Wahl
+    auf das erste davon aus, statt eine Grundform ganz zu verlieren — „taken part" und
+    „took heart" sind beides unbestimmte Akkusativobjekte ohne eigenes Kind-Token."""
+    chapter = make_chapter(
+        "She had taken part in the play. Then she quickly took heart and continued."
+    )
+    occurrences = extract_vocabulary(chapter, nlp)
+
+    take = find(occurrences, "take", "VERB")
+    assert take.word_form == "taken"
+    assert take.example_sentence == "She had taken part in the play."
+
+
+def test_running_late_keeps_its_belegsatz(nlp: Language) -> None:
+    """Gegenprobe zur Partikelliste (`_EXPRESSION_PARTICLE_WORDS`): „late" ist ein
+    gewöhnliches Adverb, keine Phrasal-Verb-Partikel — ohne die geschlossene Liste träfe
+    die advmod-Regel auch hier zu und risse den bislang richtigen Belegsatz aus
+    `test_inflected_forms_are_merged_into_one_entry_with_combined_frequency` mit."""
+    chapter = make_chapter("She was running late. He runs every morning.")
+    occurrences = extract_vocabulary(chapter, nlp)
+
+    run = find(occurrences, "run", "VERB")
+    assert run.word_form == "running"
+    assert run.example_sentence == "She was running late."
+
+
 # ---------------------------------------------------------- Häufigkeit und Belegsatz
 
 

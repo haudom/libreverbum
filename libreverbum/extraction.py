@@ -57,11 +57,14 @@ die er ausschließt (ADP, PART, DET), siehe deren Docstrings.
 
 Mischt eine Grundform mehrere Wortarten unter ihren nicht-eigennamigen Vorkommen (etwa
 „watch" als Nomen und als Verb), gewinnt die häufigere; bei Gleichstand die zuerst
-gesehene. Wortform und Belegsatz stammen vom ersten Vorkommen dieser gewählten Wortart —
-sonst schlägt `dictionary` eine andere Wortart nach, als der Belegsatz zeigt, aus dem
-später das Modell wählt. Das vereinfacht eine im Kapitel seltene Mehrdeutigkeit zugunsten
-einer einzigen Grundform je Wortliste — bauplan.md T3 verlangt keine feinere Auflösung,
-und Regel 14 untersagt eine Erweiterung auf Vorrat.
+gesehene. Wortform und Belegsatz stammen vom ersten **wendungsfreien** Vorkommen dieser
+gewählten Wortart — oder, wenn keines wendungsfrei ist, vom ersten überhaupt (siehe REGEL
+bei `_EXPRESSION_PARTICLE_WORDS`, T17-Nachbesserung 26.08.2026): sonst schlägt `dictionary`
+eine andere Wortart nach, als der Belegsatz zeigt, aus dem später das Modell wählt — und
+zeigt der Belegsatz eine Wendung statt der gewöhnlichen Verwendung, kann das Modell selbst
+bei richtiger Wortart nicht mehr richtig wählen. Das vereinfacht eine im Kapitel seltene
+Mehrdeutigkeit zugunsten einer einzigen Grundform je Wortliste — bauplan.md T3 verlangt
+keine feinere Auflösung, und Regel 14 untersagt eine Erweiterung auf Vorrat.
 """
 
 from __future__ import annotations
@@ -176,12 +179,114 @@ def _collapse_whitespace(text: str) -> str:
     return _WHITESPACE.sub(" ", text).strip()
 
 
+# REGEL (technik.md, „Warum die Wortart trotzdem nicht genügt", „Nur der Belegsatz klärt
+# den Fall"): Der Belegsatz eines Einzelworts muss dessen gewöhnliche Verwendung zeigen —
+# zeigt er stattdessen eine Wendung, sieht das Modell einen Satz, der zur Auswahlliste des
+# Einzelworts gar nicht passt, und kann selbst bei richtiger Wortart nicht mehr richtig
+# wählen. T17-Nachbesserung (26.08.2026, Abnahme `tools/dorian_gray.epub` Kapitel 10):
+# „gone" (19 Vorkommen) bekam durchweg den Beleg „…that he had gone through." — die
+# Auswahlliste zu „go" bietet dafür nur „verschwinden" u. Ä., richtig wäre „durchgemacht"
+# gewesen; „taken" (11 Vorkommen) ebenso mit „…having taken part in…" statt „teilgenommen".
+# Beide Wendungen stehen als eigener Kandidat in `expressions` (`extract_particle_verb_
+# candidates`, `extract_contiguous_candidates`), erreichen aber wegen ihrer geringen
+# Häufigkeit den Wendungsdeckel nie (`cli/interaction.py`, `EXPRESSION_LIMIT`) — das
+# Einzelwort bleibt der einzige Ort, an dem der Nutzer sie überhaupt zu sehen bekommt, und
+# zeigt dabei die falsche Bedeutung.
+#
+# Ohne Wörterbuchabgleich (Importregel, technik.md §7: dieses Modul importiert nur
+# `entities`) lässt sich eine Wendung hier nicht bestätigen, nur ihr syntaktisches Muster
+# erkennen: ein unmittelbar angehängtes, selbst unverzweigtes Satellitenwort (kein eigenes
+# Kind-Token, `_is_bare`). Drei Fälle, an Kapitel 10 gegen das echte `en-de.sqlite3`
+# nachgeprüft:
+# - eine Partikel (`_PARTICLE_DEP`, wie bei `extract_particle_verb_candidates`) oder ein
+#   Adverb aus dieser geschlossenen Liste gängiger Phrasal-Verb-Partikel — spaCy markiert
+#   dieselbe Konstruktion je nach Satz uneinheitlich als `prt` oder `advmod` („go
+#   through." bekommt `advmod`, „went over" `prt`). Ohne die Liste träfe die advmod-Regel
+#   auch echte Adverbien wie „late" in „She was running late." — dort bliebe „late" ohne
+#   die Liste ein falscher Treffer (geprüft: `test_running_late_keeps_its_belegsatz`)
+# - eine Präposition ohne eigenes Objekt
+# - ein unbestimmtes Akkusativobjekt: ein bloßes Substantiv ohne Artikel oder Attribut
+#   (`taken part` gegenüber `took a great part`, das mit „a" und „great" eigene
+#   Kind-Token trägt)
+# „went into the library" bleibt unberührt, weil „into" dort ein eigenes Objekt („library")
+# trägt — nur der auf sich allein gestellte Fall zählt als Wendungsbeteiligung.
+_EXPRESSION_PARTICLE_WORDS = frozenset(
+    {
+        "up",
+        "down",
+        "in",
+        "out",
+        "on",
+        "off",
+        "away",
+        "back",
+        "through",
+        "over",
+        "along",
+        "round",
+        "forward",
+        "across",
+        "by",
+        "apart",
+        "aside",
+        "ahead",
+        "behind",
+    }
+)
+
+
+def _is_bare(token: Token) -> bool:
+    """Kein eigenes Kind-Token — das Satellitenwort trägt keine weitere Ergänzung
+    (Artikel, Attribut, eigenes Objekt). Unterscheidet „gone through." (kein Kind an
+    „through") von „walked through London." (Kind „London" an „through")."""
+    return next(token.children, None) is None
+
+
+def _is_expression_satellite(verb: Token, satellite: Token) -> bool:
+    """Bildet `satellite` mit `verb` eher eine Wendung als eine gewöhnliche Wortfolge?
+    Siehe die REGEL bei `_EXPRESSION_PARTICLE_WORDS`.
+
+    Der Vergleich läuft über `==`, nicht `is`: spaCy erzeugt bei jedem Zugriff auf
+    `token.head` oder `doc[i]` ein neues Wrapper-Objekt für dasselbe Token — `is` liefert
+    dabei still `False`, obwohl beide dasselbe Token meinen, und die Prüfung fände nie
+    eine Wendung. Beim Bau dieser Funktion tatsächlich mit `is` versucht: die eigens dafür
+    geschriebenen Tests (`test_expression_free_occurrence_is_preferred_for_the_example_
+    sentence`, `test_falls_back_to_a_wendung_occurrence_when_none_is_free`) fielen beide
+    sofort rot, weil „taken part" nie als Wendung erkannt wurde."""
+    if satellite.head != verb or verb.pos_ != "VERB" or not _is_bare(satellite):
+        return False
+    if satellite.dep_ == _PARTICLE_DEP:
+        return True
+    if satellite.dep_ == "advmod":
+        return satellite.lemma_.lower() in _EXPRESSION_PARTICLE_WORDS
+    return satellite.dep_ == "prep" or (satellite.dep_ == "dobj" and satellite.pos_ == "NOUN")
+
+
+def _is_expression_member(token: Token) -> bool:
+    """Steht unmittelbar vor oder nach `token` ein Wort, mit dem es eine Wendung statt
+    einer gewöhnlichen Wortfolge bildet? Geprüft in beide Richtungen, weil das Vorkommen
+    sowohl das Verb als auch das Satellitenwort sein kann."""
+    doc = token.doc
+    left = doc[token.i - 1] if token.i > 0 else None
+    right = doc[token.i + 1] if token.i + 1 < len(doc) else None
+    pairs = ((token, right), (right, token), (token, left), (left, token))
+    return any(
+        verb is not None and satellite is not None and _is_expression_satellite(verb, satellite)
+        for verb, satellite in pairs
+    )
+
+
 class _CandidateOccurrence(NamedTuple):
-    """Ein einzelnes Token-Vorkommen, vor der Zusammenführung zur Grundform."""
+    """Ein einzelnes Token-Vorkommen, vor der Zusammenführung zur Grundform.
+    `in_expression` zählt nur in `extract_vocabulary` (REGEL bei
+    `_EXPRESSION_PARTICLE_WORDS`) — die beiden Mehrwortausdruck-Funktionen lassen es auf
+    der Vorgabe `False`, weil ihre Repräsentantenwahl (`_occurrences_from_candidates`)
+    stets das erste Vorkommen nimmt."""
 
     pos: str
     word_form: str
     example_sentence: str
+    in_expression: bool = False
 
 
 def extract_vocabulary(chapter: Chapter, nlp: Language) -> list[Occurrence]:
@@ -207,7 +312,12 @@ def extract_vocabulary(chapter: Chapter, nlp: Language) -> list[Occurrence]:
                 continue
             lemma_text = token.lemma_.lower()
             candidates_by_lemma[lemma_text].append(
-                _CandidateOccurrence(pos=pos, word_form=token.text, example_sentence=sentence_text)
+                _CandidateOccurrence(
+                    pos=pos,
+                    word_form=token.text,
+                    example_sentence=sentence_text,
+                    in_expression=_is_expression_member(token),
+                )
             )
 
     occurrences: list[Occurrence] = []
@@ -233,7 +343,11 @@ def extract_vocabulary(chapter: Chapter, nlp: Language) -> list[Occurrence]:
         # Wortform und Belegsatz müssen zur gewählten Wortart passen, sonst schlägt
         # dictionary eine andere Wortart nach, als der Belegsatz zeigt (etwa Verb
         # nachgeschlagen, aber ein Nomen-Belegsatz vorgelegt).
-        representative = next(c for c in non_proper if c.pos == chosen_pos)
+        same_pos = [c for c in non_proper if c.pos == chosen_pos]
+        # Bevorzugt ein wendungsfreies Vorkommen (REGEL bei `_EXPRESSION_PARTICLE_WORDS`)
+        # und weicht nur dann auf eines mit Wendungsbeteiligung aus, wenn keines frei
+        # davon ist — same_pos ist nie leer, chosen_pos stammt aus genau dieser Liste.
+        representative = next((c for c in same_pos if not c.in_expression), same_pos[0])
         occurrences.append(
             Occurrence(
                 book=chapter.book,
