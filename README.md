@@ -80,18 +80,13 @@ Danach die Umgebung aktivieren — `.venv\Scripts\activate` unter Windows,
 `source .venv/bin/activate` sonst. Alle folgenden Aufrufe laufen im Wurzelverzeichnis des
 Repositoriums; das Paket ist bewusst nicht installiert, sondern wird von dort gefunden.
 
-Dann das Wörterbuch beziehen. Der folgende Aufruf lädt es, prüft Schema und Zeilenzahl und
-legt die beiden Indizes an — **die Indizes sind der Unterschied zwischen 1,1 s und 40 s pro
-Kapitel** ([technik.md](technik.md) §3, „Nachtrag 17.08.2026"):
-
-```bash
-python -c "from cli.config import default_data_dir; from libreverbum import dictionary; dictionary.fetch_dictionary(default_data_dir() / 'en-de.sqlite3')"
-```
-
-`default_data_dir()` liefert dabei genau das Verzeichnis, in dem das Programm später
-nachsieht — unter Windows `%LOCALAPPDATA%\LibreVerbum\`, sonst
-`~/.local/share/libreverbum/`. Der Aufruf ist wiederholbar: Liegt die Datei schon da, wird
-sie nur geprüft und, falls nötig, nachträglich indiziert.
+Das Wörterbuch besorgt das Programm selbst. Fehlt es beim Start, nennt LibreVerbum
+Herkunft und Lizenz — WikDict EN→DE, aus Wiktionary über DBnary erzeugt, CC BY-SA — und
+fragt einmalig nach; rund 20 MB. Wer die Datei schon hat, legt sie ins Datenverzeichnis
+oder trägt sie unter `paths.dictionary` in `config.toml` ein: Die beiden Indizes, die sie
+von Hand kopiert nicht mitbringt, legt der Start dann selbst an. **Sie sind der Unterschied
+zwischen 1,1 s und 40 s pro Kapitel** ([technik.md](technik.md) §3, „Nachtrag
+17.08.2026").
 
 ## Benutzen
 
@@ -104,7 +99,8 @@ Beim **ersten Aufruf** entsteht `config.toml` im plattformüblichen Verzeichnis
 endet sofort mit einem Hinweis. Das ist Absicht: In der Vorlage steht
 `url = "http://localhost:11434/v1"`, und ein im Heimnetz laufender Modellserver ist der
 Regelfall, nicht die Ausnahme. Also erst `model.url` und `model.name` eintragen, dann
-denselben Befehl erneut.
+denselben Befehl erneut. Beim **zweiten Aufruf** kommt die Frage nach dem Wörterbuch, falls
+es noch fehlt, und danach die nach dem Profil, falls es noch keines gibt.
 
 Danach läuft der Durchgang:
 

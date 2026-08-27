@@ -306,6 +306,30 @@ als gültiges Wörterbuch liegen bleibt. Was es nicht leistet: Schutz gegen eine
 vollständige, aber absichtlich manipulierte Datei — dafür fehlt weiterhin ein
 unabhängiges Gegenüber.
 
+### Nachtrag 27.08.2026: der Bezug läuft beim Start, die Startprüfung nur bis zum Index
+
+**Wer** die Datei besorgt, war bis dahin offen. `dictionary.fetch_dictionary` gab es seit
+T6, aufgerufen hat es aber allein `tools/coverage_check.py`; `cli.main` verwies bei
+fehlender Datei nur auf dieses Messskript. Der Erstbezug war damit ein Handgriff außerhalb
+des Programms, und die in der Liste oben verlangte Anzeige samt Lizenzhinweis hatte keinen
+Ort, an dem sie erscheinen konnte. Seit dem 27.08.2026 fragt `cli.main` bei fehlendem
+Wörterbuch selbst nach, zeigt dabei `dictionary.SOURCE_NOTICE` und bezieht die Datei nach
+Bestätigung. Vorgabe bei bloßem Enter ist **Zustimmung** — anders als bei der Profilfrage
+(`cli.main._confirm_new_profile`), weil ein Wörterbuch wiederbeschaffbar ist und ein
+Lernstand nicht.
+
+**Ist die Datei da, läuft nicht `fetch_dictionary`, sondern nur `ensure_index`.** Der
+Unterschied ist die Zeilenzahlprüfung aus dem Nachtrag oben: Sie ist eine Aussage über
+einen **Bezug** (kam der Download vollständig an?), nicht über jeden Start. Auf jeden Start
+angewandt schlösse sie jedes bewusst kleiner gehaltene Wörterbuch aus — die Testattrappen
+des Projekts fielen mit ihren neun Zeilen als Erste durch. Was beim Start zählt, ist der
+Index: Eine von Hand hinterlegte Datei bringt ihn nicht mit (Abschnitt 3, „Nachtrag
+17.08.2026"), und ohne ihn kostet jedes Kapitel 32 bis 44 s statt 1,1 s, ohne dass
+irgendetwas darauf hinwiese — der stille Fehlschlag aus Regel 13, nur als Laufzeit statt
+als falschem Ergebnis. Gemessen am 27.08.2026 gegen `tools/en-de.sqlite3` (26,9 MB): Der
+Abgleich beider Indizes kostet, wenn sie bereits liegen, **0,9 bis 1,4 ms je Start**; der
+volle `fetch_dictionary` mit Zeilenzählung 4 bis 8 ms.
+
 ### Häufigkeitsdaten — unkritisch
 
 Der Kernablauf zählt Häufigkeiten **im Buch selbst**; externe Listen werden erst für

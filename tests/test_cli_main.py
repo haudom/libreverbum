@@ -19,6 +19,7 @@ import pytest
 from cli import export
 from cli import main as cli_main
 from cli.main import _build_parser, main
+from libreverbum import dictionary
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -101,6 +102,18 @@ def book_epub(tmp_path: Path) -> Path:
 
 def _no_read(prompt: str) -> str:
     raise AssertionError(f"Es wurde keine Eingabe erwartet, gefragt wurde: {prompt!r}")
+
+
+def _index_names(con: sqlite3.Connection) -> set[str]:
+    """Die Namen der auf `translation` liegenden Indizes — ohne die von SQLite selbst
+    angelegten (`sqlite_autoindex_…`)."""
+    return {
+        str(row[0])
+        for row in con.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'translation'"
+        )
+        if not str(row[0]).startswith("sqlite_autoindex")
+    }
 
 
 def _write_config(
@@ -317,9 +330,49 @@ def test_main_creates_config_on_the_first_run_and_stops(tmp_path: Path) -> None:
     assert any("config.toml" in line for line in written)
 
 
-def test_main_aborts_loudly_when_the_dictionary_is_missing(tmp_path: Path) -> None:
-    """dokumentation.md §4 Regel 13: fehlendes Wörterbuch bricht laut ab — kein leerer
-    oder scheinbar erfolgreicher Durchlauf, kein `except`, das nur protokolliert."""
+def test_main_offers_to_fetch_a_missing_dictionary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fehlt das Wörterbuch, wird es bezogen statt auf ein Messskript zu verweisen —
+    nach einer Rückfrage, die Herkunft und Lizenz nennt (technik.md §2, „Warum nicht
+    mitgeliefert").
+
+    `dictionary.fetch_dictionary` selbst prüft `tests/test_dictionary.py` gegen einen
+    örtlichen Server; hier wird nur die Verkettung geprüft (dokumentation.md §5, „Die
+    Vorrichtung zeigt Laufen"), deshalb eine Attrappe statt eines 20-MB-Bezugs."""
+    data_dir = tmp_path / "data"
+    ziel = data_dir / "fehlt.sqlite3"
+    _write_config(
+        data_dir, model_url="http://localhost:11434/v1", model_name="", dictionary_path=ziel
+    )
+    bezogen: list[Path] = []
+
+    def _attrappe(path: Path, *, url: str = "") -> None:
+        bezogen.append(path)
+        path.write_bytes(b"")
+
+    monkeypatch.setattr("cli.main.dictionary.fetch_dictionary", _attrappe)
+    written: list[str] = []
+    gefragt: list[str] = []
+
+    def _read(prompt: str) -> str:
+        gefragt.append(prompt)
+        return "j" if "beziehen" in prompt else "n"
+
+    main(
+        [str(tmp_path / "fehlt.epub"), "--data-dir", str(data_dir)],
+        read_line=_read,
+        write_line=written.append,
+    )
+
+    assert bezogen == [ziel]
+    assert any("wikdict.com" in line for line in written), written
+    assert any("BY-SA" in line for line in written), written
+
+
+def test_main_aborts_when_the_dictionary_fetch_is_declined(tmp_path: Path) -> None:
+    """dokumentation.md §4 Regel 13: Lehnt der Nutzer den Bezug ab, bricht der Lauf
+    sichtbar ab — kein leerer oder scheinbar erfolgreicher Durchlauf."""
     data_dir = tmp_path / "data"
     _write_config(
         data_dir,
@@ -331,12 +384,42 @@ def test_main_aborts_loudly_when_the_dictionary_is_missing(tmp_path: Path) -> No
 
     exit_code = main(
         ["irrelevant.epub", "--data-dir", str(data_dir)],
-        read_line=_no_read,
+        read_line=lambda _prompt: "n",
         write_line=written.append,
     )
 
     assert exit_code == 1
+    assert not (data_dir / "fehlt.sqlite3").exists()
     assert any("Wörterbuch nicht gefunden" in line for line in written)
+
+
+def test_main_indexes_a_dictionary_that_was_placed_by_hand(
+    tmp_path: Path, book_epub: Path, mini_dictionary_db: Path
+) -> None:
+    """Eine von Hand hinterlegte Wörterbuchdatei bringt die beiden Indizes nicht mit
+    (technik.md §3, „Nachtrag 17.08.2026") — der Start legt sie an, sonst kostet jedes
+    Kapitel 32 bis 44 s statt 1,1 s, und zwar lautlos.
+
+    Geprüft am Lauf, der an der abgelehnten Profilfrage endet: Der Index muss vorher
+    entstanden sein, nicht erst beim ersten Nachschlagen."""
+    data_dir = tmp_path / "data"
+    _write_config(
+        data_dir,
+        model_url="http://localhost:11434/v1",
+        model_name="",
+        dictionary_path=mini_dictionary_db,
+    )
+    with sqlite3.connect(mini_dictionary_db) as vorher:
+        assert not _index_names(vorher), "Die Attrappe soll ohne Index in den Test gehen"
+
+    main(
+        [str(book_epub), "--chapter", "1", "--data-dir", str(data_dir)],
+        read_line=lambda _prompt: "n",
+        write_line=lambda _text: None,
+    )
+
+    with sqlite3.connect(mini_dictionary_db) as nachher:
+        assert _index_names(nachher) == {dictionary.INDEX_NAME, dictionary.INDEX_NAME_NOCASE}
 
 
 def test_main_declines_to_create_a_profile_without_confirmation(

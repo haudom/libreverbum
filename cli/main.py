@@ -4,7 +4,8 @@ Aufgabe
 -------
 Verkettet, was `cli.config`, `libreverbum.epub`, `libreverbum.extraction`,
 `libreverbum.pipeline`, `cli.interaction` und `cli.export` je für sich liefern, zu einem
-Aufruf von der Kommandozeile: EPUB wählen, Kapitel wählen, `pipeline.run_chapter`,
+Aufruf von der Kommandozeile: Wörterbuch beziehen oder indizieren
+(`libreverbum.dictionary`), EPUB wählen, Kapitel wählen, `pipeline.run_chapter`,
 je Decksel `pipeline.resolve_triage_entries` (Bedeutung vor der Triage auflösen, Befund
 schwer 1, zweite T16-Durchsicht), Triage über die Tastatur (Wörter, dann Wendungen),
 Export nach Anki und als Druckseite.
@@ -35,7 +36,7 @@ from typing import TYPE_CHECKING
 from cli import config, export, interaction, model
 from cli.display import finish_progress_line, safe_print, safe_print_progress
 from cli.interaction import ReadLine, WriteLine
-from libreverbum import epub, extraction, pipeline, profile
+from libreverbum import dictionary, epub, extraction, pipeline, profile
 from libreverbum.entities import CardDirection
 
 if TYPE_CHECKING:
@@ -107,6 +108,25 @@ def _confirm_new_profile(profile_path: Path, read_line: ReadLine, write_line: Wr
     write_line(f"Unter {profile_path} liegt noch kein Profil.")
     answer = read_line("Neu anlegen? [j/N] ").strip().lower()
     return answer in ("j", "ja")
+
+
+def _confirm_dictionary_fetch(
+    dictionary_path: Path, read_line: ReadLine, write_line: WriteLine
+) -> bool:
+    """Fragt vor dem Erstbezug des Wörterbuchs nach Bestätigung und zeigt dabei Herkunft
+    und Lizenz.
+
+    Vorgabe bei bloßem Enter ist hier **Zustimmung**, anders als bei
+    `_confirm_new_profile`: Das Wörterbuch ist eine jederzeit wiederbeschaffbare
+    Fremddatei von rund 20 MB, kein unwiederbringlicher Lernstand — der Grund für die
+    Rückfrage ist nicht der Schutz vor einem Fehlgriff, sondern der Hinweis auf Herkunft
+    und Lizenz (`dictionary.SOURCE_NOTICE`, technik.md §2, „Warum nicht mitgeliefert")
+    und darauf, dass gleich ein Netzzugriff beginnt.
+    """
+    write_line(f"Wörterbuch nicht gefunden: {dictionary_path}")
+    write_line(dictionary.SOURCE_NOTICE)
+    answer = read_line("Jetzt beziehen? [J/n] ").strip().lower()
+    return answer in ("", "j", "ja")
 
 
 def _choose_chapter(
@@ -187,17 +207,30 @@ def _run(args: argparse.Namespace, *, read_line: ReadLine, write_line: WriteLine
         write_line("Werte prüfen (insbesondere model.url) und den Befehl erneut ausführen.")
         return 0
 
+    # Das Wörterbuch steht vor jeder anderen Rückfrage (etwa der Profilbestätigung
+    # unten): Ein Lauf, der ohne es nicht weiterkommt, soll nicht erst nach einer
+    # Bestätigung scheitern.
     if not cfg.dictionary_path.is_file():
-        # REGEL (dokumentation.md §4 Regel 13): fehlendes Wörterbuch bricht laut ab,
-        # statt eines leeren oder scheinbar erfolgreichen Durchlaufs. Geprüft vor jeder
-        # Rückfrage an den Nutzer (etwa der Profilbestätigung unten) — ein Lauf, der
-        # ohnehin nicht weiterkommt, soll nicht erst nach einer Bestätigung scheitern.
-        raise FileNotFoundError(
-            f"Wörterbuch nicht gefunden: {cfg.dictionary_path}. Bezug etwa mit "
-            "„python tools/coverage_check.py --fetch-dictionary“ (CLAUDE.md, „tools/ — die "
-            "Messskripte“), danach unter paths.dictionary in config.toml eintragen oder ins "
-            "Datenverzeichnis kopieren."
-        )
+        # REGEL (dokumentation.md §4 Regel 13): Der Erstbezug läuft über den Kern selbst
+        # (`dictionary.fetch_dictionary`) statt über einen Verweis auf ein Messskript in
+        # `tools/`. Lehnt der Nutzer ab oder schlägt der Bezug fehl, bricht der Lauf
+        # sichtbar ab — `fetch_dictionary` räumt eine unvollständige Datei selbst weg und
+        # wirft eine deutsche Meldung, die `main` unten fängt und meldet.
+        if not _confirm_dictionary_fetch(cfg.dictionary_path, read_line, write_line):
+            write_line("Abgebrochen — kein Wörterbuch bezogen.")
+            return 1
+        write_line("Wörterbuch wird bezogen, rund 20 MB — das dauert einen Moment …")
+        dictionary.fetch_dictionary(cfg.dictionary_path)
+        write_line(f"Wörterbuch bezogen: {cfg.dictionary_path}")
+    else:
+        # Nur der Index, nicht die ganze Bezugsprüfung: `fetch_dictionary` prüft eine
+        # vorhandene Datei zusätzlich auf mindestens 100.000 Zeilen (`_validate_schema`),
+        # und das ist eine Aussage über einen **Bezug**, nicht über jeden Start — ein
+        # bewusst kleiner gehaltenes Wörterbuch fiele sonst bei jedem Aufruf durch.
+        # `ensure_index` ist der Teil, der hier zählt: Eine von Hand hinterlegte Datei
+        # bringt die beiden Indizes nicht mit, und ohne sie kostet jedes Kapitel 32 bis
+        # 44 s statt 1,1 s (technik.md §3, „Nachtrag 17.08.2026") — lautlos.
+        dictionary.ensure_index(cfg.dictionary_path)
 
     if not _confirm_new_profile(cfg.profile_path, read_line, write_line):
         write_line("Abgebrochen — kein Profil angelegt.")
