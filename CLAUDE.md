@@ -157,9 +157,10 @@ WikDict-Werte nur als Momentaufnahme (`wikdict_*`). Begründung: technik.md §4.
 `PRAGMA user_version` ab der ersten Fassung. Tabellen heißen im Schema `book`,
 `chapter`, `lemma`, `sense`, `occurrence`, `event`, `card`.
 
-Zur Laufzeit liegen beide samt `config.toml` im plattformüblichen Nutzerverzeichnis
-(`%LOCALAPPDATA%\LibreVerbum\`, unter Linux `~/.local/share/libreverbum/`). **Der Kern
-bekommt jeden Pfad als Argument** und kennt keine Vorgabe — die setzt der Aufrufer.
+Zur Laufzeit liegen beide samt `config.toml` in `data/` neben dem Projekt, solange
+LibreVerbum aus dem Quellbaum läuft (seit 27.08.2026, vorher im Nutzerverzeichnis).
+**Der Kern bekommt jeden Pfad als Argument** und kennt keine Vorgabe — die setzt der
+Aufrufer. Begründung: technik.md §9.
 Begründung: technik.md §9.
 
 ## `tools/` — die Messskripte

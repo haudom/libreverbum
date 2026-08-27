@@ -18,8 +18,8 @@ oder ergänzt wird (bauplan.md, Tor 5).
 
 Voraussetzungen
 ---------------
-Eine interaktive Konsole. `--data-dir` erlaubt, das plattformübliche Verzeichnis
-(technik.md §9) für Tests durch ein Wegwerfverzeichnis zu ersetzen.
+Eine interaktive Konsole. `--data-dir` erlaubt, das Datenverzeichnis `data/` neben dem
+Projekt (technik.md §9) für Tests durch ein Wegwerfverzeichnis zu ersetzen.
 
 Liefert
 -------
@@ -82,7 +82,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--data-dir",
         type=Path,
         default=None,
-        help="Abweichendes Datenverzeichnis statt des plattformüblichen (technik.md §9)",
+        help="Abweichendes Datenverzeichnis statt data/ neben dem Projekt (technik.md §9)",
     )
     return parser
 
@@ -201,6 +201,9 @@ def _resolve_with_progress(
 
 def _run(args: argparse.Namespace, *, read_line: ReadLine, write_line: WriteLine) -> int:
     data_dir = args.data_dir or config.default_data_dir()
+    # Jeder Lauf nennt sein Datenverzeichnis: Wo Profil, Wörterbuch und config.toml
+    # liegen, soll niemand suchen müssen (technik.md §9, „Wohin die Dateien gehören").
+    write_line(f"Datenverzeichnis: {data_dir}")
     cfg, just_created = config.load_config(data_dir)
     if just_created:
         write_line(f"config.toml wurde neu angelegt: {data_dir / 'config.toml'}")

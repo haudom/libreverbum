@@ -9,6 +9,31 @@ import pytest
 from cli import config
 
 
+def test_default_data_dir_lies_next_to_the_project() -> None:
+    """technik.md §9: Das Datenverzeichnis heißt `data/` und liegt neben dem Projekt,
+    nicht im Nutzerverzeichnis — auffindbar ohne versteckte Ordner im Explorer.
+
+    Geprüft am Nachbarn statt am Pfad selbst: Dass der Elternordner das Projekt ist,
+    erkennt der Test daran, dass `cli/config.py` darin liegt."""
+    verzeichnis = config.default_data_dir()
+
+    assert verzeichnis.is_absolute()
+    assert verzeichnis.name == "data"
+    assert (verzeichnis.parent / "cli" / "config.py").is_file()
+
+
+def test_default_data_dir_does_not_follow_the_working_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Derselbe Pfad, aus welchem Verzeichnis auch immer aufgerufen wird (technik.md §9):
+    Ein am Arbeitsverzeichnis hängendes Datenverzeichnis träfe je nach Aufrufort ein
+    anderes Profil, und ein Profil an unerwarteter Stelle sieht aus wie ein verlorenes."""
+    vorher = config.default_data_dir()
+    monkeypatch.chdir(tmp_path)
+
+    assert config.default_data_dir() == vorher
+
+
 def test_load_config_creates_the_template_once_and_reports_it(tmp_path: Path) -> None:
     """bauplan.md T16: Fehlt `config.toml`, wird sie einmalig aus einer Vorlage angelegt
     (technik.md §9) — der zweite Rückgabewert meldet das dem Aufrufer."""

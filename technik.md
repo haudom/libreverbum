@@ -1847,24 +1847,53 @@ mit dem HTML aus Phase 1 als Quelle.
 
 ## 9. Ablage und Konfiguration zur Laufzeit — entschieden
 
-**Profil, Wörterbuch und Einstellungen liegen im plattformüblichen Nutzerverzeichnis. Der
-Kern bekommt jeden Pfad als Argument; die Vorgabe setzt der Aufrufer. Einstellungen stehen
-in `config.toml`, gelesen mit `tomllib` aus der Standardbibliothek.**
+**Profil, Wörterbuch und Einstellungen liegen in `data/` neben dem Projekt, solange
+LibreVerbum aus dem Quellbaum läuft. Der Kern bekommt jeden Pfad als Argument; die Vorgabe
+setzt der Aufrufer. Einstellungen stehen in `config.toml`, gelesen mit `tomllib` aus der
+Standardbibliothek.**
 
 ### Wohin die Dateien gehören
 
-| Plattform | Verzeichnis |
+| | |
 |---|---|
-| Windows | `%LOCALAPPDATA%\LibreVerbum\` |
-| Linux | `$XDG_DATA_HOME/libreverbum/`, ersatzweise `~/.local/share/libreverbum/` |
+| Vorgabe, jede Plattform | `<Wurzel des Repositoriums>/data/` |
+| abweichend je Lauf | `--data-dir` |
+| abweichend je Datei | `paths.dictionary`, `paths.profile` in `config.toml` |
 
-Darin `profil.sqlite3`, `en-de.sqlite3` und `config.toml`. Das Profil ist laut konzept.md
-der langfristige Wert des Programms und soll jedes Programmverzeichnis überleben; ein
-Ordner neben dem Programm ist unter Windows nicht verlässlich beschreibbar, sobald es
-einmal in `Program Files` liegt.
+Darin `profil.sqlite3`, `en-de.sqlite3` und `config.toml`. `cli.config.default_data_dir`
+misst den Pfad vom Ort der eigenen Datei aus, **nicht** vom Arbeitsverzeichnis: Ein am
+Arbeitsverzeichnis hängendes Datenverzeichnis träfe je nach Aufrufort ein anderes Profil.
+`data/` steht in `.gitignore`, und jeder Lauf gibt das benutzte Verzeichnis als erste Zeile
+aus.
 
 Die Trennung aus Abschnitt 4 bleibt unberührt: gemeinsames Verzeichnis, **getrennte
 Dateien**.
+
+### Umgestellt am 27.08.2026: vom Nutzerverzeichnis in den Projektordner
+
+Bis dahin galt das plattformübliche Nutzerverzeichnis — `%LOCALAPPDATA%\LibreVerbum\`
+beziehungsweise `$XDG_DATA_HOME/libreverbum/`. Die Begründung dafür lautete: Das Profil
+soll jedes Programmverzeichnis überleben, und ein Ordner neben dem Programm ist unter
+Windows nicht verlässlich beschreibbar, sobald es einmal in `Program Files` liegt.
+
+**Diese Begründung setzt eine Installation voraus, die es nicht gibt.** LibreVerbum läuft
+in Phase 1 ausschließlich aus dem Quellbaum (`python -m cli`, Abschnitt 6: „das Paket ist
+bewusst nicht installiert"); ein `Program Files`-Verzeichnis kommt darin nicht vor. Dem
+realen Nachteil stand also kein Vorteil gegenüber: `%LOCALAPPDATA%` liegt unter
+Windows in einem versteckten Ordner, und beim ersten Abnahmelauf war die Frage nicht, ob
+das Verzeichnis richtig gewählt ist, sondern **wo es überhaupt ist**.
+
+> Die Umstellung ist an den Quellbaumbetrieb gebunden. Kommt ein Installationspaket, kehrt
+> die Vorgabe ins Nutzerverzeichnis zurück — die Begründung oben gilt dann wieder, Wort für
+> Wort.
+
+**Bewusst in Kauf genommen:** Das Profil liegt damit im Projektordner und übersteht weder
+ein `git clean -xdf` noch das Wegwerfen des Klons. Dagegen stehen drei Dinge: der
+`.gitignore`-Eintrag, die Startzeile mit dem Pfad und `paths.profile` in `config.toml` für
+jeden, der es anderswo haben will. Wer schon Dateien im alten Verzeichnis liegen hat,
+verschiebt sie einmalig nach `data/` — es gibt keine Übernahme, weil es außer der
+Entwicklungsmaschine keine Installation gibt, die etwas zu übernehmen hätte.
+
 
 ### Der Kern kennt keine Vorgabe
 

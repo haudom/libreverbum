@@ -13,6 +13,11 @@ profil.sqlite3
 tools/*.txt
 tools/*.epub
 
+# Datenverzeichnis des laufenden Programms (technik.md §9): config.toml, Wörterbuch
+# und Profil. Das Profil ist der langfristige Wert des Programms und gehört nie ins
+# Repository — es liegt hier nur, weil LibreVerbum aus dem Quellbaum läuft.
+/data/
+
 # Python
 __pycache__/
 *.py[cod]

@@ -314,6 +314,21 @@ def test_acceptance_6_a_second_run_does_not_ask_about_an_ambiguous_word_marked_k
     assert second_exit == 0, "\n".join(second_console.log)
 
 
+def test_main_names_its_data_directory_on_every_run(tmp_path: Path) -> None:
+    """Jeder Lauf nennt sein Datenverzeichnis (technik.md §9, „Wohin die Dateien
+    gehören") — wo Profil, Wörterbuch und `config.toml` liegen, soll niemand suchen
+    müssen. Geprüft am kürzesten Lauf, dem ersten mit frisch angelegter `config.toml`."""
+    written: list[str] = []
+
+    main(
+        ["irrelevant.epub", "--data-dir", str(tmp_path)],
+        read_line=_no_read,
+        write_line=written.append,
+    )
+
+    assert any(str(tmp_path) in line and "Datenverzeichnis" in line for line in written), written
+
+
 def test_main_creates_config_on_the_first_run_and_stops(tmp_path: Path) -> None:
     """bauplan.md T16: „fehlende config.toml wird einmalig angelegt und gemeldet" —
     hier über den vollen Einstiegspunkt, nicht nur über `cli.config.load_config`."""

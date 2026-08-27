@@ -2,7 +2,7 @@
 
 Aufgabe
 -------
-Bestimmt das plattformübliche Nutzerverzeichnis und liest darin `config.toml` mit
+Bestimmt das Datenverzeichnis und liest darin `config.toml` mit
 `tomllib`. Fehlt die Datei, wird sie einmalig aus einer Vorlage angelegt — geschrieben
 wird sie sonst nie (technik.md §9: „Geschrieben wird die Datei nicht: Fehlt sie, legt der
 Aufrufer sie einmalig aus einer Vorlage an und ändert sie danach der Nutzer von Hand").
@@ -16,9 +16,9 @@ Keine. Importiert nichts aus `libreverbum` — reine Pfad- und Dateiverwaltung.
 
 Liefert
 -------
-`default_data_dir` das plattformübliche Verzeichnis (Windows:
-`%LOCALAPPDATA%\\LibreVerbum`, sonst `$XDG_DATA_HOME/libreverbum` beziehungsweise
-`~/.local/share/libreverbum`). `load_config` liefert `Config` samt einem zweiten
+`default_data_dir` das Verzeichnis `data/` neben dem Projekt — dieselbe Stelle auf
+jeder Plattform, weil LibreVerbum aus dem Quellbaum läuft (technik.md §9).
+`load_config` liefert `Config` samt einem zweiten
 Rückgabewert, der genau dann `True` ist, wenn `config.toml` bei diesem Aufruf gerade erst
 aus der Vorlage entstanden ist — der Aufrufer meldet das (bauplan.md T16) und bricht den
 Lauf ab, statt mit den unveränderten Vorgabewerten (insbesondere `model.url`) einfach
@@ -27,8 +27,6 @@ weiterzumachen.
 
 from __future__ import annotations
 
-import os
-import sys
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -98,25 +96,28 @@ class Config:
     triage_order: str
 
 
+# REGEL (technik.md §9, „Wohin die Dateien gehören"): Gemessen vom Ort dieser Datei aus
+# (cli/config.py, eine Ebene unter der Wurzel), nicht vom Arbeitsverzeichnis. `Path.cwd()`
+# träfe je nach Aufrufort ein anderes Profil, und ein Profil an unerwarteter Stelle sieht
+# aus wie ein verlorenes — dieselbe Sorge, aus der `cli.main._confirm_new_profile` vor dem
+# ersten Anlegen nachfragt.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
 def default_data_dir() -> Path:
-    """Plattformübliches Nutzerverzeichnis (technik.md §9, „Wohin die Dateien gehören").
+    """`data/` neben dem Projekt (technik.md §9, „Wohin die Dateien gehören").
 
-    Bricht sichtbar ab (dokumentation.md §4 Regel 13), wenn unter Windows `LOCALAPPDATA`
-    fehlt — eine gewöhnliche Windows-Umgebung setzt diese Variable immer; ihr Fehlen ist
-    ein Anzeichen für eine kaputte Umgebung, kein Fall für eine geratene Ersatzangabe.
+    LibreVerbum läuft aus dem Quellbaum; ein Installationspaket gibt es nicht und damit
+    auch kein Verzeichnis unter `Program Files`, gegen das die frühere Vorgabe im
+    Nutzerverzeichnis gebaut war. Ein sichtbarer Ordner neben dem Programm ist dagegen
+    auffindbar, ohne im Explorer erst versteckte Verzeichnisse einzuschalten. Kommt später
+    ein Installationspaket, dreht sich diese Entscheidung wieder um — technik.md §9 hält
+    sie deshalb ausdrücklich als an den Quellbaumbetrieb gebunden fest.
+
+    Wer sein Profil außerhalb des Projektordners will, trägt `paths.profile` in
+    `config.toml` ein oder ruft mit `--data-dir` auf; beides gab es schon vorher.
     """
-    if sys.platform == "win32":
-        base = os.environ.get("LOCALAPPDATA")
-        if not base:
-            raise ValueError(
-                "Umgebungsvariable LOCALAPPDATA ist nicht gesetzt — das plattformübliche "
-                "Nutzerverzeichnis lässt sich nicht bestimmen."
-            )
-        return Path(base) / "LibreVerbum"
-
-    xdg = os.environ.get("XDG_DATA_HOME")
-    base_dir = Path(xdg) if xdg else Path.home() / ".local" / "share"
-    return base_dir / "libreverbum"
+    return _PROJECT_ROOT / "data"
 
 
 def _write_template(path: Path) -> None:

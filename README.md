@@ -94,13 +94,12 @@ zwischen 1,1 s und 40 s pro Kapitel** ([technik.md](technik.md) §3, „Nachtrag
 python -m cli buch.epub
 ```
 
-Beim **ersten Aufruf** entsteht `config.toml` im plattformüblichen Verzeichnis
-(`%LOCALAPPDATA%\LibreVerbum\`, unter Linux `~/.local/share/libreverbum/`), und der Lauf
-endet sofort mit einem Hinweis. Das ist Absicht: In der Vorlage steht
-`url = "http://localhost:11434/v1"`, und ein im Heimnetz laufender Modellserver ist der
-Regelfall, nicht die Ausnahme. Also erst `model.url` und `model.name` eintragen, dann
-denselben Befehl erneut. Beim **zweiten Aufruf** kommt die Frage nach dem Wörterbuch, falls
-es noch fehlt, und danach die nach dem Profil, falls es noch keines gibt.
+Beim **ersten Aufruf** entsteht `config.toml` im Datenverzeichnis `data/` neben dem
+Projekt, und der Lauf endet sofort mit einem Hinweis. Das ist Absicht: In der Vorlage
+steht `url = "http://localhost:11434/v1"`, und ein im Heimnetz laufender Modellserver ist
+der Regelfall, nicht die Ausnahme. Also erst `model.url` und `model.name` eintragen, dann
+denselben Befehl erneut. Beim **zweiten Aufruf** kommt die Frage nach dem Wörterbuch,
+falls es noch fehlt, und danach die nach dem Profil, falls es noch keines gibt.
 
 Danach läuft der Durchgang:
 
@@ -135,7 +134,8 @@ Nirgendwohin. Das Buch verlässt den Rechner nicht, der einzige Netzzugriff im B
 an den Modellserver — und der läuft lokal oder im eigenen Netz. Das Wörterbuch wird einmal
 heruntergeladen.
 
-Zwei Dateien liegen im Nutzerverzeichnis, nie im Repository:
+Zwei Dateien liegen im Datenverzeichnis, nie im Repository (`data/` steht in
+`.gitignore`):
 
 - `en-de.sqlite3` — das Wörterbuch, jederzeit neu beziehbar
 - `profil.sqlite3` — das Nutzerprofil. Es ist der langfristige Wert des Programms: Was
