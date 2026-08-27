@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from cli import export
 from cli import main as cli_main
 from cli.main import _build_parser, main
 from libreverbum import dictionary
@@ -502,11 +501,15 @@ def test_full_run_learns_a_word_and_an_expression_and_exports_them(
     )
 
     assert exit_code == 0, "\n".join(console.log)
-    paths = export.export_paths(output_dir, "CLI-Testbuch", 1)
-    assert paths.anki_path.is_file()
-    assert paths.printout_path.is_file()
+    # Die geschriebenen Dateien werden im Verzeichnis gesucht, nicht über einen zweiten
+    # `export_paths`-Aufruf: Der liefert seit dem 27.08.2026 den nächsten **freien**
+    # Namen und damit gerade nicht die eben geschriebenen Dateien (`cli/export.py`).
+    decks = sorted(output_dir.glob("*.apkg"))
+    printouts = sorted(output_dir.glob("*.html"))
+    assert [pfad.name for pfad in decks] == ["CLI-Testbuch_kapitel1.apkg"]
+    assert [pfad.name for pfad in printouts] == ["CLI-Testbuch_kapitel1.html"]
 
-    html = paths.printout_path.read_text(encoding="utf-8")
+    html = printouts[0].read_text(encoding="utf-8")
     assert "watch" in html
     assert "gave up" in html
 

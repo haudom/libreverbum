@@ -1904,6 +1904,35 @@ Das ist die Datei-Hälfte der Architekturregel aus Abschnitt 1 und zahlt zweifac
 fassen nie das echte Profil an, sondern bekommen ein Wegwerfverzeichnis; und die
 Oberfläche muss die Vorgabe später nicht beim Kern erfragen, sondern setzt ihre eigene.
 
+### Exportdateien werden nicht überschrieben
+
+**Ein Lauf schreibt `<Buch>_kapitel<N>.apkg` und `.html` ins Ausgabeverzeichnis
+(`--output-dir`, Vorgabe das aktuelle Verzeichnis); ein zweiter Lauf über dasselbe Kapitel
+legt sich als `…_2` daneben, ein dritter als `…_3`.** Beide Dateien eines Laufs tragen
+dieselbe Nummer, und frei sein müssen beide — Deck und Druckseite gehören zusammen.
+
+Bis zum 27.08.2026 bildete `cli.export.export_paths` den Namen allein aus Buchtitel und
+Kapitelnummer, „damit ein zweiter Lauf über dasselbe Kapitel dieselbe Datei trifft". Das
+war für das Anki-Deck richtig gedacht und für die Druckseite falsch:
+
+- **Das Deck verträgt beides.** Deck-Kennung (`anki._deck_id`) und Notiz-GUID
+  (`anki.new_card_guid`) sind stabil, Anki mischt eine zweite Datei in dasselbe Deck und
+  aktualisiert dieselben Notizen (Abschnitt 8b)
+- **Die Druckseite verlor still.** Der zweite Lauf überschrieb sie wortlos, und weil
+  `profile.record_card` die Karten des ersten Laufs längst gebucht hat, kommen sie kein
+  zweites Mal: Der zweite Lauf enthält andere Wörter, und die des ersten sind nur noch in
+  der überschriebenen Datei gewesen. Wer das erste `.apkg` noch nicht importiert hatte,
+  verlor mit ihm auch die Karten
+
+Der Preis ist eine Datei je Lauf statt einer je Kapitel. **Ein Blatt je Kapitel, das jeder
+Lauf ergänzt, wäre das Bessere** — es scheitert heute nicht am Aufwand, sondern an
+Abschnitt 4: Die aufgelöste Übersetzung steht nicht im Profil („`entities.Sense.
+translation` ist ein Ergebnisfeld des Durchlaufs und wird nicht geschrieben"), und ohne sie
+lässt sich die Seite eines früheren Laufs nicht nachbauen. Bliebe, die eigene HTML-Datei
+zurückzulesen — ein Parser auf einer Präsentationsdatei, deren Aufbau `printout` jederzeit
+ändern darf. Das Zusammenführen hängt damit an derselben Schemafrage wie die eigene
+Korrektur einer Übersetzung und wird mit ihr entschieden, nicht davor.
+
 ### Einstellungen: `config.toml`
 
 | Schlüssel | Zweck | Vorgabe |

@@ -24,12 +24,12 @@ from libreverbum.entities import Book, Card, CardDirection, Lemma, Occurrence, S
 _BOOK = Book(title="Testbuch", author="Autorin")
 
 
-def _occurrence(chapter_number: int = 1) -> Occurrence:
+def _occurrence(chapter_number: int = 1, word_form: str = "watch") -> Occurrence:
     return Occurrence(
         book=_BOOK,
         chapter_number=chapter_number,
         lemma=Lemma(text="watch", pos="NOUN"),
-        word_form="watch",
+        word_form=word_form,
         example_sentence="He checked his watch before leaving.",
         frequency=2,
         proper_noun_frequency=0,
@@ -76,6 +76,67 @@ def profile_con(tmp_path: Path) -> sqlite3.Connection:
     )
     con.commit()
     return con
+
+
+def test_a_second_run_over_the_same_chapter_writes_next_to_the_first(
+    tmp_path: Path, profile_con: sqlite3.Connection
+) -> None:
+    """Ein zweiter Lauf über dasselbe Kapitel überschreibt die Dateien des ersten nicht,
+    sondern legt sich mit `_2` daneben (`cli/export.py`, `export_paths`).
+
+    Der Verlust wäre still: `profile.record_card` hat die Karten des ersten Laufs längst
+    gebucht, sie kommen kein zweites Mal — wer das erste `.apkg` noch nicht importiert
+    hatte, hätte sie mit der überschriebenen Datei verloren."""
+    output_dir = tmp_path / "export"
+    erster = export.write_exports(
+        profile_con,
+        output_dir,
+        [_card_for(_occurrence())],
+        book_title=_BOOK.title,
+        chapter_number=1,
+    )
+    erster_inhalt = erster.printout_path.read_bytes()
+
+    zweiter = export.write_exports(
+        profile_con,
+        output_dir,
+        [_card_for(_occurrence(word_form="watched"))],
+        book_title=_BOOK.title,
+        chapter_number=1,
+    )
+
+    assert zweiter.anki_path != erster.anki_path
+    assert zweiter.printout_path != erster.printout_path
+    assert erster.printout_path.read_bytes() == erster_inhalt
+    assert zweiter.printout_path.name.endswith("_2.html")
+    assert zweiter.anki_path.name.endswith("_2.apkg")
+
+
+def test_both_export_files_of_one_run_carry_the_same_number(tmp_path: Path) -> None:
+    """Deck und Druckseite eines Laufs gehören zusammen: Liegt nur eine der beiden
+    Dateien schon da, rückt **das Paar** weiter, nicht nur die belegte Hälfte."""
+    output_dir = tmp_path / "export"
+    output_dir.mkdir()
+    (output_dir / "Testbuch_kapitel1.html").write_text("alte Druckseite", encoding="utf-8")
+
+    paths = export.export_paths(output_dir, "Testbuch", 1)
+
+    assert paths.anki_path.name == "Testbuch_kapitel1_2.apkg"
+    assert paths.printout_path.name == "Testbuch_kapitel1_2.html"
+
+
+def test_export_paths_keeps_counting_past_an_occupied_second_pair(tmp_path: Path) -> None:
+    """Der dritte Lauf über dasselbe Kapitel landet auf `_3` — die Suche zählt weiter,
+    statt beim zweiten Namen stehenzubleiben."""
+    output_dir = tmp_path / "export"
+    output_dir.mkdir()
+    for name in ("Testbuch_kapitel1.apkg", "Testbuch_kapitel1_2.apkg"):
+        (output_dir / name).write_bytes(b"")
+
+    paths = export.export_paths(output_dir, "Testbuch", 1)
+
+    assert paths.anki_path.name == "Testbuch_kapitel1_3.apkg"
+    assert paths.printout_path.name == "Testbuch_kapitel1_3.html"
 
 
 def test_export_writes_the_decks_guid_into_the_profile(

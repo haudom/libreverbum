@@ -119,14 +119,16 @@ Nützliche Argumente: `--chapter 3` überspringt die Auswahl, `--card-direction 
 dreht die Karten um, `--output-dir` und `--data-dir` verschieben Ziel- und
 Datenverzeichnis. `python -m cli --help` zeigt alle.
 
-Heraus kommen zwei Dateien pro Kapitel, `<Buchtitel>_kapitel<N>.apkg` und `.html`:
+Heraus kommen zwei Dateien je Lauf, `<Buchtitel>_kapitel<N>.apkg` und `.html`:
 
 - das **Anki-Deck** mit Wort, Bedeutung, Belegsatz und Verschlagwortung nach Buch, Autor
   und Kapitel — direkt importierbar, ohne Bastelei mit CSV-Spalten
 - die **Druckseite**, zweispaltig, aus dem Browser heraus auf ein Blatt zu drucken
 
-Ein zweiter Lauf über dasselbe Kapitel trifft dieselben Dateien und dasselbe Anki-Deck,
-statt Dubletten anzulegen.
+Ein zweiter Lauf über dasselbe Kapitel überschreibt nichts, sondern legt sich als
+`…_2` daneben. In Anki landet er trotzdem im selben Deck: Deck-Kennung und Notiz-GUID
+sind stabil, ein zweiter Import aktualisiert dieselben Notizen, statt Dubletten
+anzulegen ([technik.md](technik.md) §8b).
 
 ## Wohin die Daten gehen
 

@@ -23,8 +23,10 @@ Voraussetzung wie bei `profile.record_card`.
 Liefert
 -------
 `export_paths` legt aus Buchtitel und Kapitelnummer einen dateisystemtauglichen
-Namensstamm an, `write_exports` ruft beide Kernexporte auf, schreibt danach je Karte die
-Anki-GUID ins Profil und liefert die beiden geschriebenen Pfade zurück.
+Namensstamm an und sucht dazu das erste Namenspaar, das noch frei ist — ein zweiter Lauf
+über dasselbe Kapitel überschreibt nichts. `write_exports` ruft beide Kernexporte auf,
+schreibt danach je Karte die Anki-GUID ins Profil und liefert die beiden geschriebenen
+Pfade zurück.
 """
 
 from __future__ import annotations
@@ -56,13 +58,35 @@ class ExportPaths(NamedTuple):
 
 
 def export_paths(output_dir: Path, book_title: str, chapter_number: int) -> ExportPaths:
-    """Die beiden Zielpfade für einen Export — deterministisch aus Buchtitel und
-    Kapitelnummer, damit ein zweiter Lauf über dasselbe Kapitel dieselbe Datei trifft
-    (dasselbe Verhalten wie `anki._deck_id` auf Ebene des Decks)."""
+    """Die beiden **freien** Zielpfade für einen Export: `<Buch>_kapitel<N>.apkg` und
+    `.html`, beim nächsten Lauf über dasselbe Kapitel `…_2`, dann `…_3`.
+
+    Bis zum 27.08.2026 war der Name allein aus Buchtitel und Kapitelnummer gebildet,
+    „damit ein zweiter Lauf über dasselbe Kapitel dieselbe Datei trifft". Das überschrieb
+    die Druckseite des ersten Laufs wortlos, und weil `profile.record_card` dessen Karten
+    längst gebucht hat, kommen sie im zweiten Lauf nicht wieder: Wer das erste `.apkg`
+    noch nicht importiert hatte, hatte die Karten verloren — der stille Fehlschlag aus
+    Regel 13, hier als verschwundene Datei. Beim Anki-Deck ist die zweite Datei
+    gefahrlos: Deck-Kennung und GUID sind stabil (technik.md §8b), Anki mischt sie in
+    dasselbe Deck und aktualisiert dieselben Notizen, statt Dubletten anzulegen.
+
+    Beide Namen tragen dieselbe Nummer, und frei sein müssen sie **beide**: Deck und
+    Druckseite eines Laufs gehören zusammen, auch wenn nur eine der beiden Dateien schon
+    existiert.
+
+    Die Funktion beantwortet damit „wohin **jetzt** geschrieben wird", nicht „wo die
+    Dateien dieses Kapitels liegen" — zweimal aufgerufen liefert sie zwei verschiedene
+    Antworten, sobald der Export dazwischen geschrieben hat.
+    """
     stem = f"{safe_filename_stem(book_title)}_kapitel{chapter_number}"
-    return ExportPaths(
-        anki_path=output_dir / f"{stem}.apkg", printout_path=output_dir / f"{stem}.html"
-    )
+    counter = 1
+    while True:
+        suffix = "" if counter == 1 else f"_{counter}"
+        anki_path = output_dir / f"{stem}{suffix}.apkg"
+        printout_path = output_dir / f"{stem}{suffix}.html"
+        if not anki_path.exists() and not printout_path.exists():
+            return ExportPaths(anki_path=anki_path, printout_path=printout_path)
+        counter += 1
 
 
 def write_exports(
