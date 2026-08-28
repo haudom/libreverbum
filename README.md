@@ -130,6 +130,45 @@ Ein zweiter Lauf über dasselbe Kapitel überschreibt nichts, sondern legt sich 
 sind stabil, ein zweiter Import aktualisiert dieselben Notizen, statt Dubletten
 anzulegen ([technik.md](technik.md) §8b).
 
+### Wenn ein „Kapitel" ein Drittel des Buchs ist
+
+Manche Dateien — vor allem Calibre-Konvertate — nennen im Inhaltsverzeichnis nur die
+groben Teile eines Romans. Die Kapitelliste zeigt dann drei Einträge zu je 60.000 bis
+80.000 Wörtern, und in solchen Fällen liest LibreVerbum davon zurzeit auch nur den ersten
+Abschnitt ([technik.md](technik.md) §8, „Nachtrag 28.08.2026: ein Kapitel ist nicht ein
+Dokument" — die Reparatur steht an).
+
+Der saubere Weg führt über die Quelle: **calibre kann das Inhaltsverzeichnis neu erzeugen**,
+wenn im Text eine wiederkehrende Marke steht, an der sich schneiden lässt. In einem
+geprüften Konvertat war das die Zierleiste `= = = = = =` vor jedem Kapitel-Epigraph — 50
+Stück, daraus 50 Kapitel mit im Mittel 3.500 Wörtern.
+
+Original wegsichern (EPUB→EPUB überschreibt in calibre das vorhandene Format), dann
+**Bücher konvertieren**, Ausgabeformat EPUB, und dort zwei Abschnitte:
+
+| Abschnitt | Feld | Wert |
+|---|---|---|
+| Struktur-Erkennung | Kapitel erkennen bei (XPath-Ausdruck) | `//h:p[normalize-space(.)="= = = = = ="]` |
+| Struktur-Erkennung | Kapitelmarkierung | Seitenumbruch |
+| Inhaltsverzeichnis | Erzwinge Verwendung des automatisch erzeugten Inhaltsverzeichnisses | an |
+| Inhaltsverzeichnis | Ebene-1-Inhaltsverzeichnis (XPath-Ausdruck) | `//h:p[preceding-sibling::h:p[1][normalize-space(.)="= = = = = ="]]` |
+
+Die beiden Ausdrücke unterscheiden sich absichtlich: Der erste trifft die Marke selbst,
+dort soll der **Schnitt** liegen; der zweite trifft den Absatz danach, von dem calibre den
+**Namen** des Eintrags nimmt. Mit dem ersten für beides funktioniert es auch, dann heißen
+nur alle Einträge gleich. `h:` ist calibres Präfix für den XHTML-Namensraum und muss mit.
+
+Ob es geklappt hat, sagt das Messskript aus `tools/`:
+
+```bash
+python tools/epub_check.py neue.epub
+```
+
+Stimmen Navigationseinträge und Dokumente der Lesereihenfolge ungefähr überein und liegt
+ihre Zahl bei der erwarteten Kapitelzahl, ist die Datei brauchbar. Hat der Text gar keine
+wiederkehrende Marke — weder Überschriften noch Seitenumbrüche noch ein Ornament —, hilft
+auch calibre nicht weiter.
+
 ## Wohin die Daten gehen
 
 Nirgendwohin. Das Buch verlässt den Rechner nicht, der einzige Netzzugriff im Betrieb geht
