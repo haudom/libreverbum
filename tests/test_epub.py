@@ -1207,16 +1207,44 @@ def _corrupt_crc_of_zip_entry(path: Path, document: str) -> None:
 
 
 def test_read_chapter_does_not_call_a_corrupted_entry_a_missing_zip_archive(tmp_path: Path) -> None:
-    """Befund 11, Review Runde 2: Nur `zipfile.ZipFile(path)` steht im `try` — eine kaputte
+    """Befund 11, Review Runde 2, nachgebessert durch Befund 2 (Durchsicht 29715b2): Nur
+    `zipfile.ZipFile(path)` steht in `_open_archive_for_chapter`s `try` — eine kaputte
     CRC-Summe beim Lesen des Kapiteldokuments wird deshalb nicht mehr als „kein
     ZIP-Archiv" gemeldet, obwohl sich das Archiv öffnen ließ. Sichtbar bleibt der
-    Fehlschlag trotzdem: `zipfile` wirft weiterhin `BadZipFile`."""
+    Fehlschlag trotzdem, seit Befund 2 aber mit einer deutschen Meldung statt des
+    englischen `zipfile.BadZipFile`, das `cli.main` sonst nicht abfängt (Regel 13)."""
     path = tmp_path / "corrupted_entry.epub"
     _write_single_document_epub(path, document="OEBPS/chapter.xhtml", xhtml=_MARKUP_NOISE_XHTML)
     _corrupt_crc_of_zip_entry(path, "OEBPS/chapter.xhtml")
 
-    with pytest.raises(zipfile.BadZipFile):
+    with pytest.raises(ValueError, match=r"OEBPS/chapter\.xhtml ist beschädigt"):
         epub.read_chapter(path, _TEST_BOOK, _chapter_reference("OEBPS/chapter.xhtml"))
+
+
+def test_count_chapter_words_reports_unknown_for_a_corrupted_document_but_counts_the_rest(
+    tmp_path: Path,
+) -> None:
+    """Befund 2 (Durchsicht 29715b2): Eine kaputte CRC-Prüfsumme in einem Kapiteldokument
+    macht bislang das ganze Buch unbenutzbar (`_choose_chapter` zählt vor der Auswahl) —
+    die übrigen Kapitel müssen ihre Zahl trotzdem bekommen, das betroffene wird `None`,
+    nicht `0` (Regel 13)."""
+    path = tmp_path / "one_corrupted_document.epub"
+    _write_multi_document_epub(
+        path,
+        {"OEBPS/chapter1.xhtml": _MARKUP_NOISE_XHTML, "OEBPS/chapter2.xhtml": _MARKUP_NOISE_XHTML},
+    )
+    _corrupt_crc_of_zip_entry(path, "OEBPS/chapter2.xhtml")
+    chapters = [
+        epub.ChapterReference(number=1, title="Erstes Kapitel", documents=["OEBPS/chapter1.xhtml"]),
+        epub.ChapterReference(
+            number=2, title="Zweites Kapitel", documents=["OEBPS/chapter2.xhtml"]
+        ),
+    ]
+
+    counts = epub.count_chapter_words(path, chapters)
+
+    assert counts[1] == 11
+    assert counts[2] is None
 
 
 def _encryption_xml_for(*documents: str) -> str:
@@ -1265,6 +1293,61 @@ def test_read_chapter_ignores_encryption_xml_that_only_obfuscates_a_font(tmp_pat
     chapter = epub.read_chapter(path, _TEST_BOOK, _chapter_reference("OEBPS/chapter.xhtml"))
 
     assert "Erster Absatz mit echtem Fließtext." in chapter.text
+
+
+# Absichtlich unvollständig — ein abgebrochenes Konvertat statt eines wohlgeformten
+# Dokuments (Befund 2, Durchsicht 29715b2).
+_MALFORMED_ENCRYPTION_XML = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container">\n'
+    '  <EncryptedData xmlns="http://www.w3.org/2001/04/xmlenc#">\n'
+    '    <EncryptionMethod Algorithm="http://www.idpf.org/2008/embedding"'
+)
+
+
+def test_read_chapter_reports_a_malformed_encryption_xml_in_german(tmp_path: Path) -> None:
+    """Befund 2 (Durchsicht 29715b2): Eine unvollständige `META-INF/encryption.xml` wirft
+    beim Parsen `xml.etree.ElementTree.ParseError`, einen englischen Fehler, den `cli.main`
+    nicht abfängt (Regel 13) — die Meldung muss dieselbe deutsche Form wie die übrigen
+    Ablehnfälle bekommen."""
+    path = tmp_path / "malformed_encryption.epub"
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        archive.writestr("META-INF/encryption.xml", _MALFORMED_ENCRYPTION_XML)
+        archive.writestr("OEBPS/chapter.xhtml", _MARKUP_NOISE_XHTML)
+
+    with pytest.raises(
+        ValueError, match=r"META-INF/encryption\.xml ist beschädigt \(kein wohlgeformtes XML\)"
+    ):
+        epub.read_chapter(path, _TEST_BOOK, _chapter_reference("OEBPS/chapter.xhtml"))
+
+
+def test_count_chapter_words_reports_unknown_for_every_chapter_behind_a_malformed_encryption_xml(
+    tmp_path: Path,
+) -> None:
+    """Befund 2 (Durchsicht 29715b2): Dieselbe unvollständige `encryption.xml` darf die
+    Zählung nicht ebenso englisch abbrechen lassen — jedes betroffene Kapitel wird `None`
+    (Regel 13), nicht `0`. Anders als bei der kaputten CRC-Prüfsumme (siehe
+    `test_count_chapter_words_reports_unknown_for_a_corrupted_document_but_counts_the_rest`)
+    betrifft eine beschädigte `encryption.xml` beide Kapitel gleich: Sie wird für jedes
+    Dokument neu geprüft, nicht nur für das eine, das sie beschädigt selbst nennen würde."""
+    path = tmp_path / "malformed_encryption_multi.epub"
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        archive.writestr("META-INF/encryption.xml", _MALFORMED_ENCRYPTION_XML)
+        archive.writestr("OEBPS/chapter1.xhtml", _MARKUP_NOISE_XHTML)
+        archive.writestr("OEBPS/chapter2.xhtml", _MARKUP_NOISE_XHTML)
+    chapters = [
+        epub.ChapterReference(number=1, title="Erstes Kapitel", documents=["OEBPS/chapter1.xhtml"]),
+        epub.ChapterReference(
+            number=2, title="Zweites Kapitel", documents=["OEBPS/chapter2.xhtml"]
+        ),
+    ]
+
+    counts = epub.count_chapter_words(path, chapters)
+
+    assert counts[1] is None
+    assert counts[2] is None
 
 
 def test_read_chapter_reports_a_chapter_document_missing_from_the_archive(tmp_path: Path) -> None:
@@ -1501,7 +1584,7 @@ def test_read_chapter_reads_a_real_story_chapter_unchanged(
     assert "Sherlock Holmes" in chapter.text
 
 
-# ================================================= bauplan.md T12b: Wortumfang je Kapitel
+# ================================== Wortumfang je Kapitel (technik.md §8, Nachtrag 28.08.2026)
 
 
 def test_count_chapter_words_matches_what_read_chapter_actually_returns(
@@ -1520,16 +1603,31 @@ def test_count_chapter_words_matches_what_read_chapter_actually_returns(
         assert counts[chapter.number] == len(epub._WORD.findall(actual_text))
 
 
+# Sherlocks 14. Kapitel — die volle Gutenberg-Lizenz, reiner Vorspann/Impressum
+# (technik.md §8) — ist unter den echten Dateien das einzige, das `read_chapter` ablehnt
+# (nachgeprüft: 13 von 14 Sherlock- und 22 von 22 Dorian-Gray-Kapiteln bestehen die strenge
+# Gleichheitsprüfung unten). Der Ausnahmezweig ist deshalb auf genau dieses eine Kapitel
+# beschränkt (Befund 1, Durchsicht 29715b2) statt über die ganze Schleife gelegt: Ein
+# `except`, das jedes Kapitel abfängt, sichert nichts mehr zu, sobald jedes Kapitel
+# unlesbar wird — 36-mal `None` liefe damit ebenso grün durch wie der echte Befund.
+_LICENSE_ONLY_REAL_CHAPTER_TITLE = "THE FULL PROJECT GUTENBERG™ LICENSE"
+
+
 @pytest.mark.needs_epub
 def test_count_chapter_words_matches_read_chapter_for_real_books(
     real_epub_paths: dict[str, Path],
 ) -> None:
     """Dieselbe Zusicherung wie oben, gegen die echten Dateien geprüft (dokumentation.md
     §5, „Was über den Inhalt einer Fremdquelle behauptet wird, wird zusätzlich gegen das
-    echte Gegenüber geprüft"). Ein Kapitel wie Sherlocks „THE FULL PROJECT GUTENBERG®
-    LICENSE" (nur Vorspann/Impressum) lehnt `read_chapter` selbst ab (Regel 13) — für die
-    Zählung ist sein Umfang echt `0`, siehe
-    `test_count_chapter_words_reports_zero_not_unknown_for_a_picture_book_chapter`."""
+    echte Gegenüber geprüft"), mit einer Untergrenze für die Zahl der tatsächlich streng
+    verglichenen Kapitel (Befund 1, Durchsicht 29715b2): 13 von Sherlocks 14 und alle 22
+    Dorian-Gray-Kapitel. Sherlocks „THE FULL PROJECT GUTENBERG™ LICENSE" (nur
+    Vorspann/Impressum) lehnt `read_chapter` selbst ab (Regel 13) — sein Umfang ist dabei
+    echt `0`, nicht unbekannt, denn `_read_chapter_documents` gelingt für dieses Kapitel;
+    nur die zusätzliche Prüfung in `read_chapter` lehnt danach ab (derselbe Fall wie
+    `test_count_chapter_words_reports_zero_not_unknown_for_a_picture_book_chapter`, hier an
+    der Fremdquelle bestätigt)."""
+    compared = 0
     for path in real_epub_paths.values():
         structure = epub.read_structure(path)
 
@@ -1537,17 +1635,45 @@ def test_count_chapter_words_matches_read_chapter_for_real_books(
 
         for chapter in structure.chapters:
             count = counts[chapter.number]
-            try:
-                actual_text = epub.read_chapter(path, structure.book, chapter).text
-            except ValueError:
-                assert count in (0, None), (
-                    f"{path}: Kapitel {chapter.number} „{chapter.title}“ liefert keinen "
-                    f"Text, der gezählte Umfang ({count}) ist aber weder 0 noch unbekannt."
+            if chapter.title == _LICENSE_ONLY_REAL_CHAPTER_TITLE:
+                assert count == 0, (
+                    f"{path}: Kapitel {chapter.number} „{chapter.title}“ ist reiner "
+                    f"Vorspann/Impressum, sein Umfang ({count}) muss echt 0 sein, nicht "
+                    "unbekannt."
                 )
+                with pytest.raises(ValueError, match=r"besteht nur aus Vorspann bzw\. Impressum"):
+                    epub.read_chapter(path, structure.book, chapter)
                 continue
+            actual_text = epub.read_chapter(path, structure.book, chapter).text
             assert count == len(epub._WORD.findall(actual_text)), (
                 f"{path}: Kapitel {chapter.number} „{chapter.title}“"
             )
+            compared += 1
+
+    assert compared == 13 + 22, (
+        f"{compared} von 35 erwarteten streng verglichenen Kapiteln (13 Sherlock, 22 Dorian "
+        "Gray) — die Untergrenze aus Befund 1 (Durchsicht 29715b2) ist verletzt."
+    )
+
+
+def test_count_chapter_words_reports_zero_for_a_chapter_that_is_pure_boilerplate(
+    tmp_path: Path,
+) -> None:
+    """Befund 1, Zusatz (Durchsicht 29715b2): Dieselbe Zusicherung wie
+    `test_count_chapter_words_matches_read_chapter_for_real_books` (Sherlocks 14. Kapitel,
+    reiner Lizenztext), hier an einer eigenen Vorrichtung (`_LICENSE_ONLY_XHTML`, bereits
+    genutzt in `test_read_chapter_reports_when_only_boilerplate_remains_after_removing_it`),
+    damit sie nicht allein an einer Fremdquelle hängt: `read_chapter` lehnt das Kapitel ab
+    (Regel 13), `count_chapter_words` zählt seinen echten Umfang `0`, nicht `None`."""
+    path = tmp_path / "license_only_chapter.epub"
+    _write_single_document_epub(path, document="OEBPS/license.xhtml", xhtml=_LICENSE_ONLY_XHTML)
+    chapter = epub.ChapterReference(number=1, title="Lizenz", documents=["OEBPS/license.xhtml"])
+
+    with pytest.raises(ValueError, match=r"besteht nur aus Vorspann bzw\. Impressum"):
+        epub.read_chapter(path, _TEST_BOOK, chapter)
+    counts = epub.count_chapter_words(path, [chapter])
+
+    assert counts[1] == 0
 
 
 def test_count_chapter_words_counts_every_document_of_a_multi_document_chapter(
@@ -1615,9 +1741,11 @@ def test_count_chapter_words_reports_zero_not_unknown_for_a_picture_book_chapter
 def test_count_chapter_words_opens_the_archive_only_once(
     monkeypatch: pytest.MonkeyPatch, mini_epub_with_navigation: Path
 ) -> None:
-    """technik.md §8, Nachtrag 28.08.2026: Das Archiv wird einmal geöffnet, nicht einmal
-    je Kapitel — sonst kostete jedes zusätzliche Kapitel eine weitere Archivöffnung, obwohl
-    genau das vermieden werden soll (technik.md §8, „Der Einwand … trägt dafür nicht")."""
+    """technik.md §8, Nachtrag 28.08.2026, „Was die Kapitelliste zusätzlich zeigt": Das
+    Archiv wird einmal geöffnet, nicht einmal je Kapitel — sonst kostete jedes zusätzliche
+    Kapitel eine weitere Archivöffnung, obwohl genau das vermieden werden soll (Befund 4,
+    Durchsicht 29715b2: die vorige Fassung dieser Zeile zitierte Fließtext statt der
+    Überschrift, die Verweisform verlangt beides)."""
     structure = epub.read_structure(mini_epub_with_navigation)
     original_zip_file = zipfile.ZipFile
     opened: list[int] = []

@@ -143,20 +143,36 @@ def _choose_chapter(
     epub_path: Path, structure: epub.BookStructure, read_line: ReadLine, write_line: WriteLine
 ) -> int:
     """Zeigt die Kapitelliste mit Wortumfang je Kapitel und fragt so lange nach, bis eine
-    darin vorhandene Kapitelnummer eingegeben wird (technik.md §8, Nachtrag 28.08.2026,
-    „Was die Kapitelliste zusätzlich zeigt"): Der Umfang steht vor dem Titel in einer
-    eigenen, rechtsbündigen Spalte, damit die Zahlen untereinander vergleichbar bleiben —
-    ein 80 Zeichen langer Kapiteltitel zerschießt die Ausrichtung damit nicht."""
+    darin vorhandene Kapitelnummer eingegeben wird. Titel vor Zahl, wie technik.md §8,
+    Nachtrag 28.08.2026, „Was die Kapitelliste zusätzlich zeigt" es nennt („Book 1 DUNE —
+    78.800 Wörter"): Nummer und Wortumfang stehen rechtsbündig in eigenen Spalten, der
+    Titel linksbündig auf die Länge des längsten Titels aufgefüllt dazwischen — erst die
+    aufgefüllte Nummer hält beide Spalten auch ab Kapitel 10 untereinander vergleichbar,
+    ohne einen Titel zu kürzen (Regel 14: keine Terminalbreitenerkennung, keine
+    Tabellenbibliothek). „unbekannt" bleibt dabei in derselben Spalte sichtbar wie eine Zahl."""
     write_line(f"„{structure.book.title}“ von {structure.book.author}")
     word_counts = epub.count_chapter_words(epub_path, structure.chapters)
     formatted_counts = {
         chapter.number: _format_word_count(word_counts.get(chapter.number))
         for chapter in structure.chapters
     }
-    column_width = max((len(value) for value in formatted_counts.values()), default=0)
+    number_header, title_header, count_header = "Nr.", "Kapitel", "Wörter"
+    number_width = max(
+        [len(number_header)] + [len(f"{chapter.number}.") for chapter in structure.chapters]
+    )
+    title_width = max([len(title_header)] + [len(chapter.title) for chapter in structure.chapters])
+    count_width = max([len(count_header)] + [len(value) for value in formatted_counts.values()])
+    write_line(
+        f"  {number_header:>{number_width}}  {title_header:<{title_width}}  "
+        f"{count_header:>{count_width}}"
+    )
     for chapter in structure.chapters:
+        number_column = f"{chapter.number}."
         count_column = formatted_counts[chapter.number]
-        write_line(f"  {chapter.number}. Wörter: {count_column:>{column_width}}  {chapter.title}")
+        write_line(
+            f"  {number_column:>{number_width}}  {chapter.title:<{title_width}}  "
+            f"{count_column:>{count_width}}"
+        )
     while True:
         answer = read_line("Kapitel wählen: ").strip()
         try:

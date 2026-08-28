@@ -474,16 +474,29 @@ def _remove_boilerplate(text: str) -> str:
     return text.strip()
 
 
-def _encrypts_document(archive: zipfile.ZipFile, names: set[str], document: str) -> bool:
+def _encrypts_document(
+    archive: zipfile.ZipFile, names: set[str], document: str, path: Path
+) -> bool:
     """Prüft `META-INF/encryption.xml` gegen `document`, statt allein ihre Anwesenheit zu
     werten (Befund 6, Review Runde 2): Die Datei kennzeichnet laut OCF-Norm auch bloße
     Schriftverschleierung (`Algorithm=".../2008/embedding"`), die Calibre, InDesign und
     Sigil routinemäßig erzeugen — ein DRM-freies EPUB würde sonst fälschlich abgelehnt.
     Verschlüsselt ist der Text erst, wenn eine `CipherReference` ausgerechnet auf das
-    gelesene Kapiteldokument zeigt."""
+    gelesene Kapiteldokument zeigt.
+
+    (Befund 2, Durchsicht 29715b2): Eine unvollständige `encryption.xml` (etwa durch ein
+    abgebrochenes Konvertat) wirft beim Parsen sonst den englischen
+    `xml.etree.ElementTree.ParseError` — der entkäme sowohl `read_chapter` als auch
+    `count_chapter_words` unverändert, weil keiner der beiden Aufrufer ihn erwartet."""
     if _ENCRYPTION_PATH not in names:
         return False
-    root = ElementTree.fromstring(archive.read(_ENCRYPTION_PATH))
+    try:
+        root = ElementTree.fromstring(archive.read(_ENCRYPTION_PATH))
+    except ElementTree.ParseError as error:
+        raise ValueError(
+            f"{path}: {_ENCRYPTION_PATH} ist beschädigt (kein wohlgeformtes XML) — "
+            "Verschlüsselung lässt sich nicht prüfen."
+        ) from error
     return any(
         unquote(reference.get("URI") or "") == document
         for reference in root.iter(f"{{{_NS['enc']}}}CipherReference")
@@ -508,7 +521,9 @@ def _open_archive_for_chapter(path: Path) -> zipfile.ZipFile:
     — sonst entkäme hier der englische `FileNotFoundError` der Standardbibliothek.
     (Befund 11, Review Runde 2, nachgezogen): nur das Öffnen des Archivs steht im try —
     sonst meldete eine kaputte CRC-Summe beim späteren `archive.read()` fälschlich „kein
-    ZIP-Archiv"."""
+    ZIP-Archiv". Das spätere `archive.read()` bekommt seine eigene deutsche Meldung erst in
+    `_read_chapter_documents` (Befund 2, Durchsicht 29715b2) — hier bliebe sie sonst ein
+    unveränderter `zipfile.BadZipFile`."""
     if not path.is_file():
         raise FileNotFoundError(f"EPUB nicht lesbar: {path}")
     try:
@@ -526,15 +541,16 @@ def _read_chapter_documents(
     28.08.2026, „Was die Kapitelliste zusätzlich zeigt"): Zwei getrennte Umsetzungen dieser
     Strecke ließen Anzeige und Wirklichkeit auseinanderdriften (Regel 14). Bricht mit einer
     deutschen Meldung ab (Regel 13), wenn eines der Kapiteldokumente im Archiv fehlt, nicht
-    UTF-8 kodiert ist, `META-INF/encryption.xml` es als verschlüsselt nennt oder sein
-    ZIP-Eintrag selbst passwortgeschützt ist (Kopierschutz wird nicht umgangen, konzept.md
-    Schritt 1) — kein Dokument wird dabei still übersprungen. Ob der so gelesene, noch
-    unzusammengefügte Text danach überhaupt Fließtext enthält, prüfen die Aufrufer je nach
-    Zweck getrennt: `read_chapter` lehnt einen leeren Text ab, `count_chapter_words` zählt
-    ihn als `0`."""
+    UTF-8 kodiert ist, beschädigt ist (kaputte CRC-Prüfsumme, Befund 2, Durchsicht 29715b2),
+    `META-INF/encryption.xml` es als verschlüsselt nennt oder selbst kein wohlgeformtes XML
+    ist, oder der ZIP-Eintrag selbst passwortgeschützt ist (Kopierschutz wird nicht umgangen,
+    konzept.md Schritt 1) — kein Dokument wird dabei still übersprungen. Ob der so gelesene,
+    noch unzusammengefügte Text danach überhaupt Fließtext enthält, prüfen die Aufrufer je
+    nach Zweck getrennt: `read_chapter` lehnt einen leeren Text ab, `count_chapter_words`
+    zählt ihn als `0`."""
     document_texts: list[str] = []
     for document in chapter.documents:
-        if _encrypts_document(archive, names, document):
+        if _encrypts_document(archive, names, document, path):
             raise _encrypted_error(path)
         # (Befund 7, Review Runde 2): sonst entkäme hier ein englischer KeyError, wenn
         # ein Kapiteldokument im Archiv fehlt.
@@ -548,6 +564,15 @@ def _read_chapter_documents(
             # (Befund 7, Review Runde 2): der dritte Ablehnfall in anderer Gestalt — ein
             # passwortgeschützter ZIP-Eintrag ohne META-INF/encryption.xml.
             raise _encrypted_error(path) from error
+        except zipfile.BadZipFile as error:
+            # (Befund 2, Durchsicht 29715b2): ein beschädigtes Nutzdatenbyte fällt erst
+            # hier auf, nicht beim Öffnen des Archivs (_open_archive_for_chapter) — sonst
+            # entkäme hier der englische zipfile.BadZipFile, und zwar seit 29715b2 nicht
+            # mehr nur für das eine gewählte Kapitel, sondern schon bei der Zählung für die
+            # ganze Liste.
+            raise ValueError(
+                f"{path}: {document} ist beschädigt (fehlerhafte CRC-Prüfsumme im Archiv)."
+            ) from error
 
         # (Befund 8, Review Runde 2): kein errors="replace" — sonst landete U+FFFD
         # still im Wortschatz statt eines sichtbaren Fehlschlags.
@@ -567,11 +592,13 @@ def read_chapter(path: Path, book: Book, chapter: ChapterReference) -> Chapter:
 
     Bricht mit einer deutschen Meldung ab (Regel 13) statt eines leeren oder beschädigten
     Ergebnisses: wenn `path` fehlt, die Datei kein gültiges ZIP-Archiv ist, eines der
-    Kapiteldokumente im Archiv fehlt oder nicht UTF-8 kodiert ist, `META-INF/encryption.xml`
-    ausgerechnet eines von ihnen als verschlüsselt nennt oder dessen ZIP-Eintrag selbst
-    passwortgeschützt ist (Kopierschutz wird nicht umgangen, konzept.md Schritt 1) — kein
-    Dokument wird dabei still übersprungen. Das Kapitel überhaupt keinen Fließtext enthält
-    — das Kennzeichen eines Bildbands ohne Text (technik.md §8) — oder nach dem Aussteuern
+    Kapiteldokumente im Archiv fehlt, nicht UTF-8 kodiert ist oder beschädigt ist (kaputte
+    CRC-Prüfsumme, Befund 2, Durchsicht 29715b2), `META-INF/encryption.xml` ausgerechnet
+    eines von ihnen als verschlüsselt nennt oder selbst kein wohlgeformtes XML ist, oder
+    dessen ZIP-Eintrag selbst passwortgeschützt ist (Kopierschutz wird nicht umgangen,
+    konzept.md Schritt 1) — kein Dokument wird dabei still übersprungen. Das Kapitel
+    überhaupt keinen Fließtext enthält — das Kennzeichen eines Bildbands ohne Text
+    (technik.md §8) — oder nach dem Aussteuern
     von Vorspann und Impressum keiner mehr übrig bleibt, gilt für den zusammengefügten
     Text: Ein Trennblatt ohne eigene Wörter zwischen zwei Textdokumenten darf das Kapitel
     dafür nicht ablehnen.
@@ -624,15 +651,16 @@ def count_chapter_words(path: Path, chapters: list[ChapterReference]) -> dict[in
     run_chapter` ruft `read_structure` bei jedem Lauf auf und braucht die Zählung nie.
 
     Lässt sich ein Kapitel nicht lesen — eines seiner Dokumente fehlt im Archiv, ist nicht
-    UTF-8 kodiert, `META-INF/encryption.xml` nennt es als verschlüsselt oder sein
-    ZIP-Eintrag ist selbst passwortgeschützt —, ist sein Umfang unbekannt: `None` im
-    Ergebnis statt der stillen Falschaussage `0`, die wie ein leeres Kapitel aussähe (Regel
-    13). Anders als `read_chapter` bricht diese Funktion dabei nicht ab — die übrigen
-    Kapitel bekommen trotzdem ihre Zahl. Hat ein Kapitel dagegen wirklich keinen Fließtext
-    (ein Bildband) oder besteht es nach dem Aussteuern von Vorspann und Impressum nur noch
-    aus ihnen, ist `0` die Wahrheit und steht auch so im Ergebnis — die Meldungen, die
-    `read_chapter` für genau diese beiden Fälle wirft, bleiben unverändert; wer ein solches
-    Kapitel auswählt, bekommt sie weiterhin beim Lesen.
+    UTF-8 kodiert oder beschädigt (kaputte CRC-Prüfsumme, Befund 2, Durchsicht 29715b2),
+    `META-INF/encryption.xml` nennt es als verschlüsselt oder ist selbst kein wohlgeformtes
+    XML, oder sein ZIP-Eintrag ist selbst passwortgeschützt —, ist sein Umfang unbekannt:
+    `None` im Ergebnis statt der stillen Falschaussage `0`, die wie ein leeres Kapitel
+    aussähe (Regel 13). Anders als `read_chapter` bricht diese Funktion dabei nicht ab — die
+    übrigen Kapitel bekommen trotzdem ihre Zahl. Hat ein Kapitel dagegen wirklich keinen
+    Fließtext (ein Bildband) oder besteht es nach dem Aussteuern von Vorspann und Impressum
+    nur noch aus ihnen, ist `0` die Wahrheit und steht auch so im Ergebnis — die Meldungen,
+    die `read_chapter` für genau diese beiden Fälle wirft, bleiben unverändert; wer ein
+    solches Kapitel auswählt, bekommt sie weiterhin beim Lesen.
     """
     counts: dict[int, int | None] = {}
     with _open_archive_for_chapter(path) as archive:

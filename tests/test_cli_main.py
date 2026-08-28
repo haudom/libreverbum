@@ -621,12 +621,14 @@ def test_resolve_with_progress_closes_the_line_even_when_the_model_server_fails(
     assert finish_calls, "finish_progress_line lief nicht, obwohl bereits berichtet wurde."
 
 
-def test_choose_chapter_shows_the_word_count_with_a_thousands_separator_and_unknown_as_such(
+def test_choose_chapter_shows_the_title_first_then_the_word_count_with_unknown_as_such(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """technik.md §8, Nachtrag 28.08.2026, „Was die Kapitelliste zusätzlich zeigt": Die
-    Kapitelliste zeigt den Umfang je Kapitel mit deutschem Tausendertrennzeichen (`78.774`)
-    und einen unbekannten Umfang sichtbar als solchen, nicht als Zahl (Regel 13)."""
+    """Befund 3b (Durchsicht 29715b2): technik.md §8, Nachtrag 28.08.2026, „Was die
+    Kapitelliste zusätzlich zeigt" nennt die Zeile als „Book 1 DUNE — 78.800 Wörter" — der
+    Titel steht vor der Zahl, nicht danach. Die Kapitelliste zeigt den Umfang je Kapitel
+    mit deutschem Tausendertrennzeichen (`78.774`) und einen unbekannten Umfang sichtbar als
+    solchen, nicht als Zahl (Regel 13)."""
     structure = epub.BookStructure(
         book=Book(title="Testbuch", author="Testautorin"),
         chapters=[
@@ -644,10 +646,63 @@ def test_choose_chapter_shows_the_word_count_with_a_thousands_separator_and_unkn
 
     cli_main._choose_chapter(Path("buch.epub"), structure, lambda _prompt: "1", written.append)
 
-    listing = [line for line in written if line.startswith("  1.") or line.startswith("  2.")]
-    assert any("78.774" in line and "Book 1 DUNE" in line for line in listing)
-    assert any("unbekannt" in line and "Kapitel ohne lesbares Dokument" in line for line in listing)
-    assert not any("78774" in line for line in listing)
+    listing = [line for line in written if "Book 1 DUNE" in line or "lesbares Dokument" in line]
+    assert len(listing) == 2
+    first_chapter_line, second_chapter_line = listing
+    assert first_chapter_line.index("Book 1 DUNE") < first_chapter_line.index("78.774")
+    assert "78774" not in first_chapter_line
+    assert second_chapter_line.index("Kapitel ohne lesbares Dokument") < second_chapter_line.index(
+        "unbekannt"
+    )
+
+
+def test_choose_chapter_aligns_the_word_count_column_from_chapter_ten_onward(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Befund 3 (Durchsicht 29715b2): `chapter.number` wurde nicht aufgefüllt — ab Kapitel
+    10 rutschte die ganze Wortspalte um ein Zeichen nach rechts, für jedes Buch mit zehn
+    oder mehr Kapiteln (beide echten Bücher). Geprüft an zehn Kapiteln mit unterschiedlich
+    langen Titeln und unterschiedlich vielen Ziffern im Umfang: Nummer-, Titel- und
+    Zahlenspalte müssen für jede Zeile an derselben Stelle stehen."""
+    titles = {
+        1: "Kurz",
+        9: "Ein deutlich längerer Kapiteltitel als die übrigen",
+        10: "IX. THE ADVENTURE OF THE ENGINEER’S THUMB",
+    }
+    chapters = [
+        epub.ChapterReference(
+            number=number, title=titles.get(number, f"Kapitel {number}"), documents=["x.xhtml"]
+        )
+        for number in range(1, 11)
+    ]
+    structure = epub.BookStructure(
+        book=Book(title="Testbuch", author="Testautorin"), chapters=chapters, notice=None
+    )
+    counts = {1: 97, 9: 9865, 10: 8327, **{number: number * 111 for number in range(2, 9)}}
+    monkeypatch.setattr("cli.main.epub.count_chapter_words", lambda _path, _chapters: counts)
+    written: list[str] = []
+
+    cli_main._choose_chapter(Path("buch.epub"), structure, lambda _prompt: "1", written.append)
+
+    table = written[1:]  # ohne die Buchzeile: Kopfzeile, dann zehn Kapitelzeilen
+    assert len(table) == 11
+
+    formatted = {number: cli_main._format_word_count(count) for number, count in counts.items()}
+    number_width = max([len("Nr.")] + [len(f"{chapter.number}.") for chapter in chapters])
+    title_width = max([len("Kapitel")] + [len(chapter.title) for chapter in chapters])
+    count_width = max([len("Wörter")] + [len(value) for value in formatted.values()])
+    assert {len(line) for line in table} == {2 + number_width + 2 + title_width + 2 + count_width}
+
+    header = table[0]
+    assert header[2 : 2 + number_width] == "Nr.".rjust(number_width)
+    title_start = 2 + number_width + 2
+    assert header[title_start : title_start + title_width] == "Kapitel".ljust(title_width)
+    assert header[-count_width:] == "Wörter".rjust(count_width)
+
+    for chapter, line in zip(chapters, table[1:], strict=True):
+        assert line[2 : 2 + number_width] == f"{chapter.number}.".rjust(number_width)
+        assert line[title_start : title_start + title_width] == chapter.title.ljust(title_width)
+        assert line[-count_width:] == formatted[chapter.number].rjust(count_width)
 
 
 def test_help_text_survives_a_restricted_console_codepage() -> None:
