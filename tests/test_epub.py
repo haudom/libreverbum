@@ -124,13 +124,58 @@ def test_read_structure_uses_the_first_navigation_label_for_a_deduplicated_targe
 def test_read_structure_numbers_chapters_from_one_in_document_order(
     mini_epub_with_navigation: Path,
 ) -> None:
-    """`ChapterReference.number` zählt ab 1 (`entities.Chapter`, Docstring zu `number`)."""
+    """`ChapterReference.number` zählt ab 1 (`entities.Chapter`, Docstring zu `number`).
+    Kapitel 2 trägt zusätzlich `chapter3.xhtml`, das keinen eigenen Navigationseintrag hat
+    (technik.md §8, Nachtrag 28.08.2026: „ein Kapitel ist nicht ein Dokument")."""
     result = epub.read_structure(mini_epub_with_navigation)
 
     assert [chapter.number for chapter in result.chapters] == [1, 2]
-    assert [chapter.document for chapter in result.chapters] == [
-        "OEBPS/chapter1.xhtml",
-        "OEBPS/chapter2.xhtml",
+    assert [chapter.documents for chapter in result.chapters] == [
+        ["OEBPS/chapter1.xhtml"],
+        ["OEBPS/chapter2.xhtml", "OEBPS/chapter3.xhtml"],
+    ]
+
+
+def test_a_chapter_spans_the_spine_up_to_but_excluding_the_next_navigation_target(
+    mini_epub_with_navigation: Path,
+) -> None:
+    """technik.md §8, Nachtrag 28.08.2026, „ein Kapitel ist nicht ein Dokument": Ein
+    Kapitel reicht von seinem Navigationsziel bis ausschließlich zum nächsten und umfasst
+    alle Dokumente der Lesereihenfolge dazwischen — hier für die EPUB-3-Navigation
+    (`nav.xhtml`)."""
+    result = epub.read_structure(mini_epub_with_navigation)
+
+    assert [chapter.documents for chapter in result.chapters] == [
+        ["OEBPS/chapter1.xhtml"],
+        ["OEBPS/chapter2.xhtml", "OEBPS/chapter3.xhtml"],
+    ]
+
+
+def test_a_chapter_spans_the_spine_up_to_the_next_navigation_target_with_ncx_navigation(
+    mini_epub_with_ncx_navigation: Path,
+) -> None:
+    """Derselbe Beleg wie mit `nav.xhtml`, für die EPUB-2-Navigation `toc.ncx` (technik.md
+    §8, Mehrheitsfall: zehn von zwölf gemessenen Dateien sind EPUB 2.0)."""
+    result = epub.read_structure(mini_epub_with_ncx_navigation)
+
+    assert [chapter.documents for chapter in result.chapters] == [
+        ["OEBPS/chapter1.xhtml"],
+        ["OEBPS/chapter2.xhtml", "OEBPS/chapter3.xhtml"],
+    ]
+
+
+def test_spine_fallback_gives_each_document_its_own_single_element_chapter(
+    mini_epub_without_navigation: Path,
+) -> None:
+    """technik.md §8: Fehlt die Navigation, gilt jedes Dokument der Lesereihenfolge als
+    eigenes Kapitel — `documents` trägt dabei genau ein Element, kein Kapitel fasst mehrere
+    Dokumente zusammen."""
+    result = epub.read_structure(mini_epub_without_navigation)
+
+    assert [chapter.documents for chapter in result.chapters] == [
+        ["OEBPS/chapter1.xhtml"],
+        ["OEBPS/chapter2.xhtml"],
+        ["OEBPS/chapter3.xhtml"],
     ]
 
 
@@ -159,10 +204,10 @@ def test_acceptance_1_missing_navigation_is_reported_and_every_spine_document_be
 
     assert len(result.chapters) == 3
     assert result.notice == epub.NAVIGATION_MISSING_NOTICE
-    assert [chapter.document for chapter in result.chapters] == [
-        "OEBPS/chapter1.xhtml",
-        "OEBPS/chapter2.xhtml",
-        "OEBPS/chapter3.xhtml",
+    assert [chapter.documents for chapter in result.chapters] == [
+        ["OEBPS/chapter1.xhtml"],
+        ["OEBPS/chapter2.xhtml"],
+        ["OEBPS/chapter3.xhtml"],
     ]
 
 
@@ -179,6 +224,75 @@ def test_read_structure_orders_chapters_by_spine_position_not_navigation_order(
 
     assert [chapter.title for chapter in result.chapters] == ["Label A", "Label B"]
     assert [chapter.number for chapter in result.chapters] == [1, 2]
+
+
+# ------------------------ Lokale Vorrichtung: Dokument vor dem ersten Navigationsziel
+
+_LEADING_DOCUMENT_OPF = """<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="bookid">urn:uuid:leading-document-test</dc:identifier>
+    <dc:title>Buch mit Umschlag vor dem ersten Kapitel</dc:title>
+    <dc:creator>Test Autorin</dc:creator>
+  </metadata>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chapa" href="chaptera.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chapb" href="chapterb.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="cover"/>
+    <itemref idref="chapa"/>
+    <itemref idref="chapb"/>
+  </spine>
+</package>
+"""
+
+# Nennt nur die beiden Kapitel, nicht den Umschlag davor in der spine.
+_LEADING_DOCUMENT_NAV_XHTML = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>Navigation</title></head>
+<body>
+  <nav epub:type="toc">
+    <ol>
+      <li><a href="chaptera.xhtml">Chapter A</a></li>
+      <li><a href="chapterb.xhtml">Chapter B</a></li>
+    </ol>
+  </nav>
+</body>
+</html>
+"""
+
+
+def _write_leading_document_epub(path: Path) -> None:
+    """Baut ein Mini-EPUB, dessen spine mit einem Umschlagdokument beginnt, das keinen
+    eigenen Navigationseintrag hat (technik.md §8, Nachtrag 28.08.2026: Dokumente vor dem
+    ersten Navigationsziel gehören zu keinem Kapitel)."""
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        archive.writestr("META-INF/container.xml", _REORDERED_NAV_CONTAINER_XML)
+        archive.writestr("OEBPS/content.opf", _LEADING_DOCUMENT_OPF)
+        archive.writestr("OEBPS/nav.xhtml", _LEADING_DOCUMENT_NAV_XHTML)
+        archive.writestr("OEBPS/cover.xhtml", _reordered_nav_chapter_xhtml("Cover"))
+        archive.writestr("OEBPS/chaptera.xhtml", _reordered_nav_chapter_xhtml("Chapter A"))
+        archive.writestr("OEBPS/chapterb.xhtml", _reordered_nav_chapter_xhtml("Chapter B"))
+
+
+def test_documents_before_the_first_navigation_target_belong_to_no_chapter(tmp_path: Path) -> None:
+    """technik.md §8, Nachtrag 28.08.2026, „ein Kapitel ist nicht ein Dokument": Ein
+    Kapitel reicht von seinem Navigationsziel bis zum nächsten — ein spine-Dokument vor dem
+    ersten Ziel (Umschlag, Titelei, Inhaltsverzeichnisseite) gehört deshalb zu keinem
+    Kapitel und fällt weg."""
+    path = tmp_path / "leading_document.epub"
+    _write_leading_document_epub(path)
+
+    result = epub.read_structure(path)
+
+    assert [chapter.documents for chapter in result.chapters] == [
+        ["OEBPS/chaptera.xhtml"],
+        ["OEBPS/chapterb.xhtml"],
+    ]
 
 
 # ------------------------------------------- Lokale Vorrichtung: leeres erstes dc:title
@@ -491,9 +605,9 @@ def test_acceptance_1_resolves_percent_encoded_targets_across_nested_directories
     result = epub.read_structure(path)
 
     assert result.notice is None
-    assert [chapter.document for chapter in result.chapters] == [
-        "EPUB/text/chapter 1.xhtml",
-        "EPUB/text/chapter2.xhtml",
+    assert [chapter.documents for chapter in result.chapters] == [
+        ["EPUB/text/chapter 1.xhtml"],
+        ["EPUB/text/chapter2.xhtml"],
     ]
     assert [chapter.title for chapter in result.chapters] == ["Kapitel eins", "Kapitel zwei"]
 
@@ -511,9 +625,9 @@ def test_acceptance_1_falls_back_to_spine_with_notice_when_navigation_targets_do
     result = epub.read_structure(path)
 
     assert result.notice == epub.NAVIGATION_MISSING_NOTICE
-    assert [chapter.document for chapter in result.chapters] == [
-        "OEBPS/chapter1.xhtml",
-        "OEBPS/chapter2.xhtml",
+    assert [chapter.documents for chapter in result.chapters] == [
+        ["OEBPS/chapter1.xhtml"],
+        ["OEBPS/chapter2.xhtml"],
     ]
 
 
@@ -594,6 +708,34 @@ def test_acceptance_1_matches_the_measured_unique_chapter_count_for_real_books(
 
 
 @pytest.mark.needs_epub
+def test_no_spine_document_from_the_first_navigation_target_onward_is_lost_or_duplicated(
+    real_epub_paths: dict[str, Path],
+) -> None:
+    """technik.md §8, Nachtrag 28.08.2026, „ein Kapitel ist nicht ein Dokument": Jedes
+    spine-Dokument ab dem ersten Navigationsziel gehört zu genau einem Kapitel — geprüft
+    gegen die echte spine der Package-Datei (dokumentation.md §5, „Was über den Inhalt
+    einer Fremdquelle behauptet wird, wird zusätzlich gegen das echte Gegenüber
+    geprüft")."""
+    for path in real_epub_paths.values():
+        with zipfile.ZipFile(path) as archive:
+            names = set(archive.namelist())
+            package = epub._read_package(archive, epub._find_opf(archive, path), path)
+        structure = epub.read_structure(path)
+
+        assigned = [document for chapter in structure.chapters for document in chapter.documents]
+        assert len(assigned) == len(set(assigned)), f"{path}: ein Dokument gehört zu zwei Kapiteln"
+
+        first_target = structure.chapters[0].documents[0]
+        first_target_index = package.spine_documents.index(first_target)
+        expected = [
+            document
+            for document in package.spine_documents[first_target_index:]
+            if document in names
+        ]
+        assert assigned == expected, f"{path}: Dokumente der spine sind verlorengegangen"
+
+
+@pytest.mark.needs_epub
 def test_read_structure_reads_metadata_and_first_chapter_title_for_a_real_book(
     real_epub_paths: dict[str, Path],
 ) -> None:
@@ -626,7 +768,7 @@ _TEST_BOOK = Book(title="Testbuch", author="Test Autorin")
 
 
 def _chapter_reference(document: str, title: str = "Kapitel 1") -> epub.ChapterReference:
-    return epub.ChapterReference(number=1, title=title, document=document)
+    return epub.ChapterReference(number=1, title=title, documents=[document])
 
 
 def _write_single_document_epub(path: Path, *, document: str, xhtml: str) -> None:
@@ -681,6 +823,23 @@ def test_read_chapter_keeps_a_paragraph_boundary_between_adjacent_paragraphs(
     chapter = epub.read_chapter(path, _TEST_BOOK, _chapter_reference("OEBPS/chapter.xhtml"))
 
     assert "Erster Absatz mit echtem Fließtext.\nZweiter Absatz" in chapter.text
+
+
+def test_read_chapter_reads_the_text_of_every_document_in_a_multi_document_chapter(
+    mini_epub_with_navigation: Path,
+) -> None:
+    """technik.md §8, Nachtrag 28.08.2026, „ein Kapitel ist nicht ein Dokument":
+    `read_chapter` liest alle Dokumente eines Kapitels und fügt ihren Fließtext mit einer
+    Absatzgrenze zusammen wie zwischen zwei Blockelementen — chapter3.xhtml gehört zum
+    zweiten Kapitel dieser Vorrichtung und muss im gelesenen Text enthalten sein."""
+    structure = epub.read_structure(mini_epub_with_navigation)
+
+    chapter = epub.read_chapter(mini_epub_with_navigation, structure.book, structure.chapters[1])
+
+    assert "This is the second chapter, shorter than the first one." in chapter.text
+    assert "This is the third chapter, which the navigation never names." in chapter.text
+    # Absatzgrenze am Dokumentwechsel: ein einzelner Zeilenumbruch, kein Zusammenkleben.
+    assert "This is the second chapter, shorter than the first one.\nChapter Three" in chapter.text
 
 
 # --------------------------------------- Lokale Vorrichtung: Vorspann- und Impressum-Marken

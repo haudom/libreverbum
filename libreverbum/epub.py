@@ -6,9 +6,11 @@ Aufgabe
 Schritt 1 des Kernablaufs (konzept.md, „1. Buch einlesen"): `container.xml` → OPF →
 Metadaten, `spine`, Navigation (technik.md §8, T12) liefern die Kapitelliste, mit der der
 Nutzer ein Kapitel auswählt (konzept.md, „Der Kernablauf"). `read_chapter` (T12b) liest
-danach den Fließtext genau dieses einen Kapitels mit `html.parser`, von Vorspann und
-Impressum ausgesteuert, und meldet die drei Ablehnfälle (kein ZIP-Archiv, Bildband ohne
-Text, verschlüsselt) statt leer zurückzugeben.
+danach den Fließtext dieses Kapitels — aller seiner Dokumente, von seinem Navigationsziel
+bis ausschließlich zum nächsten (technik.md §8, Nachtrag 28.08.2026: „ein Kapitel ist
+nicht ein Dokument") — mit `html.parser`, von Vorspann und Impressum ausgesteuert, und
+meldet die drei Ablehnfälle (kein ZIP-Archiv, Bildband ohne Text, verschlüsselt) statt
+leer zurückzugeben.
 
 Voraussetzungen
 ---------------
@@ -28,15 +30,23 @@ dem Buch stammen — ein Feld im Ergebnis, kein Protokolleintrag, den ein Aufruf
 übersehen könnte. `ChapterReference.number` zählt dabei stets in der Reihenfolge der
 `spine`, auch wenn die Beschriftung aus der Navigation stammt (`entities.Chapter`,
 Docstring zu `number`) — die Navigation legt nur Beschriftung und eindeutige Ziele fest,
-nicht die Zählrichtung. `ChapterReference.document` trägt das Inhaltsdokument im Archiv.
+nicht die Zählrichtung. `ChapterReference.documents` trägt die Inhaltsdokumente des
+Kapitels im Archiv: die zusammenhängende Strecke der `spine` von seinem Navigationsziel
+bis ausschließlich zum nächsten (technik.md §8, Nachtrag 28.08.2026) — Calibre zerlegt
+große Inhaltsdokumente in `…_split_000`, `…_split_001`, und die Navigation zeigt nur auf
+das jeweils erste Stück. Dokumente vor dem ersten Navigationsziel gehören zu keinem
+Kapitel. Fehlt die Navigation, trägt jedes Kapitel genau ein Dokument.
 
-`read_chapter` liefert dazu `entities.Chapter` mit dem Fließtext genau dieses Dokuments:
-Skripte, Stilangaben und Kopfzeilen bleiben draußen, Blockelemente behalten ihre
-Absatzgrenze — `extraction` (T3) braucht sie für Belegsätze (tools/epub_check.py,
-`TextCollector`, dieselbe Auswahl an Tags). Vorspann und Impressum werden ausgesteuert,
-soweit Project-Gutenberg-Dateien sie zwischen den Textmarken „*** START OF THE PROJECT
-GUTENBERG …" und „*** END OF THE PROJECT GUTENBERG …" kapseln — denselben Marken, mit
-denen `tools/coverage_check.py` den Lizenz-Vorspann der Textfassungen abschneidet. Ein
+`read_chapter` liefert dazu `entities.Chapter` mit dem zusammengefügten Fließtext aller
+Dokumente des Kapitels, in `spine`-Reihenfolge: Skripte, Stilangaben und Kopfzeilen
+bleiben draußen, Blockelemente behalten ihre Absatzgrenze — `extraction` (T3) braucht sie
+für Belegsätze (tools/epub_check.py, `TextCollector`, dieselbe Auswahl an Tags); zwischen
+zwei Dokumenten gilt dieselbe Absatzgrenze wie zwischen zwei Blockelementen eines
+Dokuments. Vorspann und Impressum werden ausgesteuert, soweit Project-Gutenberg-Dateien
+sie zwischen den Textmarken „*** START OF THE PROJECT GUTENBERG …" und „*** END OF THE
+PROJECT GUTENBERG …" kapseln — denselben Marken, mit denen `tools/coverage_check.py` den
+Lizenz-Vorspann der Textfassungen abschneidet, angewandt auf den bereits zusammengefügten
+Text des Kapitels, weil die Marken nicht an einer Dokumentgrenze haltmachen müssen. Ein
 `epub:type`, das die Norm dafür vorsähe, kommt in der Praxis nicht vor (technik.md §8,
 „Neuer Befund: epub:type gibt es in der Praxis nicht"); außerhalb von Project Gutenberg
 bleibt die Trennung deshalb unversucht und der Text unverändert — eine allgemeine
@@ -88,14 +98,18 @@ NAVIGATION_MISSING_NOTICE = (
 @dataclass(frozen=True)
 class ChapterReference:
     """Ein Eintrag der Kapitelliste vor dem Einlesen des Fließtexts (bauplan.md T12):
-    Titel und das Inhaltsdokument im Archiv, auf das er zeigt. `number` zählt ab 1 in der
-    Reihenfolge der `spine`, wie `entities.Chapter.number` es später fortführt.
-    `entities.Chapter` entsteht daraus erst, wenn der Fließtext dieses einen Dokuments
-    gelesen ist (T12b) — das Auswählen eines Kapitels soll nicht das ganze Buch parsen."""
+    Titel und die Inhaltsdokumente im Archiv, die zu ihm gehören. Ein Kapitel reicht von
+    seinem Navigationsziel bis ausschließlich zum nächsten (technik.md §8, Nachtrag
+    28.08.2026, „ein Kapitel ist nicht ein Dokument") — `documents` trägt deshalb die
+    zusammenhängende Strecke der `spine` dazwischen, in ihrer Reihenfolge, mindestens ein
+    Dokument. `number` zählt ab 1 in der Reihenfolge der `spine`, wie
+    `entities.Chapter.number` es später fortführt. `entities.Chapter` entsteht daraus
+    erst, wenn der Fließtext dieser Dokumente gelesen ist (T12b) — das Auswählen eines
+    Kapitels soll nicht das ganze Buch parsen."""
 
     number: int
     title: str
-    document: str
+    documents: list[str]
 
 
 @dataclass(frozen=True)
@@ -301,15 +315,30 @@ def _resolve_chapters(
     # eine fehlende Navigation und muss in den spine-Rückfall samt Hinweis laufen, nicht in
     # den ValueError am Ende dieser Funktion.
     if ordered_targets:
+        target_documents = set(ordered_targets)
+        # technik.md §8, Nachtrag 28.08.2026: Ein Kapitel reicht von seinem Navigationsziel
+        # bis ausschließlich zum nächsten. Beim Durchlauf der spine beginnt an jedem
+        # Zieldokument eine neue Gruppe; jedes dazwischenliegende Dokument hängt sich an die
+        # zuletzt begonnene an. Dokumente vor dem ersten Ziel treffen auf keine begonnene
+        # Gruppe und fallen weg — Umschlag, Titelei, Inhaltsverzeichnisseite gehören zu
+        # keinem Kapitel.
+        document_groups: list[list[str]] = []
+        for document in package.spine_documents:
+            if document not in names:
+                continue
+            if document in target_documents:
+                document_groups.append([document])
+            elif document_groups:
+                document_groups[-1].append(document)
         chapters = [
-            ChapterReference(number=number, title=labels[document], document=document)
-            for number, document in enumerate(ordered_targets, start=1)
+            ChapterReference(number=number, title=labels[group[0]], documents=group)
+            for number, group in enumerate(document_groups, start=1)
         ]
         notice = None
     else:
         documents = [document for document in package.spine_documents if document in names]
         chapters = [
-            ChapterReference(number=number, title=f"Kapitel {number}", document=document)
+            ChapterReference(number=number, title=f"Kapitel {number}", documents=[document])
             for number, document in enumerate(documents, start=1)
         ]
         notice = NAVIGATION_MISSING_NOTICE
@@ -459,16 +488,19 @@ def _encrypted_error(path: Path) -> ValueError:
 
 
 def read_chapter(path: Path, book: Book, chapter: ChapterReference) -> Chapter:
-    """Liest den Fließtext eines einzelnen Kapitels (bauplan.md T12b).
+    """Liest den zusammengefügten Fließtext eines Kapitels — aller seiner Dokumente, in
+    `spine`-Reihenfolge (bauplan.md T12b, technik.md §8, Nachtrag 28.08.2026).
 
     Bricht mit einer deutschen Meldung ab (Regel 13) statt eines leeren oder beschädigten
-    Ergebnisses: wenn `path` fehlt, die Datei kein gültiges ZIP-Archiv ist, das
-    Kapiteldokument im Archiv fehlt oder nicht UTF-8 kodiert ist, `META-INF/encryption.xml`
-    ausgerechnet dieses Dokument als verschlüsselt nennt oder der ZIP-Eintrag selbst
-    passwortgeschützt ist (Kopierschutz wird nicht umgangen, konzept.md Schritt 1), das
-    Kapitel überhaupt keinen Fließtext enthält — das Kennzeichen eines Bildbands ohne Text
-    (technik.md §8) — oder nach dem Aussteuern von Vorspann und Impressum keiner mehr übrig
-    bleibt, weil das Dokument nur aus Lizenztext bestand.
+    Ergebnisses: wenn `path` fehlt, die Datei kein gültiges ZIP-Archiv ist, eines der
+    Kapiteldokumente im Archiv fehlt oder nicht UTF-8 kodiert ist, `META-INF/encryption.xml`
+    ausgerechnet eines von ihnen als verschlüsselt nennt oder dessen ZIP-Eintrag selbst
+    passwortgeschützt ist (Kopierschutz wird nicht umgangen, konzept.md Schritt 1) — kein
+    Dokument wird dabei still übersprungen. Das Kapitel überhaupt keinen Fließtext enthält
+    — das Kennzeichen eines Bildbands ohne Text (technik.md §8) — oder nach dem Aussteuern
+    von Vorspann und Impressum keiner mehr übrig bleibt, gilt für den zusammengefügten
+    Text: Ein Trennblatt ohne eigene Wörter zwischen zwei Textdokumenten darf das Kapitel
+    dafür nicht ablehnen.
     """
     # (Befund 12, Review Runde 2): dieselben zwei Zeilen wie in read_structure — sonst
     # entkäme hier der englische FileNotFoundError der Standardbibliothek.
@@ -482,40 +514,55 @@ def read_chapter(path: Path, book: Book, chapter: ChapterReference) -> Chapter:
     except zipfile.BadZipFile as error:
         raise ValueError(f"{path}: keine gültige EPUB-Datei (kein ZIP-Archiv).") from error
 
+    document_texts: list[str] = []
     with archive:
         names = set(archive.namelist())
-        if _encrypts_document(archive, names, chapter.document):
-            raise _encrypted_error(path)
-        # (Befund 7, Review Runde 2): sonst entkäme hier ein englischer KeyError, wenn das
-        # Kapiteldokument im Archiv fehlt.
-        if chapter.document not in names:
-            raise ValueError(
-                f"{path}: {chapter.document} — das Dokument des Kapitels "
-                f"„{chapter.title}“ fehlt im Archiv."
-            )
-        try:
-            raw = archive.read(chapter.document)
-        except RuntimeError as error:
-            # (Befund 7, Review Runde 2): der dritte Ablehnfall in anderer Gestalt — ein
-            # passwortgeschützter ZIP-Eintrag ohne META-INF/encryption.xml.
-            raise _encrypted_error(path) from error
+        for document in chapter.documents:
+            if _encrypts_document(archive, names, document):
+                raise _encrypted_error(path)
+            # (Befund 7, Review Runde 2): sonst entkäme hier ein englischer KeyError, wenn
+            # ein Kapiteldokument im Archiv fehlt.
+            if document not in names:
+                raise ValueError(
+                    f"{path}: {document} — ein Dokument des Kapitels „{chapter.title}“ "
+                    "fehlt im Archiv."
+                )
+            try:
+                raw = archive.read(document)
+            except RuntimeError as error:
+                # (Befund 7, Review Runde 2): der dritte Ablehnfall in anderer Gestalt — ein
+                # passwortgeschützter ZIP-Eintrag ohne META-INF/encryption.xml.
+                raise _encrypted_error(path) from error
 
-    # (Befund 8, Review Runde 2): kein errors="replace" — sonst landete U+FFFD still im
-    # Wortschatz statt eines sichtbaren Fehlschlags.
-    try:
-        source = raw.decode("utf-8")
-    except UnicodeDecodeError as error:
-        raise ValueError(
-            f"{path}: {chapter.document} ist nicht UTF-8 kodiert — der Text wäre still beschädigt."
-        ) from error
+            # (Befund 8, Review Runde 2): kein errors="replace" — sonst landete U+FFFD
+            # still im Wortschatz statt eines sichtbaren Fehlschlags.
+            try:
+                source = raw.decode("utf-8")
+            except UnicodeDecodeError as error:
+                raise ValueError(
+                    f"{path}: {document} ist nicht UTF-8 kodiert — der Text wäre still beschädigt."
+                ) from error
+            document_texts.append(_extract_flowing_text(source))
 
-    raw_text = _extract_flowing_text(source)
+    # Dieselbe Absatzgrenze wie zwischen zwei Blockelementen eines Dokuments (extraction
+    # braucht sie für Belegsätze) — ein mehrteiliges Kapitel (technik.md §8, Nachtrag
+    # 28.08.2026) darf am Dokumentwechsel nicht anders getrennt sein als an einer
+    # Absatzgrenze innerhalb eines Dokuments.
+    raw_text = "\n".join(document_texts)
     if not _WORD.search(raw_text):
         raise ValueError(
             f"{path}: Kapitel „{chapter.title}“ enthält keinen Fließtext — vermutlich ein "
             "Bildband ohne Text."
         )
 
+    # Angesetzt auf raw_text, den bereits zusammengefügten Text — nicht je Dokument. Die
+    # Marken stehen zwar praktisch je einmal im ganzen Buch, typischerweise im ersten
+    # beziehungsweise letzten Dokument (technik.md §8, Nachtrag 28.08.2026), aber nicht
+    # garantiert an einer Dokumentgrenze: Stünde die Startmarke im zweiten statt im ersten
+    # Dokument eines mehrteiligen Kapitels, ließe ein Aussteuern je Dokument den
+    # vollständigen Text des ersten Dokuments unbeachtet vor der Marke stehen — genau der
+    # stille Fehlschlag aus Regel 13, den dieser Umbau beheben soll, nicht wiederholen.
+    #
     # (Befund 1, Review Runde 2): Aussteuern kann auch das ganze Kapitel verschlingen — ein
     # reines Lizenzdokument darf danach nicht als leerer Fließtext durchgehen (Regel 13).
     text = _remove_boilerplate(raw_text)
