@@ -305,27 +305,30 @@ def _resolve_chapters(
     # `number` zählt in der Reihenfolge der spine, nicht der Navigation
     # (entities.Chapter, Docstring zu `number`) — die Navigation legt nur
     # Beschriftung und eindeutige Ziele fest, nicht die Zählrichtung.
-    ordered_targets = [
-        document for document in package.spine_documents if document in labels and document in names
-    ]
+    ordered_targets = [document for document in package.spine_documents if document in labels]
 
-    # (Befund 2, Review Runde 1): Die Weiche hängt am Ergebnis der Auflösung, nicht an der
-    # rohen Einträgeliste. Nennt die Navigation nur Ziele, die sich nicht auflösen lassen
-    # (Prozentkodierung, Ziele außerhalb der spine, fehlende Dokumente), ist das materiell
-    # eine fehlende Navigation und muss in den spine-Rückfall samt Hinweis laufen, nicht in
-    # den ValueError am Ende dieser Funktion.
-    if ordered_targets:
+    # (Befund 2, Review Runde 1, nachgezogen Befund 1, Review Runde 2): Die Weiche hängt am
+    # Ergebnis der Auflösung, nicht an der rohen Einträgeliste. Nennt die Navigation nur
+    # Ziele, die sich nicht auflösen lassen (Prozentkodierung, Ziele außerhalb der spine,
+    # oder — hier geprüft — kein einziges der aufgelösten Zieldokumente im Archiv), ist das
+    # materiell eine fehlende Navigation und muss in den spine-Rückfall samt Hinweis laufen,
+    # nicht in den ValueError am Ende dieser Funktion. Fehlt dagegen nur ein Teil der
+    # Zieldokumente im Archiv, bleibt die Navigation gültig: Ein einzelnes fehlendes Ziel
+    # darf sein Kapitel nicht mit dem vorigen verschmelzen, sein Fehlschlag wird erst beim
+    # Lesen des betroffenen Kapitels sichtbar (Regel 13, read_chapter) — nicht hier still
+    # umgehängt (Befund 1, Review Runde 2).
+    if ordered_targets and any(document in names for document in ordered_targets):
         target_documents = set(ordered_targets)
         # technik.md §8, Nachtrag 28.08.2026: Ein Kapitel reicht von seinem Navigationsziel
         # bis ausschließlich zum nächsten. Beim Durchlauf der spine beginnt an jedem
         # Zieldokument eine neue Gruppe; jedes dazwischenliegende Dokument hängt sich an die
         # zuletzt begonnene an. Dokumente vor dem ersten Ziel treffen auf keine begonnene
         # Gruppe und fallen weg — Umschlag, Titelei, Inhaltsverzeichnisseite gehören zu
-        # keinem Kapitel.
+        # keinem Kapitel. Ein im Archiv fehlendes Zieldokument beginnt trotzdem seine eigene
+        # Gruppe (Befund 1, Review Runde 2) — sonst hinge sein Nachfolger sich an die zuletzt
+        # begonnene Gruppe und würde als fremder Text in ein falsches Kapitel gemischt.
         document_groups: list[list[str]] = []
         for document in package.spine_documents:
-            if document not in names:
-                continue
             if document in target_documents:
                 document_groups.append([document])
             elif document_groups:
@@ -555,13 +558,14 @@ def read_chapter(path: Path, book: Book, chapter: ChapterReference) -> Chapter:
             "Bildband ohne Text."
         )
 
-    # Angesetzt auf raw_text, den bereits zusammengefügten Text — nicht je Dokument. Die
-    # Marken stehen zwar praktisch je einmal im ganzen Buch, typischerweise im ersten
-    # beziehungsweise letzten Dokument (technik.md §8, Nachtrag 28.08.2026), aber nicht
-    # garantiert an einer Dokumentgrenze: Stünde die Startmarke im zweiten statt im ersten
-    # Dokument eines mehrteiligen Kapitels, ließe ein Aussteuern je Dokument den
-    # vollständigen Text des ersten Dokuments unbeachtet vor der Marke stehen — genau der
-    # stille Fehlschlag aus Regel 13, den dieser Umbau beheben soll, nicht wiederholen.
+    # Angesetzt auf raw_text, den bereits zusammengefügten Text — nicht je Dokument. Der
+    # Vorspann kann über die Dokumentgrenze reichen, ohne an ihr haltzumachen (technik.md
+    # §8, „Befund 18.08.2026: wie viel Vorspann die Heuristik wegnimmt"); ein Aussteuern je
+    # Dokument fände die Marke deshalb nicht zuverlässig, wenn sie nicht im ersten
+    # beziehungsweise letzten Dokument des Kapitels steht. Der Preis dieser Entscheidung:
+    # Steht die Startmarke im zweiten statt im ersten Dokument eines mehrteiligen Kapitels,
+    # fällt der vollständige Text des ersten Dokuments mit weg, nicht nur der Text vor der
+    # Marke im zweiten (Befund 2, Review Runde 2, siehe Test dazu).
     #
     # (Befund 1, Review Runde 2): Aussteuern kann auch das ganze Kapitel verschlingen — ein
     # reines Lizenzdokument darf danach nicht als leerer Fließtext durchgehen (Regel 13).

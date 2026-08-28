@@ -1768,6 +1768,14 @@ leeres Ergebnis (Regel 13):
   warnt dokumentation.md §5: Die Vorrichtung zeigt, dass der Code läuft, die Fremdquelle
   zeigt, ob er stimmt. Geschlossen wäre der Punkt, sobald eine EPUB-3-Datei in `tools/`
   liegt (die beiden hier gemessenen Manga-Bände sind 3.0) und `needs_epub` sie einschließt
+- **`documents` mit mehr als einem Eintrag läuft gegen keine Fremdquelle.** Sherlock (15
+  spine-Dokumente, 14 Kapitel) und Dorian Gray (23 / 22) sind beide 1:1 Dokument-zu-Kapitel
+  — das einzige nicht zugeordnete Dokument ist jeweils `wrap0000.html` vor dem ersten
+  Navigationsziel, und alle 36 Kapiteltexte sind gegenüber dem Elterncommit zeichengleich
+  (nachgeprüft 28.08.2026). Dieselbe Lage wie beim EPUB-3-Zweig oben: Die Vorrichtung zeigt,
+  dass der Code läuft, keine Fremdquelle zeigt, ob er stimmt. Geschlossen wäre der Punkt,
+  sobald eine Datei mit Calibre-`_split_NNN`-Dokumenten in `tools/` liegt und `needs_epub`
+  sie einschließt
 - **Anker innerhalb eines Dokuments.** Ob Navigationsziele mit `#anker` als eigene Kapitel
   zu behandeln sind, ist offen. Der Fall liegt vor — die Unterpunkte `I./II./III.` in
   `sherlock.epub` sind genau das (Nachtrag 28.08.2026) —, verlangt aber, innerhalb eines

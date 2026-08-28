@@ -130,10 +130,6 @@ def test_read_structure_numbers_chapters_from_one_in_document_order(
     result = epub.read_structure(mini_epub_with_navigation)
 
     assert [chapter.number for chapter in result.chapters] == [1, 2]
-    assert [chapter.documents for chapter in result.chapters] == [
-        ["OEBPS/chapter1.xhtml"],
-        ["OEBPS/chapter2.xhtml", "OEBPS/chapter3.xhtml"],
-    ]
 
 
 def test_a_chapter_spans_the_spine_up_to_but_excluding_the_next_navigation_target(
@@ -293,6 +289,171 @@ def test_documents_before_the_first_navigation_target_belong_to_no_chapter(tmp_p
         ["OEBPS/chaptera.xhtml"],
         ["OEBPS/chapterb.xhtml"],
     ]
+
+
+# ------------- Lokale Vorrichtung: Navigationsziel fehlt im Archiv (Befund 1, Review Runde 2)
+
+_MISSING_TARGET_DOCUMENT_OPF = """<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="bookid">urn:uuid:missing-target-document-test</dc:identifier>
+    <dc:title>Buch mit fehlendem Zieldokument</dc:title>
+    <dc:creator>Test Autorin</dc:creator>
+  </metadata>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="chapa" href="chaptera.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chapa2" href="chaptera2.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chapb" href="chapterb.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chapb2" href="chapterb2.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="chapa"/>
+    <itemref idref="chapa2"/>
+    <itemref idref="chapb"/>
+    <itemref idref="chapb2"/>
+  </spine>
+</package>
+"""
+
+# Nennt beide Kapitel; chapterb.xhtml selbst fehlt gleich im Archiv (siehe
+# _write_missing_target_document_epub) — das Navigationsziel des zweiten Kapitels ist damit
+# unerreichbar, sein Folgedokument chapterb2.xhtml aber sehr wohl vorhanden.
+_MISSING_TARGET_DOCUMENT_NAV_XHTML = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>Navigation</title></head>
+<body>
+  <nav epub:type="toc">
+    <ol>
+      <li><a href="chaptera.xhtml">Kapitel A</a></li>
+      <li><a href="chapterb.xhtml">Kapitel B</a></li>
+    </ol>
+  </nav>
+</body>
+</html>
+"""
+
+
+def _write_missing_target_document_epub(path: Path) -> None:
+    """Baut ein Mini-EPUB, dessen Navigation ein zweites Kapitel nennt, dessen eigenes
+    Zieldokument (`chapterb.xhtml`) im Archiv fehlt, während sein Folgedokument
+    (`chapterb2.xhtml`) da ist (Befund 1, Review Runde 2) — nachgestellt aus dem Beispiel
+    des Befunds: spine `a, a2, b, b2`, Nav-Ziele `a` und `b`, `b.xhtml` fehlt im Archiv."""
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        archive.writestr("META-INF/container.xml", _REORDERED_NAV_CONTAINER_XML)
+        archive.writestr("OEBPS/content.opf", _MISSING_TARGET_DOCUMENT_OPF)
+        archive.writestr("OEBPS/nav.xhtml", _MISSING_TARGET_DOCUMENT_NAV_XHTML)
+        archive.writestr("OEBPS/chaptera.xhtml", _reordered_nav_chapter_xhtml("Chapter A"))
+        archive.writestr("OEBPS/chaptera2.xhtml", _reordered_nav_chapter_xhtml("Chapter A, part 2"))
+        # OEBPS/chapterb.xhtml wird absichtlich nicht geschrieben — das Zieldokument fehlt.
+        archive.writestr("OEBPS/chapterb2.xhtml", _reordered_nav_chapter_xhtml("Chapter B, part 2"))
+
+
+def test_a_chapter_with_a_missing_navigation_target_does_not_absorb_the_next_chapters_documents(
+    tmp_path: Path,
+) -> None:
+    """Befund 1, Review Runde 2: Fehlt das Navigationsziel eines Kapitels im Archiv, während
+    seine Folgedokumente da sind, darf das Kapitel nicht lautlos aus der Liste verschwinden
+    und seine Dokumente sich nicht an das vorige Kapitel hängen. Kapitel B bleibt eine
+    eigene Gruppe, obwohl `chapterb.xhtml` selbst fehlt."""
+    path = tmp_path / "missing_target_document.epub"
+    _write_missing_target_document_epub(path)
+
+    result = epub.read_structure(path)
+
+    assert result.notice is None
+    assert [chapter.title for chapter in result.chapters] == ["Kapitel A", "Kapitel B"]
+    assert [chapter.documents for chapter in result.chapters] == [
+        ["OEBPS/chaptera.xhtml", "OEBPS/chaptera2.xhtml"],
+        ["OEBPS/chapterb.xhtml", "OEBPS/chapterb2.xhtml"],
+    ]
+
+
+def test_reading_a_chapter_whose_navigation_target_document_is_missing_reports_it(
+    tmp_path: Path,
+) -> None:
+    """Befund 1, Review Runde 2: Der in `read_chapter` versprochene Zweig „ein Dokument des
+    Kapitels … fehlt im Archiv" ist über `read_structure` erreichbar — vorher filterte
+    `_resolve_chapters` das fehlende Zieldokument schon aus der Kapitelliste heraus, bevor
+    `read_chapter` es je zu sehen bekam."""
+    path = tmp_path / "missing_target_document.epub"
+    _write_missing_target_document_epub(path)
+    structure = epub.read_structure(path)
+
+    with pytest.raises(ValueError, match=r"chapterb\.xhtml.*fehlt im Archiv"):
+        epub.read_chapter(path, structure.book, structure.chapters[1])
+
+
+_ALL_TARGETS_MISSING_OPF = """<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="bookid">urn:uuid:all-targets-missing-test</dc:identifier>
+    <dc:title>Buch mit sämtlich fehlenden Zieldokumenten</dc:title>
+    <dc:creator>Test Autorin</dc:creator>
+  </metadata>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="chapa" href="chaptera.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chapb" href="chapterb.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chapc" href="chapterc.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="chapa"/>
+    <itemref idref="chapb"/>
+    <itemref idref="chapc"/>
+  </spine>
+</package>
+"""
+
+# Nennt zwei Ziele, die beide im Archiv fehlen (siehe _write_all_targets_missing_epub);
+# chapterc.xhtml steht in der spine, aber in keinem Navigationseintrag.
+_ALL_TARGETS_MISSING_NAV_XHTML = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>Navigation</title></head>
+<body>
+  <nav epub:type="toc">
+    <ol>
+      <li><a href="chaptera.xhtml">Kapitel A</a></li>
+      <li><a href="chapterb.xhtml">Kapitel B</a></li>
+    </ol>
+  </nav>
+</body>
+</html>
+"""
+
+
+def _write_all_targets_missing_epub(path: Path) -> None:
+    """Baut ein Mini-EPUB, dessen beide Navigationsziele in der spine stehen, aber
+    **keines** von ihnen im Archiv vorhanden ist — der „Achtung"-Fall aus Befund 1, Review
+    Runde 2: die bestehende Zusicherung aus dem Kommentar „Befund 2, Review Runde 1" muss
+    auch nach dessen Nachbesserung gelten. Nur `chapterc.xhtml`, das in keinem
+    Navigationseintrag steht, ist tatsächlich im Archiv."""
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        archive.writestr("META-INF/container.xml", _REORDERED_NAV_CONTAINER_XML)
+        archive.writestr("OEBPS/content.opf", _ALL_TARGETS_MISSING_OPF)
+        archive.writestr("OEBPS/nav.xhtml", _ALL_TARGETS_MISSING_NAV_XHTML)
+        # OEBPS/chaptera.xhtml und OEBPS/chapterb.xhtml werden absichtlich nicht
+        # geschrieben — beide Zieldokumente fehlen im Archiv.
+        archive.writestr("OEBPS/chapterc.xhtml", _reordered_nav_chapter_xhtml("Chapter C"))
+
+
+def test_falls_back_to_spine_when_every_navigation_target_document_is_missing_from_the_archive(
+    tmp_path: Path,
+) -> None:
+    """Befund 1, Review Runde 2, „Achtung"-Fall: Stehen alle Navigationsziele zwar in der
+    spine, fehlen aber sämtlich im Archiv, bleibt die Zusicherung aus dem Kommentar „Befund
+    2, Review Runde 1" erhalten — das ist materiell eine fehlende Navigation und fällt auf
+    die spine samt Hinweis zurück, statt eine Kapitelliste mit `notice=None` zu liefern,
+    obwohl kein einziges ihrer Zieldokumente lesbar ist."""
+    path = tmp_path / "all_targets_missing.epub"
+    _write_all_targets_missing_epub(path)
+
+    result = epub.read_structure(path)
+
+    assert result.notice == epub.NAVIGATION_MISSING_NOTICE
+    assert [chapter.documents for chapter in result.chapters] == [["OEBPS/chapterc.xhtml"]]
 
 
 # ------------------------------------------- Lokale Vorrichtung: leeres erstes dc:title
@@ -922,6 +1083,64 @@ def test_read_chapter_keeps_real_content_that_shares_a_document_with_the_license
     chapter = epub.read_chapter(path, _TEST_BOOK, _chapter_reference("OEBPS/chapter.xhtml"))
 
     assert chapter.text == "Echter letzter Satz des Kapitels."
+
+
+def _write_multi_document_epub(path: Path, documents: dict[str, str]) -> None:
+    """Wie `_write_single_document_epub`, aber für mehrere Inhaltsdokumente eines Kapitels
+    (technik.md §8, Nachtrag 28.08.2026) — `read_chapter` braucht dafür weiterhin weder
+    `container.xml` noch die Package-Datei."""
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        for document, xhtml in documents.items():
+            archive.writestr(document, xhtml)
+
+
+_MULTI_DOCUMENT_START_MARKER_FIRST_XHTML = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>Vorspann, erstes Dokument</title></head>
+<body>
+<p>Vorspann-Absatz im ersten Dokument, der vollständig aussteuern muss, weil die
+Startmarke erst im zweiten Dokument steht.</p>
+</body>
+</html>
+"""
+
+_MULTI_DOCUMENT_START_MARKER_SECOND_XHTML = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>Vorspann, zweites Dokument</title></head>
+<body>
+<p>Vorspann-Absatz im zweiten Dokument vor der Marke, der ebenfalls aussteuern muss.</p>
+<p>*** START OF THE PROJECT GUTENBERG EBOOK TESTBUCH ***</p>
+<p>Erster echter Satz nach der Startmarke.</p>
+</body>
+</html>
+"""
+
+
+def test_read_chapter_removes_the_entire_first_document_when_the_start_marker_is_in_the_second(
+    tmp_path: Path,
+) -> None:
+    """Befund 2, Review Runde 2: `_remove_boilerplate` läuft auf dem bereits
+    zusammengefügten Text des Kapitels, nicht je Dokument, weil der Vorspann über die
+    Dokumentgrenze reichen kann. Steht die Startmarke erst im zweiten Dokument eines
+    mehrteiligen Kapitels, fällt deshalb der vollständige Text des ersten Dokuments mit weg
+    — nicht nur der Text vor der Marke im zweiten."""
+    path = tmp_path / "multi_document_start_marker.epub"
+    _write_multi_document_epub(
+        path,
+        {
+            "OEBPS/front.xhtml": _MULTI_DOCUMENT_START_MARKER_FIRST_XHTML,
+            "OEBPS/chapter.xhtml": _MULTI_DOCUMENT_START_MARKER_SECOND_XHTML,
+        },
+    )
+    chapter = epub.ChapterReference(
+        number=1, title="Kapitel 1", documents=["OEBPS/front.xhtml", "OEBPS/chapter.xhtml"]
+    )
+
+    result = epub.read_chapter(path, _TEST_BOOK, chapter)
+
+    assert "Vorspann-Absatz" not in result.text
+    assert result.text == "Erster echter Satz nach der Startmarke."
 
 
 def test_read_chapter_leaves_text_unchanged_without_a_gutenberg_marker(tmp_path: Path) -> None:
