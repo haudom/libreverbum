@@ -1776,6 +1776,16 @@ leeres Ergebnis (Regel 13):
   dass der Code läuft, keine Fremdquelle zeigt, ob er stimmt. Geschlossen wäre der Punkt,
   sobald eine Datei mit Calibre-`_split_NNN`-Dokumenten in `tools/` liegt und `needs_epub`
   sie einschließt
+- **Der Pfad „Ebene > 0" der Einrückung läuft gegen keine Fremdquelle.** `sherlock.epub`
+  nennt roh 18 Navigationseinträge, davon 3 auf Ebene 1 (`I./II./III.` unter „I. A SCANDAL
+  IN BOHEMIA", alle über `#anker` auf dasselbe Dokument wie ihr Elternteil) — nach
+  `_deduplicate_by_target` liegen alle 14 Kapitel auf Ebene 0. `dorian_gray.epub` führt 24
+  `navPoint`, sämtlich unmittelbar unter `navMap`, alle 22 Kapitel ebenfalls Ebene 0
+  (nachgeprüft 28.08.2026). Beide Dateien nehmen zudem den `toc.ncx`-Zweig; `_read_nav`
+  bleibt damit ungeprüft gegen jede echte Datei. Dieselbe Lage wie bei den beiden Punkten
+  oben. Geschlossen wäre der Punkt, sobald eine Datei mit tatsächlich verschachtelter
+  Navigation über eigene Dokumente (nicht bloß Anker im selben Dokument) in `tools/` liegt
+  und `needs_epub` sie einschließt
 - **Anker innerhalb eines Dokuments.** Ob Navigationsziele mit `#anker` als eigene Kapitel
   zu behandeln sind, ist offen. Der Fall liegt vor — die Unterpunkte `I./II./III.` in
   `sherlock.epub` sind genau das (Nachtrag 28.08.2026) —, verlangt aber, innerhalb eines

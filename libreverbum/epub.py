@@ -255,43 +255,46 @@ def _read_nav(archive: zipfile.ZipFile, href: str) -> list[tuple[str, str, int]]
     `epub:type="toc"`) — Beschriftung, Ziel und Gliederungsebene (`level`) je Eintrag,
     Anker (`#…`) abgeschnitten. Kann Wiederholungen enthalten (technik.md §8,
     Sherlock-Fall); die Zusammenführung auf eindeutige Ziele übernimmt
-    `_deduplicate_by_target`. `level` ist die Zahl der umschließenden `<ol>` innerhalb des
-    `nav`, oberste Ebene 0 (technik.md §8, Nachtrag 28.08.2026, „Unterkapitel gibt es")."""
+    `_deduplicate_by_target`. `level` ist die Zahl der umschließenden `<ol>`/`<ul>`
+    innerhalb des `nav`, minus eins und mindestens 0 — oberste Ebene 0 (technik.md §8,
+    Nachtrag 28.08.2026, „Unterkapitel gibt es").
+
+    Durchläuft **jedes** `<a>` im `nav` mit `.iter()`, statt seine Struktur Schritt für
+    Schritt abzuschreiten (Befund 1, Durchsicht 162e439): Ein `<a>`, das nicht direktes
+    Kind seines `<li>` ist (in ein `<p>` verpackt), ein verschachteltes `<ol>` hinter einem
+    umhüllenden `<div>` oder zwei Geschwister-`<ol>` im selben `<li>` verlören ihren
+    Eintrag sonst lautlos — kein Fehler, kein `notice`, kein `uncertain` (Regel 13). Die
+    Norm erlaubt alle drei Formen."""
     root = ElementTree.fromstring(archive.read(href))
     base = posixpath.dirname(href)
     entries: list[tuple[str, str, int]] = []
+    list_tags = {f"{{{_NS['xhtml']}}}ol", f"{{{_NS['xhtml']}}}ul"}
     for nav in root.iter(f"{{{_NS['xhtml']}}}nav"):
         # (Befund 3, Review Runde 1): epub:type ist eine leerzeichengetrennte Liste, nicht
         # ein einzelner Wert — "toc bodymatter" trägt ebenso ein Inhaltsverzeichnis. Zwei
         # Zeilen weiter oben (properties) wird deshalb schon mit .split() verglichen.
         if "toc" not in (nav.get(_EPUB_TYPE_ATTRIBUTE) or "").split():
             continue
-        top_level_list = nav.find(f"{{{_NS['xhtml']}}}ol")
-        if top_level_list is not None:
-            _read_nav_list(top_level_list, 0, base, entries)
-        break
-    return entries
-
-
-def _read_nav_list(
-    ordered_list: ElementTree.Element, level: int, base: str, entries: list[tuple[str, str, int]]
-) -> None:
-    """Tiefensuche in Dokumentreihenfolge über ein `<ol>` des Navigationsdokuments
-    (technik.md §8, Nachtrag 28.08.2026): je `<li>` sein eigener Eintrag, dazu — falls
-    vorhanden — sein verschachteltes `<ol>` eine Ebene tiefer. `_deduplicate_by_target`
-    stützt sich auf die unveränderte Reihenfolge (Sherlock-Fall 18→14)."""
-    for item in ordered_list.findall(f"{{{_NS['xhtml']}}}li"):
-        anchor = item.find(f"{{{_NS['xhtml']}}}a")
-        if anchor is not None:
+        # Elternabbild statt Tiefensuche (Befund 1, Durchsicht 162e439): Jedes Element
+        # innerhalb von nav zeigt so auf seinen unmittelbaren Elternknoten, unabhängig
+        # davon, wie tief oder über welchen Umweg es dort hängt.
+        parents = {child: parent for parent in nav.iter() for child in parent}
+        for anchor in nav.iter(f"{{{_NS['xhtml']}}}a"):
+            enclosing_lists = 0
+            ancestor = parents.get(anchor)
+            while ancestor is not None:
+                if ancestor.tag in list_tags:
+                    enclosing_lists += 1
+                ancestor = parents.get(ancestor)
+            level = max(enclosing_lists - 1, 0)
             # (Befund 1, Review Runde 1): erst das Fragment abschneiden, dann dekodieren —
             # sonst findet der Vergleich gegen archive.namelist() das Dokument nicht.
             target = unquote((anchor.get("href") or "").split("#", 1)[0])
             label = " ".join("".join(anchor.itertext()).split())
             if label and target:
                 entries.append((label, posixpath.normpath(posixpath.join(base, target)), level))
-        nested_list = item.find(f"{{{_NS['xhtml']}}}ol")
-        if nested_list is not None:
-            _read_nav_list(nested_list, level + 1, base, entries)
+        break
+    return entries
 
 
 def _read_ncx(archive: zipfile.ZipFile, href: str) -> list[tuple[str, str, int]]:
@@ -313,7 +316,9 @@ def _read_ncx_points(
     parent: ElementTree.Element, level: int, base: str, entries: list[tuple[str, str, int]]
 ) -> None:
     """Tiefensuche in Dokumentreihenfolge über verschachtelte `navPoint` (technik.md §8,
-    Nachtrag 28.08.2026) — derselbe Aufbau wie `_read_nav_list`."""
+    Nachtrag 28.08.2026): je `navPoint` sein eigener Eintrag, dazu — falls vorhanden —
+    seine verschachtelten `navPoint` eine Ebene tiefer. `_deduplicate_by_target` stützt
+    sich auf die unveränderte Reihenfolge (Sherlock-Fall 18→14)."""
     for point in parent.findall("ncx:navPoint", _NS):
         label_element = point.find("ncx:navLabel/ncx:text", _NS)
         content = point.find("ncx:content", _NS)
@@ -399,11 +404,12 @@ def _resolve_chapters(
         notice = None
     else:
         # technik.md §8, Nachtrag 28.08.2026, „Was die Kapitelliste zusätzlich zeigt":
-        # Ohne Navigation stammt keine Hierarchie aus dem Buch — level bleibt 0 (Vorgabe
-        # von ChapterReference.level, hier nicht mitgeschrieben).
+        # Ohne Navigation stammt keine Hierarchie aus dem Buch.
         documents = [document for document in package.spine_documents if document in names]
         chapters = [
-            ChapterReference(number=number, title=f"Kapitel {number}", documents=[document])
+            ChapterReference(
+                number=number, title=f"Kapitel {number}", documents=[document], level=0
+            )
             for number, document in enumerate(documents, start=1)
         ]
         notice = NAVIGATION_MISSING_NOTICE

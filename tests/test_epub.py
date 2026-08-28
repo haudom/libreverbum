@@ -446,6 +446,186 @@ def test_deduplicate_by_target_keeps_the_first_entrys_level_too() -> None:
     assert labels["part1.xhtml"] == ("Teil I", 0)
 
 
+# ------------- Lokale Vorrichtung: Bauformen, die die Tiefensuche aus 162e439 lautlos verlor
+
+_LOST_ENTRIES_OPF = """<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="bookid">urn:uuid:lost-entries-test</dc:identifier>
+    <dc:title>Buch mit ungewoehnlicher Navigation</dc:title>
+    <dc:creator>Test Autorin</dc:creator>
+  </metadata>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="chap1" href="c1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chap2" href="c2.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chap3" href="c3.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="chap1"/>
+    <itemref idref="chap2"/>
+    <itemref idref="chap3"/>
+  </spine>
+</package>
+"""
+
+
+def _write_lost_entries_epub(path: Path, nav_xhtml: str) -> None:
+    """Baut ein Mini-EPUB mit drei Kapiteln und der übergebenen Navigation — gemeinsame
+    Grundlage für die Bauformen, die die Tiefensuche aus 162e439 lautlos verlor (Durchsicht
+    162e439, Befund 1 und 2)."""
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        archive.writestr("META-INF/container.xml", _REORDERED_NAV_CONTAINER_XML)
+        archive.writestr("OEBPS/content.opf", _LOST_ENTRIES_OPF)
+        archive.writestr("OEBPS/nav.xhtml", nav_xhtml)
+        archive.writestr("OEBPS/c1.xhtml", _reordered_nav_chapter_xhtml("Kapitel 1"))
+        archive.writestr("OEBPS/c2.xhtml", _reordered_nav_chapter_xhtml("Kapitel 2"))
+        archive.writestr("OEBPS/c3.xhtml", _reordered_nav_chapter_xhtml("Kapitel 3"))
+
+
+# Kapitel 2 steht nicht als direktes Kind seines <li>, sondern in ein <p> verpackt — nach
+# der Norm zulässig, weil epub:type="toc" keine Kindform des <a> vorschreibt.
+_ANCHOR_WRAPPED_IN_PARAGRAPH_NAV_XHTML = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>Navigation</title></head>
+<body>
+  <nav epub:type="toc">
+    <ol>
+      <li><a href="c1.xhtml">Kapitel 1</a></li>
+      <li><p><a href="c2.xhtml">Kapitel 2</a></p></li>
+      <li><a href="c3.xhtml">Kapitel 3</a></li>
+    </ol>
+  </nav>
+</body>
+</html>
+"""
+
+
+def test_a_navigation_anchor_wrapped_in_a_paragraph_is_not_lost(tmp_path: Path) -> None:
+    """Durchsicht 162e439, Befund 1: `<a>` als Kind eines `<p>` statt direktes Kind seines
+    `<li>` ist EPUB-3-normkonform. Die Tiefensuche aus 162e439 fand mit `item.find(a)` nur
+    direkte Kinder und verlor „Kapitel 2" lautlos — sein Dokument wanderte über
+    `document_groups[-1].append(document)` ins vorige Kapitel."""
+    path = tmp_path / "anchor_in_paragraph.epub"
+    _write_lost_entries_epub(path, _ANCHOR_WRAPPED_IN_PARAGRAPH_NAV_XHTML)
+
+    result = epub.read_structure(path)
+
+    assert [chapter.title for chapter in result.chapters] == ["Kapitel 1", "Kapitel 2", "Kapitel 3"]
+    assert [chapter.documents for chapter in result.chapters] == [
+        ["OEBPS/c1.xhtml"],
+        ["OEBPS/c2.xhtml"],
+        ["OEBPS/c3.xhtml"],
+    ]
+
+
+# Kapitel 2 steht in einem verschachtelten <ol>, das hinter einem umhüllenden <div> liegt —
+# das <ol> ist damit kein direktes Kind mehr seines <li>.
+_NESTED_OL_WRAPPED_IN_DIV_NAV_XHTML = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>Navigation</title></head>
+<body>
+  <nav epub:type="toc">
+    <ol>
+      <li><a href="c1.xhtml">Kapitel 1</a>
+        <div>
+          <ol>
+            <li><a href="c2.xhtml">Kapitel 2</a></li>
+          </ol>
+        </div>
+      </li>
+      <li><a href="c3.xhtml">Kapitel 3</a></li>
+    </ol>
+  </nav>
+</body>
+</html>
+"""
+
+
+def test_a_nested_ol_wrapped_in_a_div_is_not_lost(tmp_path: Path) -> None:
+    """Durchsicht 162e439, Befund 1: Ein verschachteltes `<ol>` hinter einem umhüllenden
+    `<div>` ist kein direktes Kind mehr seines `<li>`. Die Tiefensuche aus 162e439 suchte
+    mit `item.find(ol)` nur direkte Kinder und verlor den **ganzen Kindast** — hier
+    „Kapitel 2"."""
+    path = tmp_path / "nested_ol_in_div.epub"
+    _write_lost_entries_epub(path, _NESTED_OL_WRAPPED_IN_DIV_NAV_XHTML)
+
+    result = epub.read_structure(path)
+
+    assert [chapter.title for chapter in result.chapters] == ["Kapitel 1", "Kapitel 2", "Kapitel 3"]
+    assert [chapter.level for chapter in result.chapters] == [0, 1, 0]
+
+
+# Kapitel 2 und Kapitel 3 stehen in zwei Geschwister-<ol> im selben <li> — die Norm
+# schränkt die Zahl verschachtelter <ol> je <li> nicht auf eines ein.
+_TWO_SIBLING_OL_NAV_XHTML = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>Navigation</title></head>
+<body>
+  <nav epub:type="toc">
+    <ol>
+      <li><a href="c1.xhtml">Kapitel 1</a>
+        <ol>
+          <li><a href="c2.xhtml">Kapitel 2</a></li>
+        </ol>
+        <ol>
+          <li><a href="c3.xhtml">Kapitel 3</a></li>
+        </ol>
+      </li>
+    </ol>
+  </nav>
+</body>
+</html>
+"""
+
+
+def test_two_sibling_ol_elements_in_the_same_li_are_both_read(tmp_path: Path) -> None:
+    """Durchsicht 162e439, Befund 1: Zwei Geschwister-`<ol>` im selben `<li>` sind erlaubt.
+    `item.find(ol)` der Tiefensuche aus 162e439 liefert nur das erste Fundstück — das
+    zweite verschwand vollständig, hier „Kapitel 3"."""
+    path = tmp_path / "two_sibling_ol.epub"
+    _write_lost_entries_epub(path, _TWO_SIBLING_OL_NAV_XHTML)
+
+    result = epub.read_structure(path)
+
+    assert [chapter.title for chapter in result.chapters] == ["Kapitel 1", "Kapitel 2", "Kapitel 3"]
+    assert [chapter.level for chapter in result.chapters] == [0, 1, 1]
+
+
+# Die oberste Liste ist ein <ul> statt eines <ol> — beides sind laut EPUB-3-Norm zulässige
+# Listenelemente für ein Navigationsdokument.
+_TOP_LEVEL_UL_NAV_XHTML = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>Navigation</title></head>
+<body>
+  <nav epub:type="toc">
+    <ul>
+      <li><a href="c1.xhtml">Kapitel 1</a></li>
+      <li><a href="c2.xhtml">Kapitel 2</a></li>
+      <li><a href="c3.xhtml">Kapitel 3</a></li>
+    </ul>
+  </nav>
+</body>
+</html>
+"""
+
+
+def test_a_top_level_ul_instead_of_ol_is_recognized(tmp_path: Path) -> None:
+    """Befund 2, schließt sich mit Befund 1: `nav.find(...ol)` der Fassung aus 162e439 fand
+    ein `<ul>` als oberste Liste nicht und lieferte eine leere Kapitelliste — die Datei
+    fiel auf `toc.ncx` oder die spine samt Hinweis zurück, obwohl eine EPUB-3-Navigation
+    vorhanden war."""
+    path = tmp_path / "top_level_ul.epub"
+    _write_lost_entries_epub(path, _TOP_LEVEL_UL_NAV_XHTML)
+
+    result = epub.read_structure(path)
+
+    assert result.notice is None
+    assert [chapter.title for chapter in result.chapters] == ["Kapitel 1", "Kapitel 2", "Kapitel 3"]
+    assert [chapter.level for chapter in result.chapters] == [0, 0, 0]
+
+
 # ------------------------ Lokale Vorrichtung: Dokument vor dem ersten Navigationsziel
 
 _LEADING_DOCUMENT_OPF = """<?xml version="1.0" encoding="UTF-8"?>
