@@ -541,8 +541,9 @@ betroffenen Testdateien laufen lassen" verkleinert das Problem, löst es aber ni
 
 > **Regel:** Die Durchsicht prüft gegen `git archive <commit>` in einem Wegwerfordner, nicht
 > gegen den Arbeitsbaum. `tools/en-de.sqlite3` und `tools/*.epub` werden dorthin mitkopiert
-> — ohne sie überspringt `pytest` rund zwanzig Tests (`needs_dictionary`, `needs_epub`)
-> stillschweigend, und die Durchsicht hält für grün, was gar nicht gelaufen ist.
+> — ohne sie überspringt `pytest` 32 Tests (`needs_dictionary`, `needs_epub`,
+> `needs_calibre_split_epub`) stillschweigend, und die Durchsicht hält für grün, was gar
+> nicht gelaufen ist.
 
 Das Vorgehen hat sich in drei Durchsichten und drei Abnahmeläufen im August 2026 bewährt und
 kostet einen Befehl. Es ersetzt nicht das Tor auf der Seite des Bauenden (CLAUDE.md, „Prüfen

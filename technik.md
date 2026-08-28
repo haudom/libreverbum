@@ -1699,7 +1699,7 @@ sind, und `read_chapter` liest genau eines davon:
 | Book 1 DUNE | 78.774 W (3 Dokumente) | **20.604 W** |
 | Book Two MUAD’DIB | 63.513 W (2 Dokumente) | 29.341 W |
 | Book Three THE PROPHET | 64.637 W (2 Dokumente) | 27.383 W |
-| **gesamt** | **206.930 W** | **rund 77.500 W (37 %)** |
+| **gesamt** | **206.929 W** | **rund 77.500 W (37 %)** |
 
 Die übrigen 63 % gehören zu keinem Kapitel und sind über das Programm überhaupt nicht
 erreichbar — ohne Meldung, bei vollständig plausibler Kapitelliste, die Abnahmekriterium 1
@@ -1739,7 +1739,8 @@ statt ihn zu erklären:
   der vor der Auswahl ohnehin gefragt wird: wie viel Arbeit wird das? Der Einwand aus dem
   Docstring von `ChapterReference` — das Auswählen soll nicht das ganze Buch parsen — trägt
   dafür nicht: Gemessen an Dune am 28.08.2026 kostet `read_structure` 2 ms, das Durchparsen
-  **aller** zehn Inhaltsdokumente (203.738 Wörter) **164 ms**
+  **aller** zehn Inhaltsdokumente (206.930 Wörter, `tools/epub_check.py`) **164 ms** — die
+  Tabelle oben zählt dagegen nur die acht Dokumente der vier Kapitel (206.929 W, Kern)
 - **Einrückung, wo die Navigation eine Ebene hat.** Eine flache, durchlaufend nummerierte
   Liste bleibt es trotzdem: Die Nummer zählt weiter in der Reihenfolge der `spine`
   (`entities.Chapter`, Docstring zu `number`), Elternzeilen bleiben wählbar, weil sie

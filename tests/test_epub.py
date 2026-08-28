@@ -2287,7 +2287,16 @@ def test_dune_navigation_is_used_without_falling_back_to_the_spine(
     real_dune_epub_path: Path,
 ) -> None:
     """technik.md §8: Dune trägt eine gültige `toc.ncx`-Navigation — `notice` bleibt
-    `None`, es ist kein spine-Rückfall."""
+    `None`, es ist kein spine-Rückfall. Schreibt zusätzlich die vollständige Titelliste
+    fest (Durchsicht 3997c8b, Befund 2): Ginge das erste Kapitel „Dune" (`OEBPS/part1.xhtml`,
+    5 Wörter) verloren, blieben die übrigen fünf `needs_calibre_split_epub`-Tests grün,
+    weil keiner von ihnen die Kapitelanzahl zusichert."""
     result = epub.read_structure(real_dune_epub_path)
 
     assert result.notice is None
+    assert [chapter.title for chapter in result.chapters] == [
+        "Dune",
+        "Book 1 DUNE",
+        "Book Two MUAD’DIB",
+        "Book Three THE PROPHET",
+    ]

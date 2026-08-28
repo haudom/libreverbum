@@ -30,7 +30,7 @@ Die Marke `needs_calibre_split_epub` (technik.md §8, Nachtrag 28.08.2026) steht
 `tools/dune.epub` ist eine Verlagsdatei, kein Gutenberg-Text, den sich jeder beschaffen
 kann, und deckt einen anderen Fall ab — Calibre zerlegt große Inhaltsdokumente in
 `…_split_000`, `…_split_001`, `…`, wovon die Navigation nur auf das jeweils erste Stück
-zeigt. Eine eigene Marke, damit ihr Fehlen nicht die rund 25 Sherlock-/Dorian-Gray-Tests
+zeigt. Eine eigene Marke, damit ihr Fehlen nicht die vierzehn Sherlock-/Dorian-Gray-Tests
 mit übersprungen lässt, die `needs_epub` tragen.
 """
 
