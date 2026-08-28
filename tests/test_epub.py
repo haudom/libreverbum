@@ -1499,3 +1499,135 @@ def test_read_chapter_reads_a_real_story_chapter_unchanged(
 
     assert chapter.text.startswith("I.\nA SCANDAL IN BOHEMIA")
     assert "Sherlock Holmes" in chapter.text
+
+
+# ================================================= bauplan.md T12b: Wortumfang je Kapitel
+
+
+def test_count_chapter_words_matches_what_read_chapter_actually_returns(
+    mini_epub_with_navigation: Path,
+) -> None:
+    """technik.md §8, Nachtrag 28.08.2026, „Was die Kapitelliste zusätzlich zeigt": Für
+    jedes Kapitel stimmt der gezählte Umfang mit der Zahl der Wörter überein, die
+    `read_chapter` für dasselbe Kapitel tatsächlich liefert — die Zusicherung, die Anzeige
+    und Wirklichkeit aneinanderbindet."""
+    structure = epub.read_structure(mini_epub_with_navigation)
+
+    counts = epub.count_chapter_words(mini_epub_with_navigation, structure.chapters)
+
+    for chapter in structure.chapters:
+        actual_text = epub.read_chapter(mini_epub_with_navigation, structure.book, chapter).text
+        assert counts[chapter.number] == len(epub._WORD.findall(actual_text))
+
+
+@pytest.mark.needs_epub
+def test_count_chapter_words_matches_read_chapter_for_real_books(
+    real_epub_paths: dict[str, Path],
+) -> None:
+    """Dieselbe Zusicherung wie oben, gegen die echten Dateien geprüft (dokumentation.md
+    §5, „Was über den Inhalt einer Fremdquelle behauptet wird, wird zusätzlich gegen das
+    echte Gegenüber geprüft"). Ein Kapitel wie Sherlocks „THE FULL PROJECT GUTENBERG®
+    LICENSE" (nur Vorspann/Impressum) lehnt `read_chapter` selbst ab (Regel 13) — für die
+    Zählung ist sein Umfang echt `0`, siehe
+    `test_count_chapter_words_reports_zero_not_unknown_for_a_picture_book_chapter`."""
+    for path in real_epub_paths.values():
+        structure = epub.read_structure(path)
+
+        counts = epub.count_chapter_words(path, structure.chapters)
+
+        for chapter in structure.chapters:
+            count = counts[chapter.number]
+            try:
+                actual_text = epub.read_chapter(path, structure.book, chapter).text
+            except ValueError:
+                assert count in (0, None), (
+                    f"{path}: Kapitel {chapter.number} „{chapter.title}“ liefert keinen "
+                    f"Text, der gezählte Umfang ({count}) ist aber weder 0 noch unbekannt."
+                )
+                continue
+            assert count == len(epub._WORD.findall(actual_text)), (
+                f"{path}: Kapitel {chapter.number} „{chapter.title}“"
+            )
+
+
+def test_count_chapter_words_counts_every_document_of_a_multi_document_chapter(
+    mini_epub_with_navigation: Path,
+) -> None:
+    """technik.md §8, Nachtrag 28.08.2026, „ein Kapitel ist nicht ein Dokument": ein
+    mehrdokumentiges Kapitel wird über alle seine Dokumente gezählt, nicht nur über sein
+    Navigationsziel — chapter2.xhtml und chapter3.xhtml gehören beide zum zweiten Kapitel
+    dieser Vorrichtung (Kommentar bei `_NAV_ENTRIES` in tests/conftest.py)."""
+    structure = epub.read_structure(mini_epub_with_navigation)
+    second_chapter = structure.chapters[1]
+    assert second_chapter.documents == ["OEBPS/chapter2.xhtml", "OEBPS/chapter3.xhtml"]
+    only_first_document = epub.ChapterReference(
+        number=second_chapter.number,
+        title=second_chapter.title,
+        documents=second_chapter.documents[:1],
+    )
+
+    full_count = epub.count_chapter_words(mini_epub_with_navigation, [second_chapter])
+    partial_count = epub.count_chapter_words(mini_epub_with_navigation, [only_first_document])
+
+    full = full_count[second_chapter.number]
+    partial = partial_count[second_chapter.number]
+    assert full is not None
+    assert partial is not None
+    assert full > partial
+
+
+def test_count_chapter_words_reports_unknown_not_zero_for_a_missing_document(
+    tmp_path: Path,
+) -> None:
+    """technik.md §8, Nachtrag 28.08.2026: Ein Kapitel mit fehlendem Dokument im Archiv
+    liefert unbekannt (`None`), nicht `0` — `0` sähe aus wie ein leeres Kapitel und wäre
+    der stille Fehlschlag aus Regel 13. Die übrigen Kapitel bekommen trotzdem ihre Zahl."""
+    path = tmp_path / "one_missing_document.epub"
+    _write_single_document_epub(path, document="OEBPS/chapter1.xhtml", xhtml=_MARKUP_NOISE_XHTML)
+    chapters = [
+        epub.ChapterReference(number=1, title="Erstes Kapitel", documents=["OEBPS/chapter1.xhtml"]),
+        epub.ChapterReference(
+            number=2, title="Zweites Kapitel", documents=["OEBPS/chapter2.xhtml"]
+        ),
+    ]
+
+    counts = epub.count_chapter_words(path, chapters)
+
+    assert counts[1] == 11
+    assert counts[2] is None
+
+
+def test_count_chapter_words_reports_zero_not_unknown_for_a_picture_book_chapter(
+    tmp_path: Path,
+) -> None:
+    """technik.md §8, „Was gemeldet und nicht verarbeitet wird": Ein Kapitel ohne
+    Fließtext (Bildband) hat echt den Umfang `0` — das ist die Wahrheit, keine unbekannte
+    Größe, obwohl `read_chapter` dasselbe Kapitel als Bildband ablehnt."""
+    path = tmp_path / "picture_book.epub"
+    _write_single_document_epub(path, document="OEBPS/page1.xhtml", xhtml=_IMAGE_ONLY_XHTML)
+    chapters = [epub.ChapterReference(number=1, title="Bildseite", documents=["OEBPS/page1.xhtml"])]
+
+    counts = epub.count_chapter_words(path, chapters)
+
+    assert counts[1] == 0
+
+
+def test_count_chapter_words_opens_the_archive_only_once(
+    monkeypatch: pytest.MonkeyPatch, mini_epub_with_navigation: Path
+) -> None:
+    """technik.md §8, Nachtrag 28.08.2026: Das Archiv wird einmal geöffnet, nicht einmal
+    je Kapitel — sonst kostete jedes zusätzliche Kapitel eine weitere Archivöffnung, obwohl
+    genau das vermieden werden soll (technik.md §8, „Der Einwand … trägt dafür nicht")."""
+    structure = epub.read_structure(mini_epub_with_navigation)
+    original_zip_file = zipfile.ZipFile
+    opened: list[int] = []
+
+    def _counting_zip_file(path: Path) -> zipfile.ZipFile:
+        opened.append(1)
+        return original_zip_file(path)
+
+    monkeypatch.setattr(zipfile, "ZipFile", _counting_zip_file)
+
+    epub.count_chapter_words(mini_epub_with_navigation, structure.chapters)
+
+    assert len(opened) == 1

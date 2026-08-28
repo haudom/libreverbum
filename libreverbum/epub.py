@@ -51,6 +51,15 @@ Text des Kapitels, weil die Marken nicht an einer Dokumentgrenze haltmachen müs
 „Neuer Befund: epub:type gibt es in der Praxis nicht"); außerhalb von Project Gutenberg
 bleibt die Trennung deshalb unversucht und der Text unverändert — eine allgemeine
 Schwelle ist durch keine Messung belegt (Regel 14).
+
+`count_chapter_words` liefert dazu den Umfang je Kapitel, für die Anzeige vor der Auswahl
+(technik.md §8, Nachtrag 28.08.2026, „Was die Kapitelliste zusätzlich zeigt"): denselben
+Umfang, den `read_chapter` für dasselbe Kapitel tatsächlich liefert — beide teilen sich die
+Strecke vom Archiv zum Kapiteltext, damit Anzeige und Wirklichkeit nicht auseinanderlaufen
+(Regel 14). Anders als `read_chapter` bricht sie bei einem einzelnen unlesbaren Kapitel
+nicht ab: Sein Umfang ist dann unbekannt (`None`), nicht `0` — die Liste erscheint trotzdem
+vollständig (Regel 13). Absichtlich nicht in `read_structure`: `pipeline.run_chapter`
+braucht die Zählung nie und soll dafür nicht bei jedem Lauf das ganze Buch durchparsen.
 """
 
 from __future__ import annotations
@@ -490,6 +499,68 @@ def _encrypted_error(path: Path) -> ValueError:
     )
 
 
+def _open_archive_for_chapter(path: Path) -> zipfile.ZipFile:
+    """Öffnet `path` als ZIP-Archiv mit einer deutschen Meldung statt des englischen
+    `zipfile.BadZipFile` (bauplan.md T12b) — gemeinsame erste Zeile von `read_chapter` und
+    `count_chapter_words`.
+
+    (Befund 12, Review Runde 2, nachgezogen): dieselben zwei Zeilen wie in `read_structure`
+    — sonst entkäme hier der englische `FileNotFoundError` der Standardbibliothek.
+    (Befund 11, Review Runde 2, nachgezogen): nur das Öffnen des Archivs steht im try —
+    sonst meldete eine kaputte CRC-Summe beim späteren `archive.read()` fälschlich „kein
+    ZIP-Archiv"."""
+    if not path.is_file():
+        raise FileNotFoundError(f"EPUB nicht lesbar: {path}")
+    try:
+        return zipfile.ZipFile(path)
+    except zipfile.BadZipFile as error:
+        raise ValueError(f"{path}: keine gültige EPUB-Datei (kein ZIP-Archiv).") from error
+
+
+def _read_chapter_documents(
+    archive: zipfile.ZipFile, names: set[str], path: Path, chapter: ChapterReference
+) -> list[str]:
+    """Liest und dekodiert den Fließtext jedes Dokuments eines Kapitels, in
+    `spine`-Reihenfolge — die Strecke vom Archiv zum noch ungesäuberten Kapiteltext, die
+    sich `read_chapter` und `count_chapter_words` teilen (technik.md §8, Nachtrag
+    28.08.2026, „Was die Kapitelliste zusätzlich zeigt"): Zwei getrennte Umsetzungen dieser
+    Strecke ließen Anzeige und Wirklichkeit auseinanderdriften (Regel 14). Bricht mit einer
+    deutschen Meldung ab (Regel 13), wenn eines der Kapiteldokumente im Archiv fehlt, nicht
+    UTF-8 kodiert ist, `META-INF/encryption.xml` es als verschlüsselt nennt oder sein
+    ZIP-Eintrag selbst passwortgeschützt ist (Kopierschutz wird nicht umgangen, konzept.md
+    Schritt 1) — kein Dokument wird dabei still übersprungen. Ob der so gelesene, noch
+    unzusammengefügte Text danach überhaupt Fließtext enthält, prüfen die Aufrufer je nach
+    Zweck getrennt: `read_chapter` lehnt einen leeren Text ab, `count_chapter_words` zählt
+    ihn als `0`."""
+    document_texts: list[str] = []
+    for document in chapter.documents:
+        if _encrypts_document(archive, names, document):
+            raise _encrypted_error(path)
+        # (Befund 7, Review Runde 2): sonst entkäme hier ein englischer KeyError, wenn
+        # ein Kapiteldokument im Archiv fehlt.
+        if document not in names:
+            raise ValueError(
+                f"{path}: {document} — ein Dokument des Kapitels „{chapter.title}“ fehlt im Archiv."
+            )
+        try:
+            raw = archive.read(document)
+        except RuntimeError as error:
+            # (Befund 7, Review Runde 2): der dritte Ablehnfall in anderer Gestalt — ein
+            # passwortgeschützter ZIP-Eintrag ohne META-INF/encryption.xml.
+            raise _encrypted_error(path) from error
+
+        # (Befund 8, Review Runde 2): kein errors="replace" — sonst landete U+FFFD
+        # still im Wortschatz statt eines sichtbaren Fehlschlags.
+        try:
+            source = raw.decode("utf-8")
+        except UnicodeDecodeError as error:
+            raise ValueError(
+                f"{path}: {document} ist nicht UTF-8 kodiert — der Text wäre still beschädigt."
+            ) from error
+        document_texts.append(_extract_flowing_text(source))
+    return document_texts
+
+
 def read_chapter(path: Path, book: Book, chapter: ChapterReference) -> Chapter:
     """Liest den zusammengefügten Fließtext eines Kapitels — aller seiner Dokumente, in
     `spine`-Reihenfolge (bauplan.md T12b, technik.md §8, Nachtrag 28.08.2026).
@@ -505,47 +576,9 @@ def read_chapter(path: Path, book: Book, chapter: ChapterReference) -> Chapter:
     Text: Ein Trennblatt ohne eigene Wörter zwischen zwei Textdokumenten darf das Kapitel
     dafür nicht ablehnen.
     """
-    # (Befund 12, Review Runde 2): dieselben zwei Zeilen wie in read_structure — sonst
-    # entkäme hier der englische FileNotFoundError der Standardbibliothek.
-    if not path.is_file():
-        raise FileNotFoundError(f"EPUB nicht lesbar: {path}")
-
-    # (Befund 11, Review Runde 2): nur das Öffnen des Archivs steht im try — sonst meldete
-    # eine kaputte CRC-Summe beim späteren archive.read() fälschlich „kein ZIP-Archiv".
-    try:
-        archive = zipfile.ZipFile(path)
-    except zipfile.BadZipFile as error:
-        raise ValueError(f"{path}: keine gültige EPUB-Datei (kein ZIP-Archiv).") from error
-
-    document_texts: list[str] = []
-    with archive:
+    with _open_archive_for_chapter(path) as archive:
         names = set(archive.namelist())
-        for document in chapter.documents:
-            if _encrypts_document(archive, names, document):
-                raise _encrypted_error(path)
-            # (Befund 7, Review Runde 2): sonst entkäme hier ein englischer KeyError, wenn
-            # ein Kapiteldokument im Archiv fehlt.
-            if document not in names:
-                raise ValueError(
-                    f"{path}: {document} — ein Dokument des Kapitels „{chapter.title}“ "
-                    "fehlt im Archiv."
-                )
-            try:
-                raw = archive.read(document)
-            except RuntimeError as error:
-                # (Befund 7, Review Runde 2): der dritte Ablehnfall in anderer Gestalt — ein
-                # passwortgeschützter ZIP-Eintrag ohne META-INF/encryption.xml.
-                raise _encrypted_error(path) from error
-
-            # (Befund 8, Review Runde 2): kein errors="replace" — sonst landete U+FFFD
-            # still im Wortschatz statt eines sichtbaren Fehlschlags.
-            try:
-                source = raw.decode("utf-8")
-            except UnicodeDecodeError as error:
-                raise ValueError(
-                    f"{path}: {document} ist nicht UTF-8 kodiert — der Text wäre still beschädigt."
-                ) from error
-            document_texts.append(_extract_flowing_text(source))
+        document_texts = _read_chapter_documents(archive, names, path, chapter)
 
     # Dieselbe Absatzgrenze wie zwischen zwei Blockelementen eines Dokuments (extraction
     # braucht sie für Belegsätze) — ein mehrteiliges Kapitel (technik.md §8, Nachtrag
@@ -577,3 +610,43 @@ def read_chapter(path: Path, book: Book, chapter: ChapterReference) -> Chapter:
         )
 
     return Chapter(book=book, number=chapter.number, title=chapter.title, text=text)
+
+
+def count_chapter_words(path: Path, chapters: list[ChapterReference]) -> dict[int, int | None]:
+    """Wortumfang je Kapitel, für die Anzeige vor der Auswahl (technik.md §8, Nachtrag
+    28.08.2026, „Was die Kapitelliste zusätzlich zeigt"): genau die Wörter des Textes, den
+    `read_chapter` für dasselbe Kapitel tatsächlich liefert — beide teilen sich über
+    `_read_chapter_documents` dieselbe Strecke vom Archiv zum Kapiteltext, sonst wiche die
+    angezeigte Zahl von dem ab, was das Kapitel beim Lesen wirklich liefert (Regel 13).
+    Öffnet das Archiv einmal für alle Kapitel, nicht einmal je Kapitel — anders als das
+    Durchparsen selbst (164 ms bei Dune) ist `read_structure` mit 2 ms billig genug, dass
+    diese Funktion eigenständig bleibt, statt in `read_structure` einzuziehen: `pipeline.
+    run_chapter` ruft `read_structure` bei jedem Lauf auf und braucht die Zählung nie.
+
+    Lässt sich ein Kapitel nicht lesen — eines seiner Dokumente fehlt im Archiv, ist nicht
+    UTF-8 kodiert, `META-INF/encryption.xml` nennt es als verschlüsselt oder sein
+    ZIP-Eintrag ist selbst passwortgeschützt —, ist sein Umfang unbekannt: `None` im
+    Ergebnis statt der stillen Falschaussage `0`, die wie ein leeres Kapitel aussähe (Regel
+    13). Anders als `read_chapter` bricht diese Funktion dabei nicht ab — die übrigen
+    Kapitel bekommen trotzdem ihre Zahl. Hat ein Kapitel dagegen wirklich keinen Fließtext
+    (ein Bildband) oder besteht es nach dem Aussteuern von Vorspann und Impressum nur noch
+    aus ihnen, ist `0` die Wahrheit und steht auch so im Ergebnis — die Meldungen, die
+    `read_chapter` für genau diese beiden Fälle wirft, bleiben unverändert; wer ein solches
+    Kapitel auswählt, bekommt sie weiterhin beim Lesen.
+    """
+    counts: dict[int, int | None] = {}
+    with _open_archive_for_chapter(path) as archive:
+        names = set(archive.namelist())
+        for chapter in chapters:
+            try:
+                # REGEL (dokumentation.md §4 Regel 13): kein except, das nur protokolliert
+                # und weiterläuft — der Fehlschlag bleibt sichtbar, als `None` statt einer
+                # stillen `0`, im Ergebnis dieser Funktion (der „markierte Eintrag", den die
+                # Regel als Alternative zum Abbruch nennt).
+                document_texts = _read_chapter_documents(archive, names, path, chapter)
+            except ValueError:
+                counts[chapter.number] = None
+                continue
+            text = _remove_boilerplate("\n".join(document_texts))
+            counts[chapter.number] = len(_WORD.findall(text))
+    return counts

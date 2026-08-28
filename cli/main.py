@@ -129,14 +129,34 @@ def _confirm_dictionary_fetch(
     return answer in ("", "j", "ja")
 
 
+def _format_word_count(count: int | None) -> str:
+    """Wortumfang für die Kapitelliste: deutsches Tausendertrennzeichen (`78.774`),
+    unbekannter Umfang sichtbar als `unbekannt` statt als Zahl — die stille Falschaussage
+    `0` wäre genau der stille Fehlschlag, den Regel 13 verbietet (technik.md §8, Nachtrag
+    28.08.2026, „Was die Kapitelliste zusätzlich zeigt")."""
+    if count is None:
+        return "unbekannt"
+    return f"{count:,}".replace(",", ".")
+
+
 def _choose_chapter(
-    structure: epub.BookStructure, read_line: ReadLine, write_line: WriteLine
+    epub_path: Path, structure: epub.BookStructure, read_line: ReadLine, write_line: WriteLine
 ) -> int:
-    """Zeigt die Kapitelliste und fragt so lange nach, bis eine darin vorhandene
-    Kapitelnummer eingegeben wird."""
+    """Zeigt die Kapitelliste mit Wortumfang je Kapitel und fragt so lange nach, bis eine
+    darin vorhandene Kapitelnummer eingegeben wird (technik.md §8, Nachtrag 28.08.2026,
+    „Was die Kapitelliste zusätzlich zeigt"): Der Umfang steht vor dem Titel in einer
+    eigenen, rechtsbündigen Spalte, damit die Zahlen untereinander vergleichbar bleiben —
+    ein 80 Zeichen langer Kapiteltitel zerschießt die Ausrichtung damit nicht."""
     write_line(f"„{structure.book.title}“ von {structure.book.author}")
+    word_counts = epub.count_chapter_words(epub_path, structure.chapters)
+    formatted_counts = {
+        chapter.number: _format_word_count(word_counts.get(chapter.number))
+        for chapter in structure.chapters
+    }
+    column_width = max((len(value) for value in formatted_counts.values()), default=0)
     for chapter in structure.chapters:
-        write_line(f"  {chapter.number}. {chapter.title}")
+        count_column = formatted_counts[chapter.number]
+        write_line(f"  {chapter.number}. Wörter: {count_column:>{column_width}}  {chapter.title}")
     while True:
         answer = read_line("Kapitel wählen: ").strip()
         try:
@@ -245,7 +265,7 @@ def _run(args: argparse.Namespace, *, read_line: ReadLine, write_line: WriteLine
     chapter_number = (
         args.chapter
         if args.chapter is not None
-        else _choose_chapter(structure, read_line, write_line)
+        else _choose_chapter(args.epub_path, structure, read_line, write_line)
     )
 
     write_line("Lade Sprachmodell …")

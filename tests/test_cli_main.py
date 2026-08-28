@@ -18,7 +18,8 @@ import pytest
 
 from cli import main as cli_main
 from cli.main import _build_parser, main
-from libreverbum import dictionary
+from libreverbum import dictionary, epub
+from libreverbum.entities import Book
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -618,6 +619,35 @@ def test_resolve_with_progress_closes_the_line_even_when_the_model_server_fails(
         con.close()
 
     assert finish_calls, "finish_progress_line lief nicht, obwohl bereits berichtet wurde."
+
+
+def test_choose_chapter_shows_the_word_count_with_a_thousands_separator_and_unknown_as_such(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """technik.md §8, Nachtrag 28.08.2026, „Was die Kapitelliste zusätzlich zeigt": Die
+    Kapitelliste zeigt den Umfang je Kapitel mit deutschem Tausendertrennzeichen (`78.774`)
+    und einen unbekannten Umfang sichtbar als solchen, nicht als Zahl (Regel 13)."""
+    structure = epub.BookStructure(
+        book=Book(title="Testbuch", author="Testautorin"),
+        chapters=[
+            epub.ChapterReference(number=1, title="Book 1 DUNE", documents=["a.xhtml"]),
+            epub.ChapterReference(
+                number=2, title="Kapitel ohne lesbares Dokument", documents=["b.xhtml"]
+            ),
+        ],
+        notice=None,
+    )
+    monkeypatch.setattr(
+        "cli.main.epub.count_chapter_words", lambda _path, _chapters: {1: 78774, 2: None}
+    )
+    written: list[str] = []
+
+    cli_main._choose_chapter(Path("buch.epub"), structure, lambda _prompt: "1", written.append)
+
+    listing = [line for line in written if line.startswith("  1.") or line.startswith("  2.")]
+    assert any("78.774" in line and "Book 1 DUNE" in line for line in listing)
+    assert any("unbekannt" in line and "Kapitel ohne lesbares Dokument" in line for line in listing)
+    assert not any("78774" in line for line in listing)
 
 
 def test_help_text_survives_a_restricted_console_codepage() -> None:
