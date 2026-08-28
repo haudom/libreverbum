@@ -85,6 +85,15 @@ Kapitelstruktur, tritt die Lesereihenfolge an ihre Stelle — mit sichtbarem Hin
 > Inhaltsverzeichnis. Einzelheiten in [technik.md](technik.md) §8, „Neuer Befund: manchen
 > Dateien fehlen die Kapitelgrenzen ganz".
 
+> **Nachtrag 28.08.2026:** Auch ein vorhandenes Inhaltsverzeichnis heißt nicht, dass ein
+> Kapitel in einem Dokument liegt. Bei „Dune" — Kapitelliste vollständig, Abnahmekriterium 1
+> erfüllt — waren 63 % des Buchtexts unerreichbar, weil die Navigation nur auf das erste
+> von drei zusammengehörenden Dokumenten zeigt. Ein Kapitel reicht deshalb von seinem
+> Navigationsziel bis zum nächsten, und die Kapitelliste nennt je Kapitel den **Umfang in
+> Wörtern**: Sie ist damit selbst die Stelle, an der ein 78.000-Wörter-„Kapitel" auffällt.
+> Einzelheiten in [technik.md](technik.md) §8, „Nachtrag 28.08.2026: ein Kapitel ist nicht
+> ein Dokument".
+
 ### 2. Wortschatz extrahieren
 Der wichtigste und unterschätzteste Schritt. Aus dem Rohtext entsteht eine saubere Wortliste:
 

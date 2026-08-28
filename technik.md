@@ -1584,8 +1584,9 @@ zweite Ausgabeliste daraus ist Ausgabe, keine Extraktion.
 ## 8. EPUB-Leser — entschieden
 
 **Keine Bibliothek. `zipfile` und `xml.etree` für die Struktur, `html.parser` für den
-Fließtext. Kapitel kommen aus der Navigation; fehlt sie, gilt jedes Dokument der
-Lesereihenfolge als Kapitel — mit sichtbarem Hinweis.**
+Fließtext. Kapitel kommen aus der Navigation und reichen von ihrem Navigationsziel bis zum
+nächsten; fehlt die Navigation, gilt jedes Dokument der Lesereihenfolge als Kapitel — mit
+sichtbarem Hinweis.**
 
 ### Zuerst die Lizenzfrage
 
@@ -1661,8 +1662,10 @@ Zwei Beobachtungen daraus:
   Seitenumbruchmarken noch das Wort „chapter" im Text — nur nichtssagende `calibre1`-Klassen
 
 > **Regel:** Kapitel kommen aus der Navigation (`nav.xhtml` oder `toc.ncx`), gezählt nach
-> eindeutigen Zielen. Fehlt sie, gilt jedes Dokument der Lesereihenfolge als ein Kapitel —
-> zusammen mit einem sichtbaren Hinweis, dass die Grenzen nicht aus dem Buch stammen.
+> eindeutigen Zielen; ein Kapitel reicht von seinem Ziel bis zum nächsten und umfasst alle
+> Dokumente der Lesereihenfolge dazwischen (Nachtrag 28.08.2026 unten). Fehlt die
+> Navigation, gilt jedes Dokument der Lesereihenfolge als ein Kapitel — zusammen mit einem
+> sichtbaren Hinweis, dass die Grenzen nicht aus dem Buch stammen.
 
 Beim Calibre-Konvertat heißt das vier „Kapitel" zu je rund 30.000 Wörtern. Die Triage
 bleibt dank Wortobergrenze (konzept.md, Schritt 4) benutzbar; die Zusage des Konzepts,
@@ -1679,6 +1682,71 @@ von Project Gutenberg, etwa bei der DRM-freien Verlagsdatei aus T17, fehlen die 
 die Trennung bleibt aus: eine allgemeine Schwelle ist durch keine Messung belegt (Regel 14).
 Das Inhaltsverzeichnis bleibt auch bei Gutenberg im Fließtext stehen, weil es nach der
 Startmarke steht, nicht davor (`entities.Chapter`, Docstring zu `text`).
+
+### Nachtrag 28.08.2026: ein Kapitel ist nicht ein Dokument
+
+Aufgeworfen beim Ausprobieren von „Dune" (Ace Books 1999, Calibre-Konvertat, EPUB 2.0) und
+am 28.08.2026 mit `tools/epub_check.py` sowie über `epub.read_structure` und
+`epub.read_chapter` selbst nachgemessen.
+
+**Der Fund ist ein stiller Verlust.** Calibre zerlegt große Inhaltsdokumente in
+`…_split_000`, `…_split_001`, `…`; die Navigation zeigt nur auf das jeweils erste Stück.
+`_resolve_chapters` behielt daraus allein die Dokumente, die selbst ein Navigationsziel
+sind, und `read_chapter` liest genau eines davon:
+
+| | in der Datei | bisher gelesen |
+|---|---|---|
+| Book 1 DUNE | 78.774 W (3 Dokumente) | **20.604 W** |
+| Book Two MUAD’DIB | 63.513 W (2 Dokumente) | 29.341 W |
+| Book Three THE PROPHET | 64.637 W (2 Dokumente) | 27.383 W |
+| **gesamt** | **206.930 W** | **rund 77.500 W (37 %)** |
+
+Die übrigen 63 % gehören zu keinem Kapitel und sind über das Programm überhaupt nicht
+erreichbar — ohne Meldung, bei vollständig plausibler Kapitelliste, die Abnahmekriterium 1
+weiterhin erfüllt. Genau der stille Fehlschlag aus Regel 13, und er trifft nicht nur diese
+Datei: `_split_NNN` ist Calibres Normalverhalten bei großen Dokumenten. Die Regel oben ist
+entsprechend nachgezogen; `ChapterReference` trägt dafür `documents: list[str]` statt
+`document: str`.
+
+**Unterkapitel gibt es — Dune hat aber keine.** Die Navigation ist in beiden Formen
+hierarchisch (verschachtelte `<navPoint>`, verschachtelte `<ol>`), und `_read_nav` wie
+`_read_ncx` flachen sie über `.iter()` ab. Zwei Bauformen sind zu unterscheiden:
+
+- **Unterpunkte als Anker im selben Dokument.** Kommt im eigenen Bestand vor:
+  `sherlock.epub` führt unter „I. A SCANDAL IN BOHEMIA" drei Kinder `I./II./III.`, alle mit
+  `#pgepubid…` auf dasselbe Dokument. `_deduplicate_by_target` faltet sie zusammen — das
+  ist der Fall 18→14 oben und bleibt richtig, solange innerhalb eines Dokuments nicht
+  geschnitten wird
+- **Unterpunkte als eigene Dokumente** unter einem Elternknoten (Teil I → Kapitel 1–5).
+  Kam in den zwölf gemessenen Dateien nicht vor, ist bei Sachbüchern üblich. Diese Einträge
+  stehen heute schon vollzählig in der Liste, nur gleichrangig neben ihrem Teil statt
+  darunter
+
+Dune ist keins von beidem: vier flache `navPoint`s, keine Verschachtelung (das
+`dtb:depth="2"` der Datei ist unzutreffend). Im Text sind die rund 48 Kapitel ebenfalls
+nicht ausgezeichnet — fünf Überschriften `h1`–`h3` im ganzen Buch, drei Seitenumbruchmarken,
+keine `<hr>`. Das einzige wiederkehrende Zeichen sind 50 Absätze `= = = = = =` vor den
+Epigraphen. **Daran wird nicht geschnitten:** Das ist die Zierleiste dieses einen
+Konvertats, keine Struktur, und für genau diese Dateiform gilt der Satz aus dem Befund vom
+12.08.2026 weiter — der saubere Weg führt über die Quelle, Calibre kann ein
+Inhaltsverzeichnis erzeugen.
+
+**Was die Kapitelliste zusätzlich zeigt.** Zwei Angaben, die den Fall sichtbar machen,
+statt ihn zu erklären:
+
+- **Umfang in Wörtern je Kapitel.** „Book 1 DUNE — 78.800 Wörter" sagt vor der Auswahl,
+  dass das kein Kapitel ist; „Book 1 DUNE" sagt es nicht. Zugleich ist es die Angabe, nach
+  der vor der Auswahl ohnehin gefragt wird: wie viel Arbeit wird das? Der Einwand aus dem
+  Docstring von `ChapterReference` — das Auswählen soll nicht das ganze Buch parsen — trägt
+  dafür nicht: Gemessen an Dune am 28.08.2026 kostet `read_structure` 2 ms, das Durchparsen
+  **aller** zehn Inhaltsdokumente (203.738 Wörter) **164 ms**
+- **Einrückung, wo die Navigation eine Ebene hat.** Eine flache, durchlaufend nummerierte
+  Liste bleibt es trotzdem: Die Nummer zählt weiter in der Reihenfolge der `spine`
+  (`entities.Chapter`, Docstring zu `number`), Elternzeilen bleiben wählbar, weil sie
+  eigenen Text tragen. Kein Aufklappbaum — die Ebene ist Beschriftung, nicht Auswahl
+
+Zu bauen ist in dieser Reihenfolge: erst `documents: list[str]`, weil jede Anzeige sonst
+richtig aussieht und falsch rechnet, dann die Umfangsspalte, dann die Einrückung.
 
 ### Was gemeldet und nicht verarbeitet wird
 
@@ -1700,9 +1768,13 @@ leeres Ergebnis (Regel 13):
   warnt dokumentation.md §5: Die Vorrichtung zeigt, dass der Code läuft, die Fremdquelle
   zeigt, ob er stimmt. Geschlossen wäre der Punkt, sobald eine EPUB-3-Datei in `tools/`
   liegt (die beiden hier gemessenen Manga-Bände sind 3.0) und `needs_epub` sie einschließt
-- **Anker innerhalb eines Dokuments.** Bei allen zwölf Dateien gilt ein Kapitel gleich ein
-  Dokument. Ob Navigationsziele mit `#anker` als eigene Kapitel zu behandeln sind, ist
-  offen — der Fall kam nicht vor
+- **Anker innerhalb eines Dokuments.** Ob Navigationsziele mit `#anker` als eigene Kapitel
+  zu behandeln sind, ist offen. Der Fall liegt vor — die Unterpunkte `I./II./III.` in
+  `sherlock.epub` sind genau das (Nachtrag 28.08.2026) —, verlangt aber, innerhalb eines
+  Dokuments zu schneiden, und wird deshalb nicht mit den drei Punkten des Nachtrags
+  zusammen gebaut. Die frühere Annahme „ein Kapitel gleich ein Dokument" gilt **nicht**
+  mehr, allerdings aus dem umgekehrten Grund: Ein Kapitel kann mehrere Dokumente
+  umfassen
 - **Bindestrich- und Sonderzeichen der Verlagsdateien** gegenüber Gutenberg sind nicht
   gesondert geprüft; die Abweichung von 0,08 % ist an einer Gutenberg-Datei gemessen
 
