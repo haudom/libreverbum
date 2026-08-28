@@ -1748,6 +1748,10 @@ statt ihn zu erklären:
 Zu bauen ist in dieser Reihenfolge: erst `documents: list[str]`, weil jede Anzeige sonst
 richtig aussieht und falsch rechnet, dann die Umfangsspalte, dann die Einrückung.
 
+`tools/dune.epub` liegt seit 28.08.2026 im Baum; `tests/test_epub.py` (Marke
+`needs_calibre_split_epub`) rechnet die Tabelle oben gegen die echte Datei nach —
+Dokumentlisten und Wortumfänge je Kapitel.
+
 ### Was gemeldet und nicht verarbeitet wird
 
 Drei Fälle sind kein Fall für den Kernablauf und müssen als solche erkennbar sein statt als
@@ -1761,31 +1765,28 @@ leeres Ergebnis (Regel 13):
 
 ### Offene Punkte
 
-- **Der EPUB-3-Zweig läuft gegen keine Fremdquelle.** In `tools/` liegen nur
-  `sherlock.epub` und `dorian_gray.epub` — beide EPUB 2.0 mit `toc.ncx` und ohne
-  `nav.xhtml` (nachgeprüft). `_read_nav`, `properties="nav"` und `epub:type` in
-  `libreverbum/epub.py` prüft deshalb allein die selbstgebaute Vorrichtung, und genau davor
-  warnt dokumentation.md §5: Die Vorrichtung zeigt, dass der Code läuft, die Fremdquelle
-  zeigt, ob er stimmt. Geschlossen wäre der Punkt, sobald eine EPUB-3-Datei in `tools/`
-  liegt (die beiden hier gemessenen Manga-Bände sind 3.0) und `needs_epub` sie einschließt
-- **`documents` mit mehr als einem Eintrag läuft gegen keine Fremdquelle.** Sherlock (15
-  spine-Dokumente, 14 Kapitel) und Dorian Gray (23 / 22) sind beide 1:1 Dokument-zu-Kapitel
-  — das einzige nicht zugeordnete Dokument ist jeweils `wrap0000.html` vor dem ersten
-  Navigationsziel, und alle 36 Kapiteltexte sind gegenüber dem Elterncommit zeichengleich
-  (nachgeprüft 28.08.2026). Dieselbe Lage wie beim EPUB-3-Zweig oben: Die Vorrichtung zeigt,
-  dass der Code läuft, keine Fremdquelle zeigt, ob er stimmt. Geschlossen wäre der Punkt,
-  sobald eine Datei mit Calibre-`_split_NNN`-Dokumenten in `tools/` liegt und `needs_epub`
-  sie einschließt
+- **Der EPUB-3-Zweig läuft gegen keine Fremdquelle.** In `tools/` liegen `sherlock.epub`,
+  `dorian_gray.epub` und `dune.epub` — alle drei EPUB 2.0 mit `toc.ncx` und ohne
+  `nav.xhtml` (nachgeprüft, zuletzt für Dune am 28.08.2026). `_read_nav`,
+  `properties="nav"` und `epub:type` in `libreverbum/epub.py` prüft deshalb allein die
+  selbstgebaute Vorrichtung, und genau davor warnt dokumentation.md §5: Die Vorrichtung
+  zeigt, dass der Code läuft, die Fremdquelle zeigt, ob er stimmt. **Dune schließt den
+  Punkt nicht** — es bringt denselben `toc.ncx`-Zweig wie die beiden anderen Dateien, nur
+  zusätzlich den Mehrdokument-Fall (Nachtrag 28.08.2026 oben). Geschlossen wäre der Punkt,
+  sobald eine EPUB-3-Datei in `tools/` liegt (die beiden hier gemessenen Manga-Bände sind
+  3.0) und `needs_epub` sie einschließt
 - **Der Pfad „Ebene > 0" der Einrückung läuft gegen keine Fremdquelle.** `sherlock.epub`
   nennt roh 18 Navigationseinträge, davon 3 auf Ebene 1 (`I./II./III.` unter „I. A SCANDAL
   IN BOHEMIA", alle über `#anker` auf dasselbe Dokument wie ihr Elternteil) — nach
   `_deduplicate_by_target` liegen alle 14 Kapitel auf Ebene 0. `dorian_gray.epub` führt 24
   `navPoint`, sämtlich unmittelbar unter `navMap`, alle 22 Kapitel ebenfalls Ebene 0
   (nachgeprüft 28.08.2026). Beide Dateien nehmen zudem den `toc.ncx`-Zweig; `_read_nav`
-  bleibt damit ungeprüft gegen jede echte Datei. Dieselbe Lage wie bei den beiden Punkten
-  oben. Geschlossen wäre der Punkt, sobald eine Datei mit tatsächlich verschachtelter
-  Navigation über eigene Dokumente (nicht bloß Anker im selben Dokument) in `tools/` liegt
-  und `needs_epub` sie einschließt
+  bleibt damit ungeprüft gegen jede echte Datei. **Dune schließt den Punkt nicht** — seine
+  Navigation ist flach (vier Einträge, vier eindeutige Ziele, keine Verschachtelung; das
+  `dtb:depth="2"` der Datei ist unzutreffend, Nachtrag 28.08.2026 oben). Geschlossen wäre
+  der Punkt, sobald eine Datei mit tatsächlich verschachtelter Navigation über eigene
+  Dokumente (nicht bloß Anker im selben Dokument) in `tools/` liegt und `needs_epub` sie
+  einschließt
 - **Anker innerhalb eines Dokuments.** Ob Navigationsziele mit `#anker` als eigene Kapitel
   zu behandeln sind, ist offen. Der Fall liegt vor — die Unterpunkte `I./II./III.` in
   `sherlock.epub` sind genau das (Nachtrag 28.08.2026) —, verlangt aber, innerhalb eines

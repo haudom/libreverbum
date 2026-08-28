@@ -2194,3 +2194,100 @@ def test_count_chapter_words_opens_the_archive_only_once(
     epub.count_chapter_words(mini_epub_with_navigation, structure.chapters)
 
     assert len(opened) == 1
+
+
+# ============ Echte Datei: Calibre-Konvertat mit _split_NNN-Dokumenten (technik.md §8,
+# ============ Nachtrag 28.08.2026)
+
+
+@pytest.mark.needs_calibre_split_epub
+def test_book_one_dune_spans_all_three_split_documents(real_dune_epub_path: Path) -> None:
+    """technik.md §8, Nachtrag 28.08.2026, „ein Kapitel ist nicht ein Dokument": Calibre
+    zerlegt „Book 1 DUNE" in drei `…_split_NNN`-Dokumente, wovon die Navigation nur auf das
+    erste zeigt — `documents` muss trotzdem alle drei tragen, nicht nur das Navigationsziel."""
+    structure = epub.read_structure(real_dune_epub_path)
+
+    book_one = next(chapter for chapter in structure.chapters if chapter.title == "Book 1 DUNE")
+
+    assert book_one.documents == [
+        "OEBPS/part2_split_000.xhtml",
+        "OEBPS/part2_split_001.xhtml",
+        "OEBPS/part2_split_002.xhtml",
+    ]
+
+
+@pytest.mark.needs_calibre_split_epub
+def test_book_two_and_three_span_their_two_split_documents_each(real_dune_epub_path: Path) -> None:
+    """Derselbe Beleg wie oben für die beiden übrigen Mehrdokument-Kapitel — beide mit zwei
+    statt drei `…_split_NNN`-Dokumenten (technik.md §8, Nachtrag 28.08.2026)."""
+    structure = epub.read_structure(real_dune_epub_path)
+
+    by_title = {chapter.title: chapter.documents for chapter in structure.chapters}
+
+    assert by_title["Book Two MUAD’DIB"] == [
+        "OEBPS/part3_split_000.xhtml",
+        "OEBPS/part3_split_001.xhtml",
+    ]
+    assert by_title["Book Three THE PROPHET"] == [
+        "OEBPS/part4_split_000.xhtml",
+        "OEBPS/part4_split_001.xhtml",
+    ]
+
+
+@pytest.mark.needs_calibre_split_epub
+def test_chapter_word_counts_match_the_measured_table_in_technik_md(
+    real_dune_epub_path: Path,
+) -> None:
+    """technik.md §8, Nachtrag 28.08.2026: Die gemessene Tabelle — 78.774 / 63.513 / 64.637
+    Wörter für die drei Mehrdokument-Kapitel — ist die Gegenprobe, dass die Anzeige
+    (`count_chapter_words`) und die Dokumentliste (`documents`) dasselbe Kapitel meinen."""
+    structure = epub.read_structure(real_dune_epub_path)
+
+    counts = epub.count_chapter_words(real_dune_epub_path, structure.chapters)
+    by_title = {chapter.title: counts[chapter.number] for chapter in structure.chapters}
+
+    assert by_title["Book 1 DUNE"] == 78774
+    assert by_title["Book Two MUAD’DIB"] == 63513
+    assert by_title["Book Three THE PROPHET"] == 64637
+
+
+@pytest.mark.needs_calibre_split_epub
+def test_read_chapter_includes_text_from_the_third_split_document_of_book_one(
+    real_dune_epub_path: Path,
+) -> None:
+    """technik.md §8, Nachtrag 28.08.2026, „Der Fund ist ein stiller Verlust": Vor dieser
+    Regel lag rund 63 % des Buchs außerhalb jedes Kapitels — der Text des dritten Dokuments
+    von „Book 1 DUNE" (`part2_split_002.xhtml`) muss jetzt über `read_chapter` erreichbar
+    sein."""
+    structure = epub.read_structure(real_dune_epub_path)
+    book_one = next(chapter for chapter in structure.chapters if chapter.title == "Book 1 DUNE")
+
+    chapter = epub.read_chapter(real_dune_epub_path, structure.book, book_one)
+
+    assert "Paul swallowed in a dry throat." in chapter.text
+
+
+@pytest.mark.needs_calibre_split_epub
+def test_documents_before_the_first_navigation_target_belong_to_no_chapter_in_dune(
+    real_dune_epub_path: Path,
+) -> None:
+    """technik.md §8, Nachtrag 28.08.2026: `titlepage.xhtml` und `OEBPS/title.xhtml` stehen
+    vor dem ersten Navigationsziel (`OEBPS/part1.xhtml`) und dürfen deshalb in keiner
+    `documents`-Liste auftauchen."""
+    structure = epub.read_structure(real_dune_epub_path)
+
+    assigned = {document for chapter in structure.chapters for document in chapter.documents}
+
+    assert "titlepage.xhtml" not in assigned
+    assert "OEBPS/title.xhtml" not in assigned
+
+
+@pytest.mark.needs_calibre_split_epub
+def test_dune_navigation_is_used_without_falling_back_to_the_spine(
+    real_dune_epub_path: Path,
+) -> None:
+    """technik.md §8: Dune trägt eine gültige `toc.ncx`-Navigation — `notice` bleibt
+    `None`, es ist kein spine-Rückfall."""
+    result = epub.read_structure(real_dune_epub_path)
+
+    assert result.notice is None

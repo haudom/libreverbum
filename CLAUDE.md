@@ -218,8 +218,10 @@ E8b (Anki-Erzeugung, §8b) und E8c (Druckausgabe, §8c).
 
 Nicht im Repository, aber zur Arbeit vorhanden: die Umgebung `.venv/` (spaCy mit
 `en_core_web_md` und `en_core_web_sm`), das Wörterbuch `tools/en-de.sqlite3`, die
-Testtexte `tools/*.txt` und die EPUBs `tools/*.epub`. Tests, die davon abhängen, tragen
-`needs_dictionary`, `needs_model` oder `needs_epub` und werden ohne sie übersprungen.
+Testtexte `tools/*.txt` und die EPUBs `tools/*.epub`, darunter `tools/dune.epub`
+(Calibre-Konvertat mit `_split_NNN`-Dokumenten, technik.md §8, Nachtrag 28.08.2026). Tests,
+die davon abhängen, tragen `needs_dictionary`, `needs_model`, `needs_epub` oder
+`needs_calibre_split_epub` und werden ohne sie übersprungen.
 
 ## Arbeitsweise
 
