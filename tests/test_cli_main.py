@@ -705,6 +705,58 @@ def test_choose_chapter_aligns_the_word_count_column_from_chapter_ten_onward(
         assert line[-count_width:] == formatted[chapter.number].rjust(count_width)
 
 
+def test_choose_chapter_indents_the_title_by_navigation_level_and_keeps_the_word_count_aligned(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Auftrag Teilaufgabe 3, Punkt 6: Der Titel wird je Ebene eingerückt (zwei
+    Leerzeichen, fest — Regel 14: kein Konfigurationsschalter) — die Einrückung zählt zur
+    Breite der Titelspalte, damit die Spalte „Wörter" bei eingerückten Zeilen ausgerichtet
+    bleibt (technik.md §8, Nachtrag 28.08.2026, „Was die Kapitelliste zusätzlich
+    zeigt")."""
+    chapters = [
+        epub.ChapterReference(number=1, title="Teil I", documents=["a.xhtml"], level=0),
+        epub.ChapterReference(
+            number=2, title="Ein deutlich längeres Kapitel", documents=["b.xhtml"], level=1
+        ),
+        epub.ChapterReference(number=3, title="Kapitel 2", documents=["c.xhtml"], level=1),
+        epub.ChapterReference(number=4, title="Teil II", documents=["d.xhtml"], level=0),
+        epub.ChapterReference(number=5, title="Kapitel 3", documents=["e.xhtml"], level=1),
+    ]
+    structure = epub.BookStructure(
+        book=Book(title="Testbuch", author="Testautorin"), chapters=chapters, notice=None
+    )
+    counts = {1: 500, 2: 1234, 3: 60, 4: 700, 5: 9}
+    monkeypatch.setattr("cli.main.epub.count_chapter_words", lambda _path, _chapters: counts)
+    written: list[str] = []
+
+    cli_main._choose_chapter(Path("buch.epub"), structure, lambda _prompt: "1", written.append)
+
+    table = written[1:]  # ohne die Buchzeile: Kopfzeile, dann fünf Kapitelzeilen
+    assert len(table) == 6
+
+    indented_titles = {
+        chapter.number: f"{'  ' * chapter.level}{chapter.title}" for chapter in chapters
+    }
+    formatted = {number: cli_main._format_word_count(count) for number, count in counts.items()}
+    number_width = max([len("Nr.")] + [len(f"{chapter.number}.") for chapter in chapters])
+    title_width = max([len("Kapitel")] + [len(value) for value in indented_titles.values()])
+    count_width = max([len("Wörter")] + [len(value) for value in formatted.values()])
+    assert {len(line) for line in table} == {2 + number_width + 2 + title_width + 2 + count_width}
+
+    title_start = 2 + number_width + 2
+    for chapter, line in zip(chapters, table[1:], strict=True):
+        assert line[title_start : title_start + title_width] == indented_titles[
+            chapter.number
+        ].ljust(title_width)
+        assert line[-count_width:] == formatted[chapter.number].rjust(count_width)
+        if chapter.level > 0:
+            # Die Einrückung ist tatsächlich sichtbar — nicht nur rechnerisch Teil der
+            # Spaltenbreite: Die ersten zwei Zeichen der Titelspalte sind Leerraum, und
+            # der Titel selbst steht noch in der Zeile.
+            assert line[title_start : title_start + 2] == "  "
+            assert chapter.title in line
+
+
 def test_help_text_survives_a_restricted_console_codepage() -> None:
     """Mittel 3 (Durchsicht T16): `argparse.print_help()`/`format_help()` schreiben
     direkt auf `sys.stdout`, an `cli.display.safe_print` vorbei (dokumentation.md §4

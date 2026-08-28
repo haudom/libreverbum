@@ -175,6 +175,14 @@ def test_spine_fallback_gives_each_document_its_own_single_element_chapter(
     ]
 
 
+def test_spine_fallback_chapters_have_level_zero(mini_epub_without_navigation: Path) -> None:
+    """Ohne verwertbare Navigation hat jedes Kapitel die Ebene 0 — es gibt keine Hierarchie,
+    wenn die Grenzen nicht aus dem Buch stammen (technik.md §8, Nachtrag 28.08.2026)."""
+    result = epub.read_structure(mini_epub_without_navigation)
+
+    assert all(chapter.level == 0 for chapter in result.chapters)
+
+
 def test_read_structure_with_ncx_navigation_follows_unique_navigation_targets_not_spine_count(
     mini_epub_with_ncx_navigation: Path,
 ) -> None:
@@ -220,6 +228,222 @@ def test_read_structure_orders_chapters_by_spine_position_not_navigation_order(
 
     assert [chapter.title for chapter in result.chapters] == ["Label A", "Label B"]
     assert [chapter.number for chapter in result.chapters] == [1, 2]
+
+
+# --------------------------------------- Lokale Vorrichtung: verschachtelte Navigation
+
+# Zwei Teile mit je eigener Titelseite, darunter je ein bis zwei Kapitel — die Bauform aus
+# technik.md §8, Nachtrag 28.08.2026, „Unterkapitel gibt es": „Unterpunkte als eigene
+# Dokumente unter einem Elternknoten (Teil I → Kapitel 1–5)". Die Vorrichtungen aus
+# tests/conftest.py (T2) sind absichtlich flach und können diese Ebene nicht prüfen.
+_NESTED_LEVEL_NAV_OPF = """<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="bookid">urn:uuid:nested-level-nav-test</dc:identifier>
+    <dc:title>Buch mit Teilen</dc:title>
+    <dc:creator>Test Autorin</dc:creator>
+  </metadata>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="part1" href="part1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chap1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chap2" href="chapter2.xhtml" media-type="application/xhtml+xml"/>
+    <item id="part2" href="part2.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chap3" href="chapter3.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="part1"/>
+    <itemref idref="chap1"/>
+    <itemref idref="chap2"/>
+    <itemref idref="part2"/>
+    <itemref idref="chap3"/>
+  </spine>
+</package>
+"""
+
+# Teil I und Teil II auf der obersten Ebene (0), ihre Kapitel je ein <ol> tiefer (1) —
+# <a> und das verschachtelte <ol> sind beide direkte Kinder desselben <li>, wie es die
+# EPUB-3-Norm für Navigationsdokumente vorsieht.
+_NESTED_LEVEL_NAV_XHTML = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>Navigation</title></head>
+<body>
+  <nav epub:type="toc">
+    <ol>
+      <li><a href="part1.xhtml">Teil I</a>
+        <ol>
+          <li><a href="chapter1.xhtml">Kapitel 1</a></li>
+          <li><a href="chapter2.xhtml">Kapitel 2</a></li>
+        </ol>
+      </li>
+      <li><a href="part2.xhtml">Teil II</a>
+        <ol>
+          <li><a href="chapter3.xhtml">Kapitel 3</a></li>
+        </ol>
+      </li>
+    </ol>
+  </nav>
+</body>
+</html>
+"""
+
+
+def _write_nested_nav_xhtml_epub(path: Path) -> None:
+    """Baut das Mini-EPUB mit der verschachtelten `nav.xhtml` oben zusammen."""
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        archive.writestr("META-INF/container.xml", _REORDERED_NAV_CONTAINER_XML)
+        archive.writestr("OEBPS/content.opf", _NESTED_LEVEL_NAV_OPF)
+        archive.writestr("OEBPS/nav.xhtml", _NESTED_LEVEL_NAV_XHTML)
+        archive.writestr("OEBPS/part1.xhtml", _reordered_nav_chapter_xhtml("Teil I"))
+        archive.writestr("OEBPS/chapter1.xhtml", _reordered_nav_chapter_xhtml("Kapitel 1"))
+        archive.writestr("OEBPS/chapter2.xhtml", _reordered_nav_chapter_xhtml("Kapitel 2"))
+        archive.writestr("OEBPS/part2.xhtml", _reordered_nav_chapter_xhtml("Teil II"))
+        archive.writestr("OEBPS/chapter3.xhtml", _reordered_nav_chapter_xhtml("Kapitel 3"))
+
+
+# Dieselben fünf Dokumente und Beschriftungen wie oben, als EPUB-2-`toc.ncx` mit
+# verschachtelten `navPoint` statt verschachtelter `<ol>` (technik.md §8, Mehrheitsfall:
+# zehn von zwölf gemessenen Dateien sind EPUB 2.0).
+_NESTED_LEVEL_NCX_OPF = """<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="bookid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="bookid">urn:uuid:nested-level-ncx-test</dc:identifier>
+    <dc:title>Buch mit Teilen (ncx)</dc:title>
+    <dc:creator>Test Autorin</dc:creator>
+  </metadata>
+  <manifest>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+    <item id="part1" href="part1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chap1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chap2" href="chapter2.xhtml" media-type="application/xhtml+xml"/>
+    <item id="part2" href="part2.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chap3" href="chapter3.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine toc="ncx">
+    <itemref idref="part1"/>
+    <itemref idref="chap1"/>
+    <itemref idref="chap2"/>
+    <itemref idref="part2"/>
+    <itemref idref="chap3"/>
+  </spine>
+</package>
+"""
+
+_NESTED_LEVEL_TOC_NCX = """<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head></head>
+  <docTitle><text>Buch mit Teilen (ncx)</text></docTitle>
+  <navMap>
+    <navPoint id="np1">
+      <navLabel><text>Teil I</text></navLabel>
+      <content src="part1.xhtml"/>
+      <navPoint id="np1-1">
+        <navLabel><text>Kapitel 1</text></navLabel>
+        <content src="chapter1.xhtml"/>
+      </navPoint>
+      <navPoint id="np1-2">
+        <navLabel><text>Kapitel 2</text></navLabel>
+        <content src="chapter2.xhtml"/>
+      </navPoint>
+    </navPoint>
+    <navPoint id="np2">
+      <navLabel><text>Teil II</text></navLabel>
+      <content src="part2.xhtml"/>
+      <navPoint id="np2-1">
+        <navLabel><text>Kapitel 3</text></navLabel>
+        <content src="chapter3.xhtml"/>
+      </navPoint>
+    </navPoint>
+  </navMap>
+</ncx>
+"""
+
+
+def _write_nested_toc_ncx_epub(path: Path) -> None:
+    """Baut das Mini-EPUB mit der verschachtelten `toc.ncx` oben zusammen."""
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        archive.writestr("META-INF/container.xml", _REORDERED_NAV_CONTAINER_XML)
+        archive.writestr("OEBPS/content.opf", _NESTED_LEVEL_NCX_OPF)
+        archive.writestr("OEBPS/toc.ncx", _NESTED_LEVEL_TOC_NCX)
+        archive.writestr("OEBPS/part1.xhtml", _reordered_nav_chapter_xhtml("Teil I"))
+        archive.writestr("OEBPS/chapter1.xhtml", _reordered_nav_chapter_xhtml("Kapitel 1"))
+        archive.writestr("OEBPS/chapter2.xhtml", _reordered_nav_chapter_xhtml("Kapitel 2"))
+        archive.writestr("OEBPS/part2.xhtml", _reordered_nav_chapter_xhtml("Teil II"))
+        archive.writestr("OEBPS/chapter3.xhtml", _reordered_nav_chapter_xhtml("Kapitel 3"))
+
+
+_NESTED_LEVEL_TITLES = ["Teil I", "Kapitel 1", "Kapitel 2", "Teil II", "Kapitel 3"]
+_NESTED_LEVEL_LEVELS = [0, 1, 1, 0, 1]
+
+
+def test_nested_nav_xhtml_reports_the_level_of_each_entry(tmp_path: Path) -> None:
+    """technik.md §8, Nachtrag 28.08.2026, „Unterkapitel gibt es": Die Ebene ist die Zahl
+    der umschließenden `<ol>` innerhalb des `nav` — Teil I und Teil II auf Ebene 0, ihre
+    Kapitel je ein `<ol>` tiefer auf Ebene 1."""
+    path = tmp_path / "nested_nav.epub"
+    _write_nested_nav_xhtml_epub(path)
+
+    result = epub.read_structure(path)
+
+    assert [chapter.title for chapter in result.chapters] == _NESTED_LEVEL_TITLES
+    assert [chapter.level for chapter in result.chapters] == _NESTED_LEVEL_LEVELS
+
+
+def test_nested_nav_xhtml_numbers_run_through_across_levels_in_spine_order(tmp_path: Path) -> None:
+    """Auftrag Teilaufgabe 3: Die Nummer zählt in der Reihenfolge der spine durch, ohne
+    bei einer tieferen Ebene neu zu beginnen (keine Unternummerierung wie „3.1")."""
+    path = tmp_path / "nested_nav_numbers.epub"
+    _write_nested_nav_xhtml_epub(path)
+
+    result = epub.read_structure(path)
+
+    assert [chapter.number for chapter in result.chapters] == [1, 2, 3, 4, 5]
+
+
+def test_nested_toc_ncx_reports_the_level_of_each_entry(tmp_path: Path) -> None:
+    """Derselbe Beleg wie mit `nav.xhtml`, für die EPUB-2-Form `toc.ncx` — die Ebene ist
+    hier die Verschachtelungstiefe des `navPoint`, nicht `dtb:depth` der Datei (technik.md
+    §8, Nachtrag 28.08.2026: bei Dune steht dort „2", obwohl die Navigation flach ist)."""
+    path = tmp_path / "nested_ncx.epub"
+    _write_nested_toc_ncx_epub(path)
+
+    result = epub.read_structure(path)
+
+    assert [chapter.title for chapter in result.chapters] == _NESTED_LEVEL_TITLES
+    assert [chapter.level for chapter in result.chapters] == _NESTED_LEVEL_LEVELS
+    assert [chapter.number for chapter in result.chapters] == [1, 2, 3, 4, 5]
+
+
+def test_a_parent_chapter_stays_selectable_and_reads_its_own_document(tmp_path: Path) -> None:
+    """Auftrag Teilaufgabe 3: „Elternzeilen bleiben wählbar, weil sie eigenen Text
+    tragen" — `read_chapter` auf „Teil I" liefert dessen eigenes Vorspanndokument, nicht
+    den Text seiner Kinder „Kapitel 1"/„Kapitel 2" (technik.md §8, Nachtrag 28.08.2026,
+    „Was die Kapitelliste zusätzlich zeigt")."""
+    path = tmp_path / "nested_nav_parent.epub"
+    _write_nested_nav_xhtml_epub(path)
+    structure = epub.read_structure(path)
+    part_one = structure.chapters[0]
+    assert part_one.title == "Teil I"
+    assert part_one.documents == ["OEBPS/part1.xhtml"]
+
+    chapter = epub.read_chapter(path, structure.book, part_one)
+
+    assert chapter.text == "Teil I"
+
+
+def test_deduplicate_by_target_keeps_the_first_entrys_level_too() -> None:
+    """`_deduplicate_by_target`, technik.md §8, „Sherlock-Fall 18→14": Gewinnt bei mehreren
+    Einträgen auf dasselbe Ziel der erste in der Reihenfolge der Navigation, gilt das auch
+    für seine Ebene — ein tiefer eingerücktes Kind darf die Ebene des schon gesehenen
+    Elternteils nicht überschreiben (dieselbe Lage wie die Kinder I./II./III. unter „I. A
+    SCANDAL IN BOHEMIA" in `sherlock.epub`)."""
+    entries = [("Teil I", "part1.xhtml", 0), ("I.", "part1.xhtml", 1), ("II.", "part1.xhtml", 1)]
+
+    labels = epub._deduplicate_by_target(entries)
+
+    assert labels["part1.xhtml"] == ("Teil I", 0)
 
 
 # ------------------------ Lokale Vorrichtung: Dokument vor dem ersten Navigationsziel
@@ -921,6 +1145,37 @@ def test_read_structure_deduplicates_a_trailing_navigation_entry_in_a_real_book(
     result = epub.read_structure(real_epub_paths["dorian_gray"])
 
     assert result.chapters[-1].title == "CHAPTER XX."
+
+
+@pytest.mark.needs_epub
+def test_sherlock_holmes_folds_entirely_to_level_zero_despite_nested_navpoints(
+    real_epub_paths: dict[str, Path],
+) -> None:
+    """technik.md §8, Nachtrag 28.08.2026: `sherlock.epub` verschachtelt die drei Kinder
+    I./II./III. unter „I. A SCANDAL IN BOHEMIA", alle über `#anker` auf dasselbe Dokument
+    wie der Elternteil. Nach dem Zusammenfalten (`_deduplicate_by_target`) liegt die ganze
+    Kapitelliste auf Ebene 0 — keine einzige eingerückte Zeile, obwohl die Datei
+    verschachtelt ist. (Die eigentliche Absicherung der Verschachtelungstiefe liefert
+    `test_nested_toc_ncx_reports_the_level_of_each_entry` an einer Vorrichtung mit
+    tatsächlichen Ebenen über 0 — gegen diese echte Datei allein wäre „liefert überall 0"
+    kein Unterschied zu einer Umsetzung ohne jede Tiefenmessung, dokumentation.md §5)."""
+    result = epub.read_structure(real_epub_paths["sherlock"])
+
+    assert [chapter.level for chapter in result.chapters] == [0] * len(result.chapters)
+
+
+@pytest.mark.needs_epub
+def test_dorian_gray_has_no_nested_navigation_and_stays_at_level_zero(
+    real_epub_paths: dict[str, Path],
+) -> None:
+    """Nachmessung (Auftrag Teilaufgabe 3): `dorian_gray.epub` führt anders als
+    `sherlock.epub` überhaupt keine verschachtelten `navPoint` — nachgesehen im Archiv
+    (`OEBPS/toc.ncx`, 28.08.2026: 24 `navPoint`, alle unmittelbar unter `navMap`). Die
+    Kapitelliste liegt deshalb ebenfalls vollständig auf Ebene 0, aber weil die Datei
+    flach ist, nicht weil etwas zusammengefaltet wurde."""
+    result = epub.read_structure(real_epub_paths["dorian_gray"])
+
+    assert [chapter.level for chapter in result.chapters] == [0] * len(result.chapters)
 
 
 # ============================================================ bauplan.md T12b: Fließtext

@@ -36,6 +36,10 @@ bis ausschließlich zum nächsten (technik.md §8, Nachtrag 28.08.2026) — Cali
 große Inhaltsdokumente in `…_split_000`, `…_split_001`, und die Navigation zeigt nur auf
 das jeweils erste Stück. Dokumente vor dem ersten Navigationsziel gehören zu keinem
 Kapitel. Fehlt die Navigation, trägt jedes Kapitel genau ein Dokument.
+`ChapterReference.level` trägt die Gliederungsebene aus einer verschachtelten Navigation
+(technik.md §8, Nachtrag 28.08.2026, „Unterkapitel gibt es"), oberste Ebene 0 — eine
+flache, durchlaufend nummerierte Liste bleibt es trotzdem: kein Aufklappbaum, `number`
+zählt unbeeinflusst weiter. Fehlt die Navigation, ist `level` stets 0.
 
 `read_chapter` liefert dazu `entities.Chapter` mit dem zusammengefügten Fließtext aller
 Dokumente des Kapitels, in `spine`-Reihenfolge: Skripte, Stilangaben und Kopfzeilen
@@ -112,13 +116,21 @@ class ChapterReference:
     28.08.2026, „ein Kapitel ist nicht ein Dokument") — `documents` trägt deshalb die
     zusammenhängende Strecke der `spine` dazwischen, in ihrer Reihenfolge, mindestens ein
     Dokument. `number` zählt ab 1 in der Reihenfolge der `spine`, wie
-    `entities.Chapter.number` es später fortführt. `entities.Chapter` entsteht daraus
-    erst, wenn der Fließtext dieser Dokumente gelesen ist (T12b) — das Auswählen eines
-    Kapitels soll nicht das ganze Buch parsen."""
+    `entities.Chapter.number` es später fortführt — unabhängig von `level`, das nur die
+    Beschriftung betrifft. `entities.Chapter` entsteht daraus erst, wenn der Fließtext
+    dieser Dokumente gelesen ist (T12b) — das Auswählen eines Kapitels soll nicht das
+    ganze Buch parsen.
+
+    `level` ist die Gliederungsebene aus der Navigation (technik.md §8, Nachtrag
+    28.08.2026, „Unterkapitel gibt es"), oberste Ebene 0 — Beschriftung für eine flache,
+    durchlaufend nummerierte Liste, kein Aufklappbaum: Eine Elternzeile bleibt wählbar,
+    weil sie eigenen Text trägt. Fehlt die Navigation (spine-Rückfall), ist `level` stets
+    0, weil dann keine Hierarchie aus dem Buch stammt."""
 
     number: int
     title: str
     documents: list[str]
+    level: int = 0
 
 
 @dataclass(frozen=True)
@@ -238,60 +250,96 @@ def _read_package(archive: zipfile.ZipFile, opf_path: str, path: Path) -> _Packa
     )
 
 
-def _read_nav(archive: zipfile.ZipFile, href: str) -> list[tuple[str, str]]:
+def _read_nav(archive: zipfile.ZipFile, href: str) -> list[tuple[str, str, int]]:
     """Rohe Kapitelliste aus dem EPUB-3-Navigationsdokument (`nav` mit
-    `epub:type="toc"`) — Beschriftung und Ziel je Eintrag, Anker (`#…`) abgeschnitten.
-    Kann Wiederholungen enthalten (technik.md §8, Sherlock-Fall); die Zusammenführung auf
-    eindeutige Ziele übernimmt `_deduplicate_by_target`."""
+    `epub:type="toc"`) — Beschriftung, Ziel und Gliederungsebene (`level`) je Eintrag,
+    Anker (`#…`) abgeschnitten. Kann Wiederholungen enthalten (technik.md §8,
+    Sherlock-Fall); die Zusammenführung auf eindeutige Ziele übernimmt
+    `_deduplicate_by_target`. `level` ist die Zahl der umschließenden `<ol>` innerhalb des
+    `nav`, oberste Ebene 0 (technik.md §8, Nachtrag 28.08.2026, „Unterkapitel gibt es")."""
     root = ElementTree.fromstring(archive.read(href))
     base = posixpath.dirname(href)
-    entries: list[tuple[str, str]] = []
+    entries: list[tuple[str, str, int]] = []
     for nav in root.iter(f"{{{_NS['xhtml']}}}nav"):
         # (Befund 3, Review Runde 1): epub:type ist eine leerzeichengetrennte Liste, nicht
         # ein einzelner Wert — "toc bodymatter" trägt ebenso ein Inhaltsverzeichnis. Zwei
         # Zeilen weiter oben (properties) wird deshalb schon mit .split() verglichen.
         if "toc" not in (nav.get(_EPUB_TYPE_ATTRIBUTE) or "").split():
             continue
-        for anchor in nav.iter(f"{{{_NS['xhtml']}}}a"):
+        top_level_list = nav.find(f"{{{_NS['xhtml']}}}ol")
+        if top_level_list is not None:
+            _read_nav_list(top_level_list, 0, base, entries)
+        break
+    return entries
+
+
+def _read_nav_list(
+    ordered_list: ElementTree.Element, level: int, base: str, entries: list[tuple[str, str, int]]
+) -> None:
+    """Tiefensuche in Dokumentreihenfolge über ein `<ol>` des Navigationsdokuments
+    (technik.md §8, Nachtrag 28.08.2026): je `<li>` sein eigener Eintrag, dazu — falls
+    vorhanden — sein verschachteltes `<ol>` eine Ebene tiefer. `_deduplicate_by_target`
+    stützt sich auf die unveränderte Reihenfolge (Sherlock-Fall 18→14)."""
+    for item in ordered_list.findall(f"{{{_NS['xhtml']}}}li"):
+        anchor = item.find(f"{{{_NS['xhtml']}}}a")
+        if anchor is not None:
             # (Befund 1, Review Runde 1): erst das Fragment abschneiden, dann dekodieren —
             # sonst findet der Vergleich gegen archive.namelist() das Dokument nicht.
             target = unquote((anchor.get("href") or "").split("#", 1)[0])
             label = " ".join("".join(anchor.itertext()).split())
             if label and target:
-                entries.append((label, posixpath.normpath(posixpath.join(base, target))))
-        break
-    return entries
+                entries.append((label, posixpath.normpath(posixpath.join(base, target)), level))
+        nested_list = item.find(f"{{{_NS['xhtml']}}}ol")
+        if nested_list is not None:
+            _read_nav_list(nested_list, level + 1, base, entries)
 
 
-def _read_ncx(archive: zipfile.ZipFile, href: str) -> list[tuple[str, str]]:
+def _read_ncx(archive: zipfile.ZipFile, href: str) -> list[tuple[str, str, int]]:
     """Rohe Kapitelliste aus der EPUB-2-Datei `toc.ncx` — derselbe Aufbau wie `_read_nav`,
-    für den Mehrheitsfall aus technik.md §8 (zehn von zwölf gemessenen Dateien EPUB 2.0)."""
+    für den Mehrheitsfall aus technik.md §8 (zehn von zwölf gemessenen Dateien EPUB 2.0).
+    `level` ist die Verschachtelungstiefe des `navPoint`, oberste Ebene 0 — **nicht**
+    `dtb:depth` der Datei: Bei Dune steht dort „2", obwohl die Navigation flach ist
+    (technik.md §8, Nachtrag 28.08.2026)."""
     root = ElementTree.fromstring(archive.read(href))
     base = posixpath.dirname(href)
-    entries: list[tuple[str, str]] = []
-    for point in root.iter(f"{{{_NS['ncx']}}}navPoint"):
-        label_element = point.find("ncx:navLabel/ncx:text", _NS)
-        content = point.find("ncx:content", _NS)
-        if label_element is None or content is None:
-            continue
-        label = " ".join((label_element.text or "").split())
-        # (Befund 1, Review Runde 1): siehe _read_nav — erst das Fragment abschneiden,
-        # dann dekodieren.
-        target = unquote((content.get("src") or "").split("#", 1)[0])
-        if label and target:
-            entries.append((label, posixpath.normpath(posixpath.join(base, target))))
+    entries: list[tuple[str, str, int]] = []
+    nav_map = root.find("ncx:navMap", _NS)
+    if nav_map is not None:
+        _read_ncx_points(nav_map, 0, base, entries)
     return entries
 
 
-def _deduplicate_by_target(entries: list[tuple[str, str]]) -> dict[str, str]:
-    """Beschriftung des ersten Navigationseintrags je eindeutigem Ziel (technik.md §8,
-    „Sherlock-Fall 18→14"): Unterpunkte wie „I./II./III." einer Erzählung und der Eintrag
-    „Contents" zeigen auf dasselbe Dokument wie ein anderer Eintrag und dürfen die
-    Kapitelliste nicht aufblähen. Bei mehreren Einträgen auf dasselbe Ziel gewinnt der
-    erste in der Reihenfolge der Navigation."""
-    labels: dict[str, str] = {}
-    for label, target in entries:
-        labels.setdefault(target, label)
+def _read_ncx_points(
+    parent: ElementTree.Element, level: int, base: str, entries: list[tuple[str, str, int]]
+) -> None:
+    """Tiefensuche in Dokumentreihenfolge über verschachtelte `navPoint` (technik.md §8,
+    Nachtrag 28.08.2026) — derselbe Aufbau wie `_read_nav_list`."""
+    for point in parent.findall("ncx:navPoint", _NS):
+        label_element = point.find("ncx:navLabel/ncx:text", _NS)
+        content = point.find("ncx:content", _NS)
+        if label_element is not None and content is not None:
+            label = " ".join((label_element.text or "").split())
+            # (Befund 1, Review Runde 1): siehe _read_nav — erst das Fragment abschneiden,
+            # dann dekodieren.
+            target = unquote((content.get("src") or "").split("#", 1)[0])
+            if label and target:
+                entries.append((label, posixpath.normpath(posixpath.join(base, target)), level))
+        _read_ncx_points(point, level + 1, base, entries)
+
+
+def _deduplicate_by_target(entries: list[tuple[str, str, int]]) -> dict[str, tuple[str, int]]:
+    """Beschriftung **und Ebene** des ersten Navigationseintrags je eindeutigem Ziel
+    (technik.md §8, „Sherlock-Fall 18→14"): Unterpunkte wie „I./II./III." einer Erzählung
+    und der Eintrag „Contents" zeigen auf dasselbe Dokument wie ein anderer Eintrag und
+    dürfen die Kapitelliste nicht aufblähen. Bei mehreren Einträgen auf dasselbe Ziel
+    gewinnt der erste in der Reihenfolge der Navigation — dieselbe Regel für die Ebene:
+    Falten sich tiefer eingerückte Kinder mit ihrem Elternteil zusammen (die drei Kinder
+    I./II./III. unter „I. A SCANDAL IN BOHEMIA" in `sherlock.epub`, alle über `#anker` auf
+    dasselbe Dokument wie der Elternteil), bleibt dessen Ebene übrig, nicht die der
+    Kinder."""
+    labels: dict[str, tuple[str, int]] = {}
+    for label, target, level in entries:
+        labels.setdefault(target, (label, level))
     return labels
 
 
@@ -301,7 +349,7 @@ def _resolve_chapters(
     """Kapitelliste aus der Navigation, sonst der Rückfall auf die `spine` (technik.md
     §8). Bricht sichtbar ab (Regel 13), bleibt am Ende keine einzige Kapitelreferenz übrig
     — statt eines leeren Ergebnisses, das wie ein leeres Buch aussähe."""
-    entries: list[tuple[str, str]] = []
+    entries: list[tuple[str, str, int]] = []
     if package.nav_href and package.nav_href in names:
         entries = _read_nav(archive, package.nav_href)
     # (Befund 4, Review Runde 1): EPUB-3-Vorrang bleibt erhalten — die toc.ncx wird nur
@@ -343,11 +391,16 @@ def _resolve_chapters(
             elif document_groups:
                 document_groups[-1].append(document)
         chapters = [
-            ChapterReference(number=number, title=labels[group[0]], documents=group)
+            ChapterReference(
+                number=number, title=labels[group[0]][0], documents=group, level=labels[group[0]][1]
+            )
             for number, group in enumerate(document_groups, start=1)
         ]
         notice = None
     else:
+        # technik.md §8, Nachtrag 28.08.2026, „Was die Kapitelliste zusätzlich zeigt":
+        # Ohne Navigation stammt keine Hierarchie aus dem Buch — level bleibt 0 (Vorgabe
+        # von ChapterReference.level, hier nicht mitgeschrieben).
         documents = [document for document in package.spine_documents if document in names]
         chapters = [
             ChapterReference(number=number, title=f"Kapitel {number}", documents=[document])
