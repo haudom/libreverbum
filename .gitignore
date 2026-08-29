@@ -35,3 +35,7 @@ agent_status.json
 .ruff_cache/
 .mypy_cache/
 .pytest_cache/
+
+# Transportkopie der Claude-Erinnerungen — gehört zur Sitzung, nicht zum Projekt,
+# genauso wie agent_status.json. Zurückspielen: claude-erinnerungen/LIESMICH.md.
+/claude-erinnerungen/
