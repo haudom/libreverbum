@@ -1996,6 +1996,35 @@ Das ist die Datei-Hälfte der Architekturregel aus Abschnitt 1 und zahlt zweifac
 fassen nie das echte Profil an, sondern bekommen ein Wegwerfverzeichnis; und die
 Oberfläche muss die Vorgabe später nicht beim Kern erfragen, sondern setzt ihre eigene.
 
+### Die Regel gilt für Nutzerdaten, nicht für Programmbestandteile (31.08.2026)
+
+**Der Satz oben meint Nutzerdaten** — Profil, Wörterbuch, `config.toml`: Dateien, die dem
+Nutzer gehören, die er verschieben darf und die kein Klon des Repositoriums mitbringt.
+**Mitgelieferte Programmbestandteile liegen dagegen im Paket, und der Kern findet sie
+relativ zu sich selbst.**
+
+| Art | wo sie liegt | wie der Kern sie findet |
+|---|---|---|
+| Nutzerdaten | `data/` neben dem Projekt | Pfad als Argument, vom Aufrufer gesetzt |
+| Programmbestandteile | im Paket `libreverbum/` | relativ zur eigenen Datei |
+
+Warum nicht auch hier ein Argument: Der Aufrufer müsste dann wissen, wie das Kernpaket
+innen aussieht, und diese Kenntnis wäre durch `cli` und durch jede spätere Oberfläche
+durchzureichen — für eine Datei, die niemand je woanders hinlegt. Das kehrt die
+Architekturregel aus Abschnitt 1 um: Nicht die Oberfläche darf den Kern kennen, sondern
+umgekehrt.
+
+Zu den Programmbestandteilen zählt bisher genau eine Datei:
+
+- `libreverbum/wordfreq_en_5000.txt` — die eingefrorene Grundwortschatzliste für die
+  Vorbelegung des Profils (konzept.md, „Bewusst offen", erster Punkt). Sie steht unter CC
+  BY-SA 4.0 statt unter der MIT-Lizenz des übrigen Repositoriums; Herkunft und Auflagen im
+  `NOTICE`, Bildungsregeln im Kopf der Datei und in `tools/build_wordfreq_preset.py`
+
+Die Trennung aus Abschnitt 4 bleibt auch hier unberührt: Die Liste wird mit keiner anderen
+Datenquelle verschmolzen, sondern beim Anlegen des Profils **eingelesen** — das Ergebnis
+sind Profileinträge, keine Fremdschlüssel auf diese Datei.
+
 ### Exportdateien werden nicht überschrieben
 
 **Ein Lauf schreibt `<Buch>_kapitel<N>.apkg` und `.html` ins Ausgabeverzeichnis

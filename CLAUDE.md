@@ -178,14 +178,22 @@ python tools/bundle_check.py buch.txt                 # Bündelgrößen gegen Ei
 python tools/nlp_check.py buch.txt                    # spaCy gegen Stanza
 python tools/epub_check.py buch.epub                  # EPUB-Struktur und Fließtext
 python tools/epub_check.py --summary *.epub           # eine Zeile je Buch
+python tools/build_wordfreq_preset.py …               # erzeugt statt zu messen (s. u.)
 ```
 
-Alle bis auf zwei kommen mit der Standardbibliothek aus, brauchen also keine
+Alle bis auf drei kommen mit der Standardbibliothek aus, brauchen also keine
 Projektumgebung. **`nlp_check.py` verlangt spaCy oder Stanza samt Modellen**: Ein Vergleich
 der beiden lässt sich nur an den echten Modellen führen, nicht nachbilden; das Skript nennt
 die Installationsbefehle in seinem Kopf. **`ambiguity_check.py` verlangt spaCy und den Kern
 selbst** (`libreverbum.extraction`, `libreverbum.dictionary`): Gemessen wird, was der Kern
 tatsächlich liefert, nicht eine nachgebaute Näherung.
+
+**`build_wordfreq_preset.py` misst nicht, es erzeugt** — als einziges Skript hier: Es
+schreibt `libreverbum/wordfreq_en_5000.txt`, einen ausgelieferten Programmbestandteil
+(technik.md §9, „Die Regel gilt für Nutzerdaten, nicht für Programmbestandteile"). Dafür
+läuft es zweistufig in **zwei** Umgebungen — `export-forms` braucht `wordfreq`, das bewusst
+nie in `.venv/` landet, `build` braucht spaCy mit `en_core_web_md`, das nur dort liegt.
+Einzelheiten im Kopf des Skripts.
 
 **Wer ein Skript aufruft, das den Kern importiert, braucht `PYTHONPATH=.`** — das Paket
 `libreverbum` ist in `.venv/` nicht installiert, und ohne die Zuweisung bricht

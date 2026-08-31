@@ -7,7 +7,9 @@ version = "0.1.0"
 description = "Bereitet den Wortschatz eines Buchkapitels vor dem Lesen auf"
 readme = "README.md"
 license = "MIT"
-license-files = ["LICENSE"]
+# NOTICE gehört mit ins Paket: libreverbum/wordfreq_en_5000.txt steht unter CC BY-SA 4.0
+# statt unter der MIT-Lizenz daneben, und die Namensnennungen dazu stehen nur dort.
+license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "haudom" }]
 keywords = ["epub", "anki", "vocabulary", "spaced-repetition", "spacy", "language-learning"]
 requires-python = ">=3.12,<3.13"
@@ -106,5 +108,5 @@ markers = [
     "needs_model: benötigt einen erreichbaren, echten Modellserver (LIBREVERBUM_MODEL_URL)",
     "needs_epub: benötigt die echten EPUBs tools/sherlock.epub und tools/dorian_gray.epub",
     "needs_calibre_split_epub: benötigt die echte EPUB-Datei tools/dune.epub (Calibre-Konvertat mit _split_NNN-Dokumenten)",
-    "needs_wordfreq: benötigt das echte wordfreq-Paket (bewusst nicht in .venv/, siehe tools/build_wordfreq_preset.py)",
+    "needs_wordfreq: benötigt einen zweiten Interpreter mit dem echten wordfreq-Paket (LIBREVERBUM_WORDFREQ_PYTHON; wordfreq liegt bewusst nicht in .venv/, siehe tools/build_wordfreq_preset.py)",
 ]

@@ -12,8 +12,9 @@ Rangliste der 5.000 häufigsten englischen Grundformen. Genaueres zur Bearbeitun
 steht am Ende dieser Datei und im Kopf von `wordfreq_en_5000.txt` selbst.
 
 Alle Angaben unten sind wörtlich aus `wordfreq`s eigenen Dateien übernommen
-(NOTICE-Text in dessen `README.md`, Abschnitt „License", sowie `LICENSE.txt`,
-geprüft am 31.08.2026 an Fassung 3.1.1) — nicht aus dem Gedächtnis nacherzählt
+(NOTICE-Text in dessen `README.md`, Abschnitte „License" und „Citations to work
+that wordfreq is built on", sowie `LICENSE.txt`, geprüft am 31.08.2026 am
+Quellpaket `wordfreq-3.1.1.tar.gz`) — nicht aus dem Gedächtnis nacherzählt
 (dokumentation.md §4, Regel 15, „die Rohquelle entscheidet").
 
 Anmerkung zur Quelle: `wordfreq` liefert selbst keine gesondert benannte
@@ -105,7 +106,8 @@ OPUS OpenSubtitles 2018
 SUBTLEX (SUBTLEX-US, SUBTLEX-UK, SUBTLEX-CH, SUBTLEX-DE, SUBTLEX-NL) — eigene Auflage
     It contains data from various SUBTLEX word lists: SUBTLEX-US, SUBTLEX-UK,
     SUBTLEX-CH, SUBTLEX-DE, and SUBTLEX-NL, created by Marc Brysbaert et al.
-    and available at http://crr.ugent.be/programs-data/subtitle-frequencies.
+    (see citations below) and available at
+    http://crr.ugent.be/programs-data/subtitle-frequencies.
 
     I (Robyn Speer) have obtained permission by e-mail from Marc Brysbaert to
     distribute these wordlists in wordfreq, to be used for any purpose, not
@@ -117,9 +119,38 @@ SUBTLEX (SUBTLEX-US, SUBTLEX-UK, SUBTLEX-CH, SUBTLEX-DE, SUBTLEX-NL) — eigene 
     These terms are similar to the Creative Commons Attribution-ShareAlike
     license.
 
-    Diese Auflage gilt hiermit als erfüllt: Die SUBTLEX-Autoren (Marc
-    Brysbaert et al.) sind oben genannt, und dass SUBTLEX frei verfügbare
-    Daten sind, steht mit diesem Absatz da.
+    Die Zitate, auf die „(see citations below)" zeigt, stehen in `wordfreq`s
+    README unter „Citations to work that wordfreq is built on". Es sind die
+    fünf SUBTLEX-Einträge daraus, hier im Wortlaut:
+
+    - Brysbaert, M. & New, B. (2009). Moving beyond Kucera and Francis: A Critical
+      Evaluation of Current Word Frequency Norms and the Introduction of a New and
+      Improved Word Frequency Measure for American English. Behavior Research
+      Methods, 41 (4), 977-990.
+      <http://sites.google.com/site/borisnew/pub/BrysbaertNew2009.pdf>
+
+    - Brysbaert, M., Buchmeier, M., Conrad, M., Jacobs, A.M., Bölte, J., & Böhl, A.
+      (2011). The word frequency effect: A review of recent developments and
+      implications for the choice of frequency estimates in German. Experimental
+      Psychology, 58, 412-424.
+
+    - Cai, Q., & Brysbaert, M. (2010). SUBTLEX-CH: Chinese word and character
+      frequencies based on film subtitles. PLoS One, 5(6), e10729.
+      <http://journals.plos.org/plosone/article?id=10.1371/journal.pone.0010729>
+
+    - Keuleers, E., Brysbaert, M. & New, B. (2010). SUBTLEX-NL: A new frequency
+      measure for Dutch words based on film subtitles. Behavior Research Methods,
+      42(3), 643-650.
+      <http://crr.ugent.be/papers/SUBTLEX-NL_BRM.pdf>
+
+    - van Heuven, W. J., Mandera, P., Keuleers, E., & Brysbaert, M. (2014).
+      SUBTLEX-UK: A new and improved word frequency database for British English.
+      The Quarterly Journal of Experimental Psychology, 67(6), 1176-1190.
+      <http://www.tandfonline.com/doi/pdf/10.1080/17470218.2013.850521>
+
+    Damit ist die Auflage erfüllt: Die SUBTLEX-Autoren sind genannt — nicht nur
+    als „Marc Brysbaert et al.", sondern über die Zitate namentlich auflösbar —,
+    und dass SUBTLEX frei verfügbare Daten sind, steht mit diesem Absatz da.
 
 Twitter
     Some additional data was collected by a custom application that watches

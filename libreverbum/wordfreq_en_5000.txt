@@ -6,22 +6,31 @@
 # dieselbe Fassung wie libreverbum/extraction.py.
 #
 # Bildungsregeln:
-#  1. Quelle: wordfreq large_en (wordlist=best), 60.000 Formen exportiert.
+#  1. Quelle: wordfreq „large_en“ (wordlist=best), 60000 Formen exportiert.
 #  2. Nichtalphabetische Formen werden übersprungen und verbrauchen keinen Platz
-#     von N (2637 von 60000 — sie treffen die
-#     is_alpha-Bedingung des Kerns nie).
+#     von N — sie treffen die is_alpha-Bedingung des Kerns nie. Innerhalb der
+#     dafür durchlaufenen Ränge 1 bis 7036 sind das 109;
+#     über den ganzen Export gerechnet 2637 von 60000.
 #  3. Grundform = token.lemma_.lower() über spaCy, jede Form einzeln ohne
 #     Satzkontext.
 #  4. Der Rang einer Grundform ist der Rang ihrer häufigsten Oberflächenform,
 #     nicht die Summe über alle Formen.
 #  5. Von oben durchgehen, bis N=5000 verschiedene Grundformen beisammen sind
-#     (verbraucht dafür: 6927 Formen).
+#     (verbraucht dafür: 6927 alphabetische Formen, Ränge 1 bis 7036).
 #
 # Bekannter Schönheitsfehler: 9 Einträge zerfallen bei der
-# Lemmatisierung in mehrere Token und werden dadurch zu Mehrworteinträgen — sie
-# können nie auf eine Grundform des Kerns treffen und sind tote Plätze. Sie
-# bleiben stehen, weil die Messwerte der Entscheidung auf genau dieser Liste
-# beruhen: „go to“, „can not“, „get to“, „do not“, „i m“, „i d“, „that s“, „will not“, „i ve“.
+# Lemmatisierung in mehrere Token und werden dadurch zu Mehrworteinträgen —
+# Bildungsregel 3 nennt token.lemma_.lower() in der Einzahl, umgesetzt ist die
+# Verkettung über alle Token einer Form. Tote Plätze sind sie nicht: Der Kern
+# bildet auf dem Wendungsweg (extraction.extract_expression_candidates) nach
+# genau derselben Vorschrift Grundformen aus mehreren Token, sie können also
+# treffen. Sie bleiben stehen, weil die Messwerte der Entscheidung auf genau
+# dieser Liste beruhen: „go to“, „can not“, „get to“, „do not“, „i m“, „i d“, „that s“, „will not“, „i ve“.
+#
+# Diese Datei trägt kein pos. Der Abgleichschlüssel des Profils ist (text, pos),
+# und Wortweg und Wendungsweg des Kerns füllen ihn verschieden — welches pos die
+# Vorbelegung schreibt, entscheidet der Bauschritt, der diese Datei einliest,
+# nicht die Datei selbst.
 #
 # Die Liste steht in Rangfolge (häufigste zuerst). Ein Präfix beliebiger Länge
 # daraus (die ersten k von 5000 Zeilen) ist eine gültige Auswahl der k häufigsten

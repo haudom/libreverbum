@@ -33,16 +33,17 @@ kann, und deckt einen anderen Fall ab — Calibre zerlegt große Inhaltsdokument
 zeigt. Eine eigene Marke, damit ihr Fehlen nicht die vierzehn Sherlock-/Dorian-Gray-Tests
 mit übersprungen lässt, die `needs_epub` tragen.
 
-Die Marke `needs_wordfreq` prüft ein **Paket**, keine Datei: `wordfreq` ist bewusst keine
-Abhängigkeit des Projekts (konzept.md, „Bewusst offen") und liegt deshalb nie in `.venv/`.
-Tests damit prüfen `tools/build_wordfreq_preset.py` gegen die echte Bibliothek und laufen
-nur, wenn sie testweise installiert ist.
+Die Marke `needs_wordfreq` prüft weder Datei noch Paket, sondern eine **zweite Umgebung**:
+`wordfreq` ist bewusst keine Abhängigkeit des Projekts (konzept.md, „Bewusst offen") und
+liegt deshalb nie in `.venv/`, während spaCy und `en_core_web_md` nur dort liegen. Der
+Reproduktionstest zu `tools/build_wordfreq_preset.py` braucht beides und läuft deshalb
+zweistufig — Stufe 1 mit dem Interpreter aus `LIBREVERBUM_WORDFREQ_PYTHON`, Stufe 2 mit
+`sys.executable`. Fehlt die Variable, wird übersprungen.
 """
 
 from __future__ import annotations
 
 import http.server
-import importlib.util
 import json
 import os
 import sqlite3
@@ -542,14 +543,28 @@ def real_dune_epub_path() -> Path:
     return _real_dune_epub_path()
 
 
-def _wordfreq_available() -> bool:
+def _wordfreq_python() -> str | None:
     # REGEL (dokumentation.md §4, Regel 15, „die Rohquelle entscheidet"): Der Test zu
     # tools/build_wordfreq_preset.py prüft die eingefrorene Datei gegen die echte
     # wordfreq-Bibliothek, nicht gegen eine erinnerte Zahl. wordfreq ist bewusst keine
     # Abhängigkeit des Projekts (technik.md §2, „Häufigkeitsdaten — unkritisch") und
-    # liegt deshalb nie in .venv/ — anders als bei needs_dictionary/needs_epub prüft die
-    # Marke hier also ein Paket, keine Datei.
-    return importlib.util.find_spec("wordfreq") is not None
+    # liegt deshalb nie in .venv/ — die Marke zeigt daher auf einen *zweiten*
+    # Interpreter: Stufe 1 des Bauskripts läuft dort, Stufe 2 braucht spaCy und
+    # en_core_web_md und läuft mit sys.executable in .venv/. Vorbild ist _real_model_url()
+    # oben: keine Autosuche, sondern eine Umgebungsvariable — sonst wird übersprungen,
+    # nicht geraten (Befund 1, Review Bauschritt 1: die frühere Paketprüfung konnte in
+    # keiner der beiden Umgebungen zutreffen und übersprang deshalb immer).
+    return os.environ.get("LIBREVERBUM_WORDFREQ_PYTHON")
+
+
+@pytest.fixture
+def wordfreq_python() -> str:
+    """Interpreter einer Wegwerfumgebung mit `wordfreq` (`LIBREVERBUM_WORDFREQ_PYTHON`) —
+    dieselbe Stelle, gegen die auch `pytest_collection_modifyitems` die Marke
+    `needs_wordfreq` prüft."""
+    path = _wordfreq_python()
+    assert path is not None, "needs_wordfreq hätte übersprungen haben müssen"
+    return path
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
@@ -580,10 +595,11 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
         for item in items:
             if item.get_closest_marker("needs_calibre_split_epub") is not None:
                 item.add_marker(skip_dune)
-    if not _wordfreq_available():
+    if not _wordfreq_python():
         skip_wordfreq = pytest.mark.skip(
-            reason="echtes wordfreq-Paket fehlt (bewusst nicht in .venv/, siehe "
-            "tools/build_wordfreq_preset.py)"
+            reason="kein Interpreter mit wordfreq konfiguriert "
+            "(LIBREVERBUM_WORDFREQ_PYTHON setzen; wordfreq liegt bewusst nicht in .venv/, "
+            "siehe tools/build_wordfreq_preset.py)"
         )
         for item in items:
             if item.get_closest_marker("needs_wordfreq") is not None:

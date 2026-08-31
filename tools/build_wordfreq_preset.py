@@ -48,12 +48,28 @@ Fünf Bildungsregeln — verbindlich, nicht bei jedem Lauf neu zu entscheiden
 Bekannter Schönheitsfehler
 ---------------------------
 Ein Teil der Grundformen zerfällt bei der Lemmatisierung in mehrere Token und wird dadurch
-zu einem Mehrworteintrag (`cannot` -> „can not", `gonna` -> „go to", …). Solche Einträge
-können nie auf eine Grundform des Kerns treffen und sind tote Plätze in der Liste. Sie
-bleiben bewusst drin: Die Messwerte, auf denen die Entscheidung für die Vorbelegung
-beruht, stammen von genau dieser Liste, und eine nachträgliche Bereinigungsregel gäbe es
-nirgends sonst im Projekt. Der Kopf der erzeugten Datei nennt die tatsächlich gefundenen
-Einträge — ausgezählt bei diesem Lauf, nicht aus einer früheren Messung übernommen.
+zu einem Mehrworteintrag (`cannot` -> „can not", `gonna` -> „go to", …). Der Grund steht in
+Regel 3: Sie nennt `token.lemma_.lower()` in der Einzahl, umgesetzt ist die Verkettung über
+**alle** Token einer Form (`" ".join(…)`) — bei einer einformigen Eingabe dasselbe, bei
+einer zerfallenden nicht.
+
+**Tote Plätze sind das nicht.** `extraction.extract_expression_candidates` bildet je Satz
+aus jedem n-Gramm alphabetischer Token eine Grundform nach genau derselben Vorschrift; „go
+to", „get to", „do not", „can not" und „will not" entstehen dort laufend. Die Einträge
+wirken also — auf dem Wendungsweg statt auf dem Wortweg. Sie bleiben bewusst drin: Die
+Messwerte, auf denen die Entscheidung für die Vorbelegung beruht, stammen von genau dieser
+Liste, und eine nachträgliche Bereinigungsregel gäbe es nirgends sonst im Projekt. Der Kopf
+der erzeugten Datei nennt die tatsächlich gefundenen Einträge — ausgezählt bei diesem Lauf,
+nicht aus einer früheren Messung übernommen.
+
+Was diese Datei nicht entscheidet: den Abgleichschlüssel
+---------------------------------------------------------
+Die Datei trägt **kein `pos`**, nur Grundformen. Im Profil ist der Abgleichschlüssel
+dagegen `(text, pos)` (`libreverbum/profile.py`), und die beiden Wege des Kerns füllen ihn
+verschieden: Wortgrundformen tragen eine echte Wortart, Wendungsgrundformen den leeren Wert
+(`extraction._NO_SINGLE_POS`). Welches `pos` die Vorbelegung beim Einlesen schreibt,
+entscheidet deshalb der Bauschritt, der sie einliest — nicht diese Datei und nicht dieses
+Skript. Ein einziger fester Wert träfe entweder nur die Mehrworteinträge oder keinen der N.
 
 Aufruf
 ------
@@ -116,6 +132,12 @@ def _build(forms_path: str, out_path: str, n: int) -> None:
     forms: list[str] = payload["forms"]
     total = len(forms)
     alpha_forms = [f for f in forms if f.isalpha()]
+    # Der Rang jeder alphabetischen Form in der ungefilterten Rangliste (1-gezählt). Ohne
+    # ihn ließe sich der Kopf nicht widerspruchsfrei schreiben: Die übersprungenen
+    # nichtalphabetischen Formen über den ganzen Export gezählt passen nicht zu den
+    # verbrauchten Formen, die nur bis zum Erreichen von N reichen (leicht-Befund 2,
+    # Review Bauschritt 1).
+    alpha_ranks = [i + 1 for i, f in enumerate(forms) if f.isalpha()]
     skipped_nonalpha = total - len(alpha_forms)
 
     nlp = spacy.load("en_core_web_md")
@@ -137,6 +159,9 @@ def _build(forms_path: str, out_path: str, n: int) -> None:
             f"mehr — --limit bei »export-forms« erhöhen und Stufe 1 erneut laufen lassen"
         )
 
+    last_rank = alpha_ranks[consumed - 1]
+    skipped_within = last_rank - consumed
+
     multiword = [w for w in lemma_order if " " in w]
     header = _build_header(
         payload=payload,
@@ -144,12 +169,15 @@ def _build(forms_path: str, out_path: str, n: int) -> None:
         total_forms=total,
         skipped_nonalpha=skipped_nonalpha,
         consumed=consumed,
+        last_rank=last_rank,
+        skipped_within=skipped_within,
         multiword=multiword,
     )
     Path(out_path).write_text(header + "\n".join(lemma_order) + "\n", encoding="utf-8")
     print(
-        f"{len(lemma_order)} Grundformen aus {consumed} verbrauchten Formen "
-        f"({skipped_nonalpha} nichtalphabetische von {total} übersprungen) -> {out_path}"
+        f"{len(lemma_order)} Grundformen aus {consumed} verbrauchten alphabetischen Formen "
+        f"(Ränge 1 bis {last_rank}, darin {skipped_within} nichtalphabetische übersprungen; "
+        f"über den ganzen Export {skipped_nonalpha} von {total}) -> {out_path}"
     )
     print(f"Mehrworteinträge ({len(multiword)}): {', '.join(multiword)}")
 
@@ -161,6 +189,8 @@ def _build_header(
     total_forms: int,
     skipped_nonalpha: int,
     consumed: int,
+    last_rank: int,
+    skipped_within: int,
     multiword: list[str],
 ) -> str:
     heute = datetime.date.today().strftime("%d.%m.%Y")
@@ -178,22 +208,31 @@ def _build_header(
         "# dieselbe Fassung wie libreverbum/extraction.py.",
         "#",
         "# Bildungsregeln:",
-        "#  1. Quelle: wordfreq large_en (wordlist=best), 60.000 Formen exportiert.",
+        f"#  1. Quelle: wordfreq {quelle} (wordlist=best), {total_forms} Formen exportiert.",
         "#  2. Nichtalphabetische Formen werden übersprungen und verbrauchen keinen Platz",
-        f"#     von N ({skipped_nonalpha} von {total_forms} — sie treffen die",
-        "#     is_alpha-Bedingung des Kerns nie).",
+        "#     von N — sie treffen die is_alpha-Bedingung des Kerns nie. Innerhalb der",
+        f"#     dafür durchlaufenen Ränge 1 bis {last_rank} sind das {skipped_within};",
+        f"#     über den ganzen Export gerechnet {skipped_nonalpha} von {total_forms}.",
         "#  3. Grundform = token.lemma_.lower() über spaCy, jede Form einzeln ohne",
         "#     Satzkontext.",
         "#  4. Der Rang einer Grundform ist der Rang ihrer häufigsten Oberflächenform,",
         "#     nicht die Summe über alle Formen.",
         f"#  5. Von oben durchgehen, bis N={n} verschiedene Grundformen beisammen sind",
-        f"#     (verbraucht dafür: {consumed} Formen).",
+        f"#     (verbraucht dafür: {consumed} alphabetische Formen, Ränge 1 bis {last_rank}).",
         "#",
         f"# Bekannter Schönheitsfehler: {len(multiword)} Einträge zerfallen bei der",
-        "# Lemmatisierung in mehrere Token und werden dadurch zu Mehrworteinträgen — sie",
-        "# können nie auf eine Grundform des Kerns treffen und sind tote Plätze. Sie",
-        "# bleiben stehen, weil die Messwerte der Entscheidung auf genau dieser Liste",
-        f"# beruhen: {multiword_text}.",
+        "# Lemmatisierung in mehrere Token und werden dadurch zu Mehrworteinträgen —",
+        "# Bildungsregel 3 nennt token.lemma_.lower() in der Einzahl, umgesetzt ist die",
+        "# Verkettung über alle Token einer Form. Tote Plätze sind sie nicht: Der Kern",
+        "# bildet auf dem Wendungsweg (extraction.extract_expression_candidates) nach",
+        "# genau derselben Vorschrift Grundformen aus mehreren Token, sie können also",
+        "# treffen. Sie bleiben stehen, weil die Messwerte der Entscheidung auf genau",
+        f"# dieser Liste beruhen: {multiword_text}.",
+        "#",
+        "# Diese Datei trägt kein pos. Der Abgleichschlüssel des Profils ist (text, pos),",
+        "# und Wortweg und Wendungsweg des Kerns füllen ihn verschieden — welches pos die",
+        "# Vorbelegung schreibt, entscheidet der Bauschritt, der diese Datei einliest,",
+        "# nicht die Datei selbst.",
         "#",
         "# Die Liste steht in Rangfolge (häufigste zuerst). Ein Präfix beliebiger Länge",
         f"# daraus (die ersten k von {n} Zeilen) ist eine gültige Auswahl der k häufigsten",
