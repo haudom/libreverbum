@@ -19,3 +19,11 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+Dieses Repositorium ist gemischt lizenziert: Der Code steht unter der MIT-Lizenz
+oben. Eine Ausnahme ist `libreverbum/wordfreq_en_5000.txt` — bearbeitetes Material
+aus `wordfreq`s CC-BY-SA-4.0-lizenzierten Häufigkeitsdaten und deshalb selbst unter
+CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Namensnennungen
+und Einzelheiten: siehe NOTICE.

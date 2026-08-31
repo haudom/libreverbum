@@ -32,11 +32,17 @@ kann, und deckt einen anderen Fall ab — Calibre zerlegt große Inhaltsdokument
 `…_split_000`, `…_split_001`, `…`, wovon die Navigation nur auf das jeweils erste Stück
 zeigt. Eine eigene Marke, damit ihr Fehlen nicht die vierzehn Sherlock-/Dorian-Gray-Tests
 mit übersprungen lässt, die `needs_epub` tragen.
+
+Die Marke `needs_wordfreq` prüft ein **Paket**, keine Datei: `wordfreq` ist bewusst keine
+Abhängigkeit des Projekts (konzept.md, „Bewusst offen") und liegt deshalb nie in `.venv/`.
+Tests damit prüfen `tools/build_wordfreq_preset.py` gegen die echte Bibliothek und laufen
+nur, wenn sie testweise installiert ist.
 """
 
 from __future__ import annotations
 
 import http.server
+import importlib.util
 import json
 import os
 import sqlite3
@@ -536,10 +542,20 @@ def real_dune_epub_path() -> Path:
     return _real_dune_epub_path()
 
 
+def _wordfreq_available() -> bool:
+    # REGEL (dokumentation.md §4, Regel 15, „die Rohquelle entscheidet"): Der Test zu
+    # tools/build_wordfreq_preset.py prüft die eingefrorene Datei gegen die echte
+    # wordfreq-Bibliothek, nicht gegen eine erinnerte Zahl. wordfreq ist bewusst keine
+    # Abhängigkeit des Projekts (technik.md §2, „Häufigkeitsdaten — unkritisch") und
+    # liegt deshalb nie in .venv/ — anders als bei needs_dictionary/needs_epub prüft die
+    # Marke hier also ein Paket, keine Datei.
+    return importlib.util.find_spec("wordfreq") is not None
+
+
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
-    """Überspringt `needs_dictionary`-, `needs_model`-, `needs_epub`- und
-    `needs_calibre_split_epub`-Tests ohne ihre Voraussetzung, statt sie scheitern zu
-    lassen (bauplan.md, T2 und T12; technik.md §8, Nachtrag 28.08.2026)."""
+    """Überspringt `needs_dictionary`-, `needs_model`-, `needs_epub`-,
+    `needs_calibre_split_epub`- und `needs_wordfreq`-Tests ohne ihre Voraussetzung, statt
+    sie scheitern zu lassen (bauplan.md, T2 und T12; technik.md §8, Nachtrag 28.08.2026)."""
     if not _real_dictionary_path().exists():
         skip_dictionary = pytest.mark.skip(reason="echtes Wörterbuch tools/en-de.sqlite3 fehlt")
         for item in items:
@@ -564,3 +580,11 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
         for item in items:
             if item.get_closest_marker("needs_calibre_split_epub") is not None:
                 item.add_marker(skip_dune)
+    if not _wordfreq_available():
+        skip_wordfreq = pytest.mark.skip(
+            reason="echtes wordfreq-Paket fehlt (bewusst nicht in .venv/, siehe "
+            "tools/build_wordfreq_preset.py)"
+        )
+        for item in items:
+            if item.get_closest_marker("needs_wordfreq") is not None:
+                item.add_marker(skip_wordfreq)

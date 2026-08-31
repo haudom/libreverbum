@@ -106,4 +106,5 @@ markers = [
     "needs_model: benötigt einen erreichbaren, echten Modellserver (LIBREVERBUM_MODEL_URL)",
     "needs_epub: benötigt die echten EPUBs tools/sherlock.epub und tools/dorian_gray.epub",
     "needs_calibre_split_epub: benötigt die echte EPUB-Datei tools/dune.epub (Calibre-Konvertat mit _split_NNN-Dokumenten)",
+    "needs_wordfreq: benötigt das echte wordfreq-Paket (bewusst nicht in .venv/, siehe tools/build_wordfreq_preset.py)",
 ]

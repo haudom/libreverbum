@@ -193,6 +193,7 @@ dazukommt:
 | Bestandteil | Lizenz | mitgeliefert |
 |---|---|---|
 | WikDict EN→DE (aus Wiktionary über DBnary) | CC BY-SA | nein, wird bezogen |
+| `wordfreq_en_5000.txt` (Grundwortschatz für die Vorbelegung, bearbeitet aus `wordfreq`) | CC BY-SA 4.0 | ja, im Repository |
 | spaCy samt `en_core_web_md` | MIT | nein, über `uv sync` |
 | genanki (Anki-Erzeugung) | MIT | nein, über `uv sync` |
 | PySide6 (Oberfläche, Phase 2) | LGPL | nein, eigene Zusatzgruppe |
@@ -201,6 +202,10 @@ Die WikDict-Daten stehen unter CC BY-SA und werden deshalb **nicht** mit einer
 GPL-lizenzierten Quelle verschmolzen — die beiden Lizenzen sind nicht verträglich, und
 genau daran ist die naheliegende Alternative gescheitert ([technik.md](technik.md) §2,
 „Lizenzfalle: nicht verschmelzen").
+
+**Das Repositorium ist damit gemischt lizenziert:** Code MIT, `wordfreq_en_5000.txt`
+CC BY-SA 4.0, weil sie bearbeitetes Material aus `wordfreq`s Häufigkeitsdaten ist.
+Namensnennungen: siehe [NOTICE](NOTICE).
 
 ## Dokumentation
 
