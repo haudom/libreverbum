@@ -166,7 +166,7 @@ def test_a_foreign_sqlite_file_is_rejected_instead_of_being_overwritten(tmp_path
 
 def test_a_versioned_file_missing_profile_tables_is_rejected(tmp_path: Path) -> None:
     """bauplan.md T8, Befund 2 (Review T8): `user_version` allein ist keine Zusicherung —
-    eine Datei mit passender Versionsnummer, aber ohne die sieben Profiltabellen (etwa
+    eine Datei mit passender Versionsnummer, aber ohne die acht Profiltabellen (etwa
     eine vorversionierte fremde Datei), bricht sichtbar ab statt erst bei der nächsten
     Abfrage mit einer nichtssagenden `OperationalError: no such table`."""
     path = tmp_path / "unvollstaendig.sqlite3"
@@ -176,6 +176,45 @@ def test_a_versioned_file_missing_profile_tables_is_rejected(tmp_path: Path) -> 
     con.close()
 
     with pytest.raises(ValueError):
+        profile.open_profile(path)
+
+
+# Die acht Tabellennamen des Profilschemas (technik.md §4) — eigens hier gepflegt statt
+# über profile._TABLE_NAMES importiert: Der folgende Test soll gerade prüfen, dass jede
+# einzelne davon verlangt wird, nicht die Menge übernehmen, die er testet.
+_PROFILE_TABLE_NAMES = (
+    "book",
+    "chapter",
+    "lemma",
+    "sense",
+    "occurrence",
+    "event",
+    "card",
+    "learner",
+)
+
+
+@pytest.mark.parametrize("missing_table", _PROFILE_TABLE_NAMES)
+def test_a_versioned_file_missing_a_single_profile_table_is_rejected(
+    tmp_path: Path, missing_table: str
+) -> None:
+    """Verschärfung von `test_a_versioned_file_missing_profile_tables_is_rejected` (Befund
+    leicht, Durchsicht d8d5954): Jener Test legt eine Datei mit **gar keiner** Tabelle an —
+    die Differenzmenge `_TABLE_NAMES - existing_tables` ist dann so oder so nicht leer,
+    egal welche (oder wie viele) Tabellen `_TABLE_NAMES` tatsächlich nennt. Fiele eine
+    einzelne Tabelle unbemerkt aus `_TABLE_NAMES`, bliebe jener Test unverändert grün. Hier
+    fehlt gezielt **eine** Tabelle bei sonst vollständigem Schema — das prüft für jede der
+    acht Tabellen einzeln, dass ihr Fehlen tatsächlich erkannt wird."""
+    path = tmp_path / f"fehlt_{missing_table}.sqlite3"
+    con = sqlite3.connect(path)
+    con.execute(f"PRAGMA user_version = {profile.SCHEMA_VERSION}")
+    for table in _PROFILE_TABLE_NAMES:
+        if table != missing_table:
+            con.execute(f"CREATE TABLE {table}(id INTEGER PRIMARY KEY)")
+    con.commit()
+    con.close()
+
+    with pytest.raises(ValueError, match=missing_table):
         profile.open_profile(path)
 
 
@@ -885,6 +924,62 @@ def test_recording_an_event_with_only_one_of_book_and_chapter_number_set_is_reje
         )
 
 
+def test_recording_an_event_with_only_chapter_number_set_is_rejected(tmp_path: Path) -> None:
+    """Gegenrichtung zu `test_recording_an_event_with_only_one_of_book_and_chapter_number_
+    set_is_rejected` oben (Befund leicht, Durchsicht d8d5954): Bislang war nur „Buch ohne
+    Kapitelnummer" geprüft; `_record_event`s Bedingung `(event.book is None) !=
+    (event.chapter_number is None)` weist aber auch „Kapitelnummer ohne Buch" zurück — bis
+    hierher unbelegt, obwohl sie hält."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    sense = Sense(
+        lemma=Lemma(text="life", pos="NOUN"),
+        wikdict_sense="the state of being alive",
+        wikdict_trans_list="Leben",
+        wikdict_lexentry="eng/life__Noun__1",
+    )
+
+    with pytest.raises(ValueError):
+        profile.record_event(
+            con,
+            Event(
+                sense=sense,
+                knowledge_state=KnowledgeState.KNOWN,
+                origin=Origin.TRIAGE,
+                timestamp=datetime.now(UTC),
+                book=None,
+                chapter_number=1,
+            ),
+        )
+
+
+def test_the_database_check_constraint_rejects_a_mixed_row_directly(tmp_path: Path) -> None:
+    """Der `CHECK ((book_id IS NULL) = (chapter_number IS NULL))` aus `_SCHEMA` greift auch
+    am Python vorbei (Befund leicht, Durchsicht d8d5954): Bislang war nur `_record_event`s
+    eigene Prüfung getestet, nicht der DB-seitige `CHECK` selbst — eine Zeile, direkt per
+    SQL eingefügt, umgeht `_record_event` vollständig. `book_id` gehört zu einem echten
+    Buch (der einspaltige Fremdschlüssel auf `book(id)` bliebe sonst die eigentliche
+    Fehlerursache), `chapter_number` bleibt `NULL`: Der zusammengesetzte Fremdschlüssel auf
+    `chapter(book_id, number)` greift bei einer `NULL`-Spalte nicht (SQLites `MATCH
+    SIMPLE`), sodass ausschließlich der `CHECK` übrigbleibt, um den Fehlschlag zu
+    erklären."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    book_id = profile.ensure_book(con, _BOOK)
+    sense = Sense(
+        lemma=Lemma(text="life", pos="NOUN"),
+        wikdict_sense="the state of being alive",
+        wikdict_trans_list="Leben",
+        wikdict_lexentry="eng/life__Noun__1",
+    )
+    sense_id = profile.ensure_sense(con, sense)
+
+    with pytest.raises(sqlite3.IntegrityError):
+        con.execute(
+            "INSERT INTO event (sense_id, knowledge_state, origin, timestamp, book_id, "
+            "chapter_number) VALUES (?, ?, ?, ?, ?, NULL)",
+            (sense_id, "known", "triage", datetime.now(UTC).isoformat(), book_id),
+        )
+
+
 def test_origin_preset_stays_distinguishable_from_origin_triage_after_reading_back(
     tmp_path: Path,
 ) -> None:
@@ -963,6 +1058,49 @@ def test_cefr_level_defaults_to_no_answer_and_is_distinguishable_from_a_set_leve
 
     profile.set_cefr_level(con, None)
     assert profile.get_cefr_level(con) is None
+
+
+def test_set_cefr_level_still_works_if_the_learner_row_is_missing(tmp_path: Path) -> None:
+    """Befund leicht, Durchsicht d8d5954: `set_cefr_level` schrieb bislang ein bloßes
+    `UPDATE learner SET cefr_level = ? WHERE id = 1` — betrifft die Zeile fehlt (etwa nach
+    einem manuellen Eingriff außerhalb dieses Moduls) null Zeilen und kehrt wortlos zurück
+    (gegen Regel 13). `INSERT … ON CONFLICT(id) DO UPDATE` legt die Zeile stattdessen neu
+    an, das Niveau ist danach lesbar."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    con.execute("DELETE FROM learner WHERE id = 1")
+    con.commit()
+
+    profile.set_cefr_level(con, CefrLevel.B2)
+
+    assert profile.get_cefr_level(con) == CefrLevel.B2
+
+
+def test_get_cefr_level_reports_a_missing_learner_row_in_german(tmp_path: Path) -> None:
+    """Befund leicht, Durchsicht d8d5954: Fehlt die Einzelzeile der Tabelle `learner`
+    trotzdem (Regel 13), bricht `get_cefr_level` mit einer eigenen, deutschen Meldung ab —
+    nicht mit einem nackten `assert`, das unter `python -O` entfällt und die Zeile
+    darunter erst mit einem englischen `TypeError` an entfernter Stelle abbrechen ließe."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    con.execute("DELETE FROM learner WHERE id = 1")
+    con.commit()
+
+    with pytest.raises(ValueError, match="learner"):
+        profile.get_cefr_level(con)
+
+
+def test_get_cefr_level_wraps_an_invalid_stored_value_in_a_german_message(tmp_path: Path) -> None:
+    """Befund leicht, Durchsicht d8d5954: Ein Wert außerhalb der `CefrLevel`-Aufzählung in
+    der Spalte (etwa nach einem manuellen Eingriff) ließ bislang `CefrLevel(...)`s
+    englische Fremdmeldung („'c2' is not a valid CefrLevel") unverändert durch — laut, aber
+    gegen die Sprachregel (dokumentation.md §1). `get_cefr_level` kapselt sie jetzt wie das
+    Modul es sonst mit sqlite3s englischen Meldungen tut."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    con.execute("UPDATE learner SET cefr_level = ? WHERE id = 1", ("c2",))
+    con.commit()
+
+    with pytest.raises(ValueError, match="c2") as excinfo:
+        profile.get_cefr_level(con)
+    assert "is not a valid" not in str(excinfo.value)
 
 
 def test_event_sense_id_index_exists(tmp_path: Path) -> None:

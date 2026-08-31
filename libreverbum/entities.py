@@ -66,8 +66,16 @@ class CefrLevel(StrEnum):
     Bezeichner bewusst `CefrLevel`/`cefr_level`, nicht `level`: Der Bezeichner `level` ist
     in dokumentation.md §2 bereits für die Gliederungsebene der Navigation vergeben
     (`epub.ChapterReference.level`) — ein zweiter, andersartiger Gebrauch verwechselte
-    beides (dokumentation.md §1). **`C2` wird bewusst nicht angeboten**: Wer C2 einträfe,
-    hätte kaum unbekannte Grundformen mehr vorzubelegen — die Stufen darunter genügen."""
+    beides (dokumentation.md §1).
+
+    **`C2` wird bewusst nicht angeboten** — nicht, weil ein C2-Lernender wenig vorzu-
+    belegen hätte (das Gegenteil ist der Fall: Er hätte am meisten davon). Zwei echte
+    Gründe (Befund leicht, Durchsicht d8d5954): Erstens trägt `wordfreq_en_5000.txt` nur
+    5.000 Grundformen — oberhalb von C1 (`_PRESET_WORD_COUNT[CefrLevel.C1] == 5000` in
+    `pipeline.py`) ist aus der eingefrorenen Liste schlicht nichts mehr auszugeben.
+    Zweitens wächst gemessen der Anteil der Grundformen ohne Wörterbucheintrag mit N (2
+    von 25 bei A1, 6 bei B1, 9 bei C1) — ein C2-Kontingent träfe auf einen noch größeren
+    Anteil ungedeckter Grundformen."""
 
     A1 = "a1"
     A2 = "a2"

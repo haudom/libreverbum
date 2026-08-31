@@ -32,7 +32,9 @@ user_version` (Regel 5). `ensure_book`, `ensure_lemma`, `ensure_sense` und
 Identität. `record_event` hängt ein Ereignis an, ohne ein vorheriges zu ersetzen
 (technik.md §4, „Kernentscheidung: Ereignisfolge statt überschreibbarem Zustand") — bei
 `Origin.PRESET` ohne Buch und Kapitel (`event.book`/`event.chapter_number` sind dann
-`None`, Schemafassung 2, siehe unten). `events_for_sense` liest die volle Folge zu einer
+`None`, Schemafassung 2, siehe unten). Das deckt nur die Buch-lose Seite ab; die
+**Bedeutungsidentität** prüft `record_event` nicht — siehe dessen eigenen Docstring,
+„Bedeutungsidentität einer Vorbelegung". `events_for_sense` liest die volle Folge zu einer
 Bedeutung zurück, mit `book=None` für jedes Vorbelegungs-Ereignis darin — nicht ohne
 dieses Ereignis, das JOIN auf `book` verwirft keine Zeile (Regel 13).
 `current_knowledge_state` ist die Sicht darauf: das jüngste Ereignis je Bedeutung, `None`
@@ -45,10 +47,11 @@ exportierten `Card` fest, mit derselben GUID, die im Anki-Deck steht (Regel 6) �
 GUID idempotent: ein zweiter Export derselben Bedeutung legt keine zweite Zeile an.
 
 `get_cefr_level`/`set_cefr_level` lesen und setzen das Sprachniveau des Lernenden
-(`entities.CefrLevel`, `None` für „keine Angabe") — eine Angabe über das Profil selbst,
-nicht über ein Buch oder Kapitel, in der eigenen Tabelle `profile` mit genau einer Zeile
-(siehe `_SCHEMA` unten, Kommentar bei `CREATE TABLE profile`, für die Abgrenzung gegen
-eine allgemeine Schlüssel-Wert-Tabelle).
+(`entities.CefrLevel`, `None` für „keine Angabe") — eine Angabe über den Lernenden selbst,
+nicht über ein Buch oder Kapitel, in der eigenen Tabelle `learner` mit genau einer Zeile
+(siehe `_SCHEMA` unten, Kommentar bei `CREATE TABLE learner`, für die Abgrenzung gegen
+eine allgemeine Schlüssel-Wert-Tabelle sowie dafür, warum die Tabelle nicht `profile`
+heißt).
 
 `record_preset` (Bauschritt 3/5 der Vorbelegung, 31.08.2026) schreibt die Ereignisse einer
 Vorbelegung **und** das gewählte Niveau in einer einzigen Transaktion — ganz oder gar
@@ -59,7 +62,10 @@ seit diesem Bauschritt mit einem unbestätigten Kern (`_ensure_book`, `_ensure_l
 `_ensure_sense`, `_record_event`), den `record_preset` ohne Zwischen-Commit wiederverwendet
 — welche Bedeutungen eine Grundform bekommt, ist Sache des Aufrufers (`pipeline`, der
 einzige Ort, der `dictionary` und `profile` zugleich kennen darf, technik.md §7); dieses
-Modul kennt `en-de.sqlite3` weiterhin an keiner Stelle.
+Modul kennt `en-de.sqlite3` weiterhin an keiner Stelle. Wie `record_event` prüft auch
+`record_preset` die Bedeutungsidentität der übergebenen Ereignisse nicht (siehe
+`record_event`, „Bedeutungsidentität einer Vorbelegung") — eine zulässige Vorbelegung
+liefert deshalb stets über `dictionary` aufgelöste Bedeutungen.
 """
 
 from __future__ import annotations
@@ -211,24 +217,31 @@ CREATE TABLE card(
 -- Schemafassung 2: Das Sprachniveau ist eine Angabe über den Lernenden, nicht über ein
 -- Buch oder Kapitel — deshalb eine eigene Tabelle statt einer Spalte in `book` oder
 -- `chapter`. Bewusst keine allgemeine Schlüssel-Wert-Tabelle (setting(key, value)), die
--- Regel 14 als Abstraktion über einer einzigen Umsetzung untersagt: `profile` trägt eine
+-- Regel 14 als Abstraktion über einer einzigen Umsetzung untersagt: `learner` trägt eine
 -- konkrete, typisierte Spalte für genau einen Zweck. Genau eine Zeile (CHECK id = 1), von
 -- open_profile beim Schemaaufbau angelegt, damit get_cefr_level/set_cefr_level nie
 -- zwischen „keine Zeile" und „Niveau ist NULL" unterscheiden müssen — NULL heißt „keine
 -- Angabe" (entities.CefrLevel wird beim Rücklesen daraus erzeugt, nie geraten).
-CREATE TABLE profile(
+--
+-- (Befund mittel, Durchsicht d8d5954): nicht `profile` — der Bezeichner ist bereits
+-- dreifach vergeben (das Modul `profile.py`, der Begriff „Profil" für den ganzen
+-- Nutzerbestand in dokumentation.md §2, die Datei `profil.sqlite3`); `SELECT cefr_level
+-- FROM profile` läse sich wörtlich als „aus der Profildatei", die es aber nicht ist.
+-- Dasselbe Muster hat das Projekt schon zweimal verworfen (`model` für `entities`,
+-- technik.md §7; `level` für `cefr_level` selbst, siehe entities.CefrLevel-Docstring).
+CREATE TABLE learner(
     id INTEGER PRIMARY KEY CHECK (id = 1),
     cefr_level TEXT
 );
-INSERT INTO profile (id, cefr_level) VALUES (1, NULL);
+INSERT INTO learner (id, cefr_level) VALUES (1, NULL);
 """
 
 
 # (Befund 2, Review T8): Die Tabellennamen des Schemas, um beim Öffnen zu prüfen, ob eine
 # Datei mit passender Schemaversion auch wirklich dieses Schema trägt. Seit Fassung 2 acht
-# Tabellen (`profile` kam hinzu).
+# Tabellen (`learner` kam hinzu).
 _TABLE_NAMES = frozenset(
-    {"book", "chapter", "lemma", "sense", "occurrence", "event", "card", "profile"}
+    {"book", "chapter", "lemma", "sense", "occurrence", "event", "card", "learner"}
 )
 
 
@@ -496,6 +509,19 @@ def record_event(con: sqlite3.Connection, event: Event) -> int:
     (Buch ohne Kapitelnummer oder umgekehrt) wird zurückgewiesen (Regel 13) — das wäre
     weder ein reguläres Kapitel-Ereignis noch eine Vorbelegung, sondern ein Zustand, den
     `entities.Event` nicht vorsieht.
+
+    **Bedeutungsidentität einer Vorbelegung** (Befund mittel, Durchsicht d8d5954): Das
+    oben Beschriebene deckt nur die Buch-lose Seite ab. `event.sense` selbst wird von
+    dieser Funktion **ungeprüft** übernommen — eine `Sense` mit allen drei
+    `wikdict_`-Feldern auf `None` wird ebenso angenommen wie eine über `dictionary`
+    aufgelöste und erzeugt eine `sense`-Zeile mit drei `NULL`, die technik.md §4
+    ausdrücklich als *„kein Wörterbucheintrag"* liest, nicht als vorbelegtes Wissen. Eine
+    zulässige Vorbelegung bucht deshalb stets auf eine **über `dictionary` aufgelöste**
+    Bedeutung, mit derselben Identität, die ein echter Kapiteldurchlauf erzeugt
+    (`pipeline.write_vocabulary_preset` tut genau das) — sonst vergleicht
+    `_find_sense_id`/`compare_chapter_vocabulary` den späteren echten Fund gegen eine
+    andere Bedeutung, und der Nutzer wird trotz Vorbelegung erneut gefragt, nur unter dem
+    Etikett `NEW_MEANING_OF_KNOWN_WORD` statt `KNOWN` (Abnahmekriterium 6).
     """
     event_id = _record_event(con, event)
     con.commit()
@@ -672,25 +698,65 @@ def record_card(con: sqlite3.Connection, card: Card) -> int:
 def get_cefr_level(con: sqlite3.Connection) -> CefrLevel | None:
     """Das Sprachniveau des Lernenden (`entities.CefrLevel`), `None` für „keine Angabe".
 
-    Liest die einzige Zeile der Tabelle `profile` (Schemafassung 2) — `open_profile` legt
-    sie beim Schemaaufbau mit `cefr_level = NULL` an, die Zeile fehlt also nie."""
-    row = con.execute("SELECT cefr_level FROM profile WHERE id = 1").fetchone()
-    assert row is not None  # open_profile legt die Zeile beim Schemaaufbau stets an
+    Liest die einzige Zeile der Tabelle `learner` (Schemafassung 2) — `open_profile` legt
+    sie beim Schemaaufbau mit `cefr_level = NULL` an, die Zeile fehlt also nie. Fehlt sie
+    trotzdem (Befund leicht, Durchsicht d8d5954: eine Profildatei, an der außerhalb dieses
+    Moduls herumgeschrieben wurde), bricht dieser Zugriff mit einer eigenen, deutschen
+    Meldung ab (Regel 13) — statt eines nackten `assert`, das unter `python -O` (Regel 13
+    verlangt einen Fehlschlag, der auch ohne Assertions sichtbar bleibt) stillschweigend
+    entfällt und die Zeile darunter mit einem `TypeError` an entfernter Stelle abbrechen
+    ließe."""
+    row = con.execute("SELECT cefr_level FROM learner WHERE id = 1").fetchone()
+    if row is None:
+        raise ValueError(
+            "Profildatei enthält keine Zeile in der Tabelle `learner` (id = 1) — "
+            "open_profile legt sie beim Schemaaufbau an; die Datei ist entweder "
+            "beschädigt oder wurde außerhalb dieses Moduls verändert."
+        )
     level = row[0]
-    return CefrLevel(level) if level is not None else None
+    if level is None:
+        return None
+    try:
+        return CefrLevel(level)
+    except ValueError as error:
+        # (Befund leicht, Durchsicht d8d5954): CefrLevel(...) wirft bei einem Wert
+        # außerhalb der Aufzählung eine englische Fremdmeldung („'c2' is not a valid
+        # CefrLevel") — laut (Regel 13), aber gegen die Sprachregel (dokumentation.md §1).
+        # Dasselbe Muster wie bei sqlite3s englischen Meldungen: gekapselt, nicht
+        # unverändert durchgereicht.
+        raise ValueError(
+            f"Profildatei enthält in der Tabelle `learner` das unbekannte Sprachniveau "
+            f"{level!r} — kein gültiger Wert von entities.CefrLevel."
+        ) from error
+
+
+def _set_cefr_level(con: sqlite3.Connection, level: CefrLevel | None) -> None:
+    """Unbestätigter Kern von `set_cefr_level` (siehe `_ensure_book`) — auch von
+    `record_preset` genutzt, das dasselbe Setzen ohne Zwischen-Commit braucht.
+
+    `INSERT … ON CONFLICT(id) DO UPDATE`, kein bloßes `UPDATE` (Befund leicht, Durchsicht
+    d8d5954): Ein `UPDATE` auf eine fehlende Zeile betrifft still null Zeilen (Regel 13) —
+    `get_cefr_level` bräche danach am eigenen, oben beschriebenen Abbruch ab, obwohl der
+    Aufruf hier scheinbar erfolgreich war. Die Zielzeile (`id = 1`) besteht seit
+    `open_profile` zwar immer, aber die Zusicherung soll nicht an dieser Voraussetzung
+    hängen."""
+    con.execute(
+        "INSERT INTO learner (id, cefr_level) VALUES (1, ?) "
+        "ON CONFLICT(id) DO UPDATE SET cefr_level = excluded.cefr_level",
+        (level,),
+    )
 
 
 def set_cefr_level(con: sqlite3.Connection, level: CefrLevel | None) -> None:
     """Setzt das Sprachniveau des Lernenden — `None` trägt „keine Angabe" ein, unter-
     scheidbar von jedem gesetzten Niveau (`get_cefr_level`).
 
-    Ein `UPDATE` auf die einzige Zeile von `profile`, kein `INSERT`: Anders als bei einem
-    `Event` gibt es hier nur den einen aktuellen Stand, kein Verlauf — das Niveau ist eine
-    Momentaufnahme des Lernenden, nicht ein Ereignis mit Herkunft und Zeitpunkt
-    (technik.md §4, „Kernentscheidung: Ereignisfolge statt überschreibbarem Zustand" gilt
-    hier bewusst nicht: Ein adaptiver Test aus Phase 2 soll diesen einen Wert verfeinern,
-    nicht eine zweite Herleitung neben der Ereignisfolge aufbauen)."""
-    con.execute("UPDATE profile SET cefr_level = ? WHERE id = 1", (level,))
+    Anders als bei einem `Event` gibt es hier nur den einen aktuellen Stand, kein Verlauf
+    — das Niveau ist eine Momentaufnahme des Lernenden, nicht ein Ereignis mit Herkunft und
+    Zeitpunkt (technik.md §4, „Kernentscheidung: Ereignisfolge statt überschreibbarem
+    Zustand" gilt hier bewusst nicht: Ein adaptiver Test aus Phase 2 soll diesen einen Wert
+    verfeinern, nicht eine zweite Herleitung neben der Ereignisfolge aufbauen)."""
+    _set_cefr_level(con, level)
     con.commit()
 
 
@@ -705,9 +771,9 @@ def record_preset(con: sqlite3.Connection, events: Iterable[Event], cefr_level: 
     Gemessen an 18.644 Ereignissen (Auftragstext): `record_event` in einer Schleife 441 s
     — jeder Aufruf committet für sich —, dasselbe Sammelschreiben hier 0,2 s: Jedes
     Ereignis läuft über den unbestätigten Kern `_record_event` (dieselbe Prüfung und
-    Schreiblogik wie `record_event`, nur ohne Zwischen-Commit), das Niveau über dieselbe
-    rohe `UPDATE`-Anweisung wie `set_cefr_level`, beides im selben, noch offenen
-    Transaktionsblock — erst danach **ein** `commit()`. Scheitert ein Schritt, holt
+    Schreiblogik wie `record_event`, nur ohne Zwischen-Commit), das Niveau über denselben
+    unbestätigten Kern `_set_cefr_level` wie `set_cefr_level`, beides im selben, noch
+    offenen Transaktionsblock — erst danach **ein** `commit()`. Scheitert ein Schritt, holt
     `rollback()` alles seit dem letzten Commit zurück, bevor der Fehler weitergereicht wird
     (Regel 13: kein `except`, das nur protokolliert und weiterläuft, sondern eines, das den
     Halbschritt zurücknimmt und den Fehler sichtbar lässt).
@@ -715,11 +781,14 @@ def record_preset(con: sqlite3.Connection, events: Iterable[Event], cefr_level: 
     Wie die Ereignisse zustande kommen — welche Grundformen, welche Bedeutungen aus dem
     Wörterbuch —, ist nicht Sache dieser Funktion: Sie kennt `en-de.sqlite3` nicht (Regel
     4). Das erledigt `pipeline`, der einzige Ort, der `dictionary` und `profile` zugleich
-    kennen darf (technik.md §7)."""
+    kennen darf (technik.md §7). Und wie `record_event` prüft auch sie die
+    Bedeutungsidentität der übergebenen Ereignisse nicht (siehe `record_event`,
+    „Bedeutungsidentität einer Vorbelegung") — eine zulässige Vorbelegung liefert deshalb
+    stets über `dictionary` aufgelöste Bedeutungen."""
     try:
         for event in events:
             _record_event(con, event)
-        con.execute("UPDATE profile SET cefr_level = ? WHERE id = 1", (cefr_level,))
+        _set_cefr_level(con, cefr_level)
     except Exception:
         con.rollback()
         raise
