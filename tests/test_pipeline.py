@@ -16,6 +16,7 @@ from libreverbum import dictionary, epub, extraction, pipeline, profile
 from libreverbum.entities import (
     Book,
     CardDirection,
+    CefrLevel,
     Event,
     KnowledgeState,
     Lemma,
@@ -1513,3 +1514,183 @@ def test_resolve_triage_entries_reports_progress_for_skipped_and_resolved_known_
     assert resolution.skipped == 1
     assert resolution.resolved_known == 1
     assert len(reports) == 3, reports
+
+
+# ------------------------------------------ write_vocabulary_preset (Bauschritt 3/5 der
+# ------------------------------------------ Vorbelegung, 31.08.2026)
+#
+# Läuft gegen die echte, im Paket ausgelieferte wordfreq_en_5000.txt (Programmbestandteil,
+# technik.md §9) und `mini_dictionary_db` — kein eigenes Wegwerf-Wörterbuch, weil
+# write_vocabulary_preset den Ort der Liste nicht als Argument entgegennimmt. Innerhalb
+# der ersten 500 Ränge der echten Liste treffen genau drei der sieben Stichwörter aus
+# mini_dictionary_db: watch (Rang 368, Substantiv **und** Verb), red (Rang 384, Adjektiv
+# **und** Substantiv), street (Rang 431, Substantiv) — macht 5 (Grundform, Wortart)-Paare,
+# 6 Bedeutungen; nachgerechnet mit dictionary.pos_variant_lists/contiguous_candidates vor
+# dem Schreiben dieser Tests. bank und draw liegen erst jenseits von Rang 500, saw und
+# give up stehen gar nicht in der Liste (keine dieser vier Formen verfälscht also A1).
+
+
+def test_write_vocabulary_preset_books_every_dictionary_sense_not_only_the_best_scored(
+    mini_dictionary_db: Path, profile_path: Path
+) -> None:
+    """Auftragstext: gebucht wird alle Wörterbuchbedeutungen einer vorbelegten Grundform.
+    watch als Substantiv trägt im Mini-Wörterbuch zwei Bedeutungen (Uhr, Wache mit
+    niedrigerem score) — beide werden gebucht, nicht nur die bestbewertete."""
+    count = pipeline.write_vocabulary_preset(
+        dictionary_path=mini_dictionary_db,
+        profile_path=profile_path,
+        cefr_level=CefrLevel.A1,
+        timestamp=datetime.now(UTC),
+    )
+
+    assert count == 6
+
+    con = profile.open_profile(profile_path)
+    watch_noun_translations = {
+        row[0]
+        for row in con.execute(
+            "SELECT s.wikdict_trans_list FROM sense s JOIN lemma l ON l.id = s.lemma_id "
+            "WHERE l.text = 'watch' AND l.pos = 'NOUN'"
+        )
+    }
+    assert watch_noun_translations == {"Uhr | Armbanduhr", "Wache"}
+
+
+def test_write_vocabulary_preset_word_class_matches_what_the_dictionary_actually_has(
+    mini_dictionary_db: Path, profile_path: Path
+) -> None:
+    """Fortsetzung von Bauschritt 3/5, Auftragstext: eine feste Wortart zu schreiben wäre
+    der stille Fehlschlag. red bekommt hier sowohl ein Adjektiv- als auch ein
+    Substantiv-Ereignis, street nur ein Substantiv-Ereignis — eine feste Wortart, gleich
+    welche, träfe mindestens eines der beiden falsch oder gar keines."""
+    pipeline.write_vocabulary_preset(
+        dictionary_path=mini_dictionary_db,
+        profile_path=profile_path,
+        cefr_level=CefrLevel.A1,
+        timestamp=datetime.now(UTC),
+    )
+
+    con = profile.open_profile(profile_path)
+    red_pos = {
+        row[0]
+        for row in con.execute(
+            "SELECT l.pos FROM lemma l WHERE l.text = 'red' AND EXISTS "
+            "(SELECT 1 FROM sense s WHERE s.lemma_id = l.id)"
+        )
+    }
+    street_pos = {
+        row[0]
+        for row in con.execute(
+            "SELECT l.pos FROM lemma l WHERE l.text = 'street' AND EXISTS "
+            "(SELECT 1 FROM sense s WHERE s.lemma_id = l.id)"
+        )
+    }
+    assert red_pos == {"ADJ", "NOUN"}
+    assert street_pos == {"NOUN"}
+
+
+def test_write_vocabulary_preset_vocabulary_is_recognized_as_known_in_a_later_lookup(
+    mini_dictionary_db: Path, profile_path: Path
+) -> None:
+    """Abnahmekriterium 6: Eine vorbelegte Grundform muss beim späteren Kapitelabgleich
+    als bekannt erkannt werden — nicht nur als roh geschriebene sense-Zeile.
+    profile._find_sense_id vergleicht Grundform, Wortart und alle drei wikdict_-Felder;
+    eine Vorbelegung, die nur die Wortart aus dem Wörterbuch nimmt, aber keine
+    vollständige Sense schreibt, erzeugte eine andere Bedeutungsidentität als der spätere
+    echte Fund — der Nutzer würde trotz Vorbelegung erneut gefragt, nur unter dem Etikett
+    neue Bedeutung eines bekannten Wortes statt bekannt."""
+    pipeline.write_vocabulary_preset(
+        dictionary_path=mini_dictionary_db,
+        profile_path=profile_path,
+        cefr_level=CefrLevel.A1,
+        timestamp=datetime.now(UTC),
+    )
+
+    # Dieselbe Bedeutung, wie sie ein echter Kapiteldurchlauf über dictionary.candidates
+    # fände (run_chapter tut für ein Einzelwort-Vorkommen nichts anderes).
+    street_candidates = dictionary.candidates(mini_dictionary_db, Lemma(text="street", pos="NOUN"))
+    assert len(street_candidates) == 1
+    street_sense = street_candidates[0]
+
+    con = profile.open_profile(profile_path)
+    sense_id = profile.ensure_sense(con, street_sense)
+    assert profile.current_knowledge_state(con, sense_id) == KnowledgeState.KNOWN
+
+    status = profile.compare_chapter_vocabulary(con, [street_sense])
+    assert status[street_sense] == profile.VocabularyStatus.KNOWN
+
+
+def test_write_vocabulary_preset_does_not_book_a_lemma_without_a_dictionary_entry(
+    tmp_path: Path, profile_path: Path
+) -> None:
+    """Auftragstext: Was der Kern beim Nachschlagen findet, wird vorbelegt; was er nicht
+    findet, wird nicht vorbelegt. Ein Wörterbuch ohne einen einzigen Eintrag lässt keine
+    der 500 Grundformen aus A1 ein Ereignis erzeugen — und keinen uncertain-Platzhalter:
+    sense bekäme sonst Zeilen mit drei NULL-Feldern, die technik.md §4 als kein
+    Wörterbucheintrag liest, nicht als vorbelegtes Wissen."""
+    empty_dictionary = tmp_path / "leer.sqlite3"
+    con = sqlite3.connect(empty_dictionary)
+    con.execute(
+        "CREATE TABLE translation("
+        "lexentry, sense_num, sense, written_rep TEXT, trans_list, score, is_good, importance)"
+    )
+    con.commit()
+    con.close()
+
+    count = pipeline.write_vocabulary_preset(
+        dictionary_path=empty_dictionary,
+        profile_path=profile_path,
+        cefr_level=CefrLevel.A1,
+        timestamp=datetime.now(UTC),
+    )
+
+    assert count == 0
+    reader = profile.open_profile(profile_path)
+    assert reader.execute("SELECT count(*) FROM event").fetchone()[0] == 0
+    assert reader.execute("SELECT count(*) FROM sense").fetchone()[0] == 0
+    # Das Niveau selbst wurde trotzdem gewählt (anders als „keine Angabe" unten) und bleibt
+    # gesetzt, auch wenn kein einziges Wort einen Wörterbucheintrag hatte.
+    assert profile.get_cefr_level(reader) == CefrLevel.A1
+
+
+def test_write_vocabulary_preset_with_no_answer_writes_nothing(
+    mini_dictionary_db: Path, profile_path: Path
+) -> None:
+    """keine Angabe (cefr_level=None) schreibt keine Ereignisse und setzt kein Niveau —
+    hier sogar noch früher sichtbar: Das Profil wird gar nicht erst geöffnet, die
+    Profildatei bleibt ganz ungeschrieben."""
+    count = pipeline.write_vocabulary_preset(
+        dictionary_path=mini_dictionary_db,
+        profile_path=profile_path,
+        cefr_level=None,
+        timestamp=datetime.now(UTC),
+    )
+
+    assert count == 0
+    assert not profile_path.exists()
+
+
+@pytest.mark.needs_dictionary
+def test_write_vocabulary_preset_against_the_real_dictionary(
+    real_dictionary_path: Path, profile_path: Path
+) -> None:
+    """dokumentation.md §5, Woran geprüft wird: Was über den Inhalt einer Fremdquelle
+    behauptet wird, wird gegen das echte Gegenüber geprüft. Schreibt die Zahl fest, die
+    dieser Bau tatsächlich gegen tools/en-de.sqlite3 liefert.
+
+    Abweichung vom Auftragstext: Der Auftrag nennt für B1 (N=2.000) 2.663 Paare und
+    8.045 Bedeutungen aus einer Messung vom 31.08.2026. Diese Umsetzung liefert
+    reproduzierbar 8.044 Ereignisse (eine Bedeutung weniger) — geprüft gegen
+    case-insensitives Nachschlagen, Funktionswörter (the/of/a/…, deren Wörterbucheintrag
+    außerhalb der fünf erkannten Wortarten liegt) und unübliche lexentry-Formate; keine
+    dieser Erklärungen trifft zu. Die Abweichung bleibt ungeklärt und ist hier als Befund
+    festgehalten (Auftragstext: Weicht dein Ergebnis ab, ist das ein Befund für den
+    Bericht und keine Zahl zum Anpassen)."""
+    count = pipeline.write_vocabulary_preset(
+        dictionary_path=real_dictionary_path,
+        profile_path=profile_path,
+        cefr_level=CefrLevel.B1,
+        timestamp=datetime.now(UTC),
+    )
+
+    assert count == 8044

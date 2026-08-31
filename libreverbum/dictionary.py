@@ -9,7 +9,10 @@ denen `translation` — Schritt 5, zweite Hälfte — die im Kontext passende Be
 (Befund 4, Review T15). `contiguous_candidates` und `particle_verb_candidates` gleichen
 dazu die beiden Mehrwortausdruck-Kandidaten aus T4 gegen dieselbe Tabelle ab (bauplan.md
 T7) — getrennt, weil sie verschieden viel behaupten (Abschnitt „Liefert" unten, Befund 1
-Review T7). `fetch_dictionary` liefert dazu den Erstbezug der Datei selbst (bauplan.md T6):
+Review T7). `pos_variants` und `pos_variant_lists` (Bauschritt 3/5 der Vorbelegung,
+31.08.2026) kehren `candidates` um: Sie bestimmen die Wortart erst aus dem Fund, für eine
+Grundform, deren Wortart noch niemand kennt (`wordfreq_en_5000.txt` trägt keine).
+`fetch_dictionary` liefert dazu den Erstbezug der Datei selbst (bauplan.md T6):
 Herunterladen, Prüfung, von Hand hinterlegte Datei, die beiden Indizes auf
 `translation(written_rep)`.
 
@@ -17,13 +20,16 @@ Voraussetzungen
 ---------------
 `candidates` und `candidate_lists` erwarten die Grundform(en) bereits wortartbestimmt
 (`Lemma.pos`, spaCys `token.pos_`): Die Reihenfolge Wortart → Grundform → Nachschlagen ist
-zwingend (technik.md, „Warum die Reihenfolge zwingend ist"). `contiguous_candidates`
+zwingend (technik.md, „Warum die Reihenfolge zwingend ist"). `pos_variants` und
+`pos_variant_lists` kehren das um und erwarten deshalb nur einen bloßen Text, keine
+`Lemma` — genau der Fall der eingefrorenen Grundwortschatzliste
+(`wordfreq_en_5000.txt`, „Diese Datei trägt kein pos"). `contiguous_candidates`
 erwartet die gesamte Liste der Kandidaten aus einem Aufruf von
 `extraction.extract_contiguous_candidates`, `particle_verb_candidates` die aus
 `extraction.extract_particle_verb_candidates` (T4) — welche der beiden Funktionen
 aufgerufen wird, entscheidet der Aufrufer anhand der Herkunft der Kandidaten, nicht dieses
 Modul (`extraction.py`, „T7 unterscheidet die zwei Arten daran, welche der beiden
-Funktionen sie geliefert hat"). Alle drei Listenformen nehmen eine Liste statt eines
+Funktionen sie geliefert hat"). Alle Listenformen nehmen eine Liste statt eines
 einzelnen Kandidaten entgegen und teilen sich dafür eine Verbindung (Befund 5, Review T7;
 Befund 4, Review T15): Eine eigene Verbindung je Kandidat kostet ein Kapitel mit rund
 23.600 Mehrwort-Kandidaten 14,3 s, eine gemeinsame Verbindung für die ganze Liste 1,7 s
@@ -39,6 +45,11 @@ Je Grundform und Wortart eine nach `score` absteigend sortierte Liste von `Sense
 die vorgeschriebene Beschriftung. `candidate_lists` liefert dieselbe Liste je Eingabe-
 `Lemma`, in derselben Reihenfolge wie die Eingabe (Befund 4, Review T15) — kein
 Zwischenspeicher (Regel 14), nur eine für den einen Aufruf geteilte Verbindung.
+`pos_variants` liefert je Text alle `(Lemma, Bedeutungen)`-Paare, für die das Wörterbuch
+unter einer der fünf erkannten Wortarten mindestens einen Eintrag führt — leer, wo keine
+Wortart trifft, nie geraten (Bauschritt 3/5 der Vorbelegung: „Die Wortarten kommen deshalb
+aus dem Wörterbuch"). `pos_variant_lists` dieselbe Abfrage über eine geteilte Verbindung,
+wie `candidate_lists`.
 `contiguous_candidates` und `particle_verb_candidates` liefern je Eingabe-`Lemma` ebenso
 eine solche Liste — case-insensitiv gegen `written_rep` abgeglichen, gefiltert auf
 `score ≥ 50` und Wortart nicht `Proper_noun` (technik.md, „Messung: Mehrwortausdrücke") —,
@@ -192,6 +203,91 @@ def candidate_lists(dictionary_path: Path, lemmas: Sequence[Lemma]) -> list[list
     con = sqlite3.connect(dictionary_path)
     try:
         return [_single_word_matches(con, lemma) for lemma in lemmas]
+    finally:
+        con.close()
+
+
+# --------------------------------------- Umkehrung: Wortart aus dem Fund (Bauschritt 3/5
+# --------------------------------------- der Vorbelegung, 31.08.2026)
+
+# Umkehrung von _WIKDICT_POS: WikDict-Wortart -> spaCy-Wortart. `pos_variants` bestimmt
+# die Wortart erst aus dem Fund, anders als candidates()/candidate_lists(), die eine
+# bereits bekannte Lemma.pos erwarten — genau der Fall der eingefrorenen
+# Grundwortschatzliste, die kein pos trägt (wordfreq_en_5000.txt).
+_SPACY_POS = {wikdict: spacy for spacy, wikdict in _WIKDICT_POS.items()}
+
+
+def _pos_variants(con: sqlite3.Connection, text: str) -> list[tuple[Lemma, list[Sense]]]:
+    """Kern von `pos_variants`/`pos_variant_lists` für eine bereits offene Verbindung —
+    dieselbe Abfrage wie `_single_word_matches`, nur **eine** statt fünf: alle Zeilen zu
+    `text` auf einmal, danach nach der in `lexentry` gefundenen Wortart gruppiert. Nur die
+    fünf Wortarten aus `_WIKDICT_POS` zählen (dieselbe Einschränkung wie
+    `_single_word_matches`) — eine Zeile mit einer anderen WikDict-Wortart (`Pronoun`,
+    `Preposition`, `Determiner`, …) liefert `_wikdict_pos(...)` zwar zurück, aber
+    `extraction.extract_vocabulary` vergibt `chosen_pos` nie an eine dieser Wortarten
+    (Inhaltswortfilter, `dictionary.py`, „Warum die Reihenfolge zwingend ist"), ein
+    Wortweg-Fund unter ihnen entspräche also keiner Grundform, die der Kern je bildet."""
+    rows: list[tuple[str | None, str | None, str | None]] = con.execute(
+        "SELECT lexentry, sense, trans_list FROM translation "
+        "WHERE written_rep = ? AND lexentry IS NOT NULL ORDER BY score DESC",
+        (text,),
+    ).fetchall()
+
+    senses_by_pos: dict[str, list[Sense]] = {}
+    for lexentry, wikdict_sense, trans_list in rows:
+        found_pos = _wikdict_pos(lexentry)
+        if found_pos is None:
+            continue
+        spacy_pos = _SPACY_POS.get(found_pos)
+        if spacy_pos is None:
+            continue
+        lemma = Lemma(text=text, pos=spacy_pos)
+        senses_by_pos.setdefault(spacy_pos, []).append(
+            Sense(
+                lemma=lemma,
+                wikdict_sense=wikdict_sense,
+                wikdict_trans_list=trans_list,
+                wikdict_lexentry=lexentry,
+            )
+        )
+    return [(Lemma(text=text, pos=pos), senses) for pos, senses in senses_by_pos.items()]
+
+
+def pos_variants(dictionary_path: Path, text: str) -> list[tuple[Lemma, list[Sense]]]:
+    """Alle (Grundform, Wortart)-Paare, für die `text` als Einzelwort mindestens einen
+    Wörterbucheintrag hat, samt deren Bedeutungen — die Umkehrung von `candidates()`
+    (Bauschritt 3/5 der Vorbelegung, 31.08.2026): Dort ist `Lemma.pos` bereits bekannt, hier
+    wird sie erst gesucht, weil die eingefrorene Grundwortschatzliste
+    (`wordfreq_en_5000.txt`) keine Wortart trägt.
+
+    Nur die fünf Wortarten aus `_WIKDICT_POS`, wie `candidates()`. `text` ohne Eintrag
+    unter diesen Wortarten liefert eine **leere** Liste, keinen `uncertain`-Platzhalter:
+    Anders als ein Kandidat aus einem echten Kapitel (`particle_verb_candidates`) ist eine
+    Grundform aus der eingefrorenen Liste ohne Fund keine beobachtete, aber unbekannte
+    Verwendung — es gibt keine Bedeutung, die als bekannt gebucht werden könnte.
+    """
+    if not dictionary_path.is_file():
+        raise FileNotFoundError(f"Wörterbuch nicht lesbar: {dictionary_path}")
+    con = sqlite3.connect(dictionary_path)
+    try:
+        return _pos_variants(con, text)
+    finally:
+        con.close()
+
+
+def pos_variant_lists(
+    dictionary_path: Path, texts: Sequence[str]
+) -> list[list[tuple[Lemma, list[Sense]]]]:
+    """`pos_variants` für mehrere Grundformen über eine geteilte Verbindung (Bauschritt
+    3/5 der Vorbelegung, 31.08.2026) — dieselbe Bauart wie `candidate_lists` (Befund 4,
+    Review T15): Bei 5.000 Grundformen kostet eine eigene Verbindung je Grundform ein
+    Vielfaches einer geteilten (vgl. `candidate_lists`-Docstring, 7,2× bei 1.465
+    Vorkommen)."""
+    if not dictionary_path.is_file():
+        raise FileNotFoundError(f"Wörterbuch nicht lesbar: {dictionary_path}")
+    con = sqlite3.connect(dictionary_path)
+    try:
+        return [_pos_variants(con, text) for text in texts]
     finally:
         con.close()
 

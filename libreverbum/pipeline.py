@@ -11,6 +11,13 @@ Kenntnisstand jeder Bedeutung darin gegen das Profil abgleichen. `pipeline` ist 
 technik.md §7 der einzige Ort im Kern, der mehrere Schrittmodule kennen darf — hier
 `epub`, `extraction`, `dictionary` und `profile`.
 
+Dazu, seit Bauschritt 3/5 der Vorbelegung (31.08.2026), `write_vocabulary_preset`: trägt
+die häufigsten Grundformen des beim Anlegen des Profils gewählten Sprachniveaus als
+bekannt ein (konzept.md, „Bewusst offen", „Woher der Nutzer seinen Grundwortschatz
+bekommt"). Auch dafür kennt nur `pipeline` `dictionary` (die Wortarten und Bedeutungen
+der eingefrorenen Liste, `wordfreq_en_5000.txt`) **und** `profile` (das Sammelschreiben,
+`profile.record_preset`) zugleich.
+
 Voraussetzungen
 ---------------
 `nlp` ist ein bereits geladenes spaCy-Modell (`extraction.load_nlp()`) — das Laden kostet
@@ -106,16 +113,26 @@ Wörterbucheintrag auch hier.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from libreverbum import dictionary, epub, extraction, profile, translation, triage
-from libreverbum.entities import Chapter, Occurrence, Sense
+from libreverbum.entities import (
+    CefrLevel,
+    Chapter,
+    Event,
+    KnowledgeState,
+    Lemma,
+    Occurrence,
+    Origin,
+    Sense,
+)
 from libreverbum.profile import VocabularyStatus
 
 if TYPE_CHECKING:
     import sqlite3
     from collections.abc import Callable, Sequence
-    from pathlib import Path
+    from datetime import datetime
 
     from spacy.language import Language
 
@@ -674,3 +691,117 @@ def resolve_triage_entries(
         skipped=skipped,
         deferred=len(ordered) - examined,
     )
+
+
+# --------------------------------------- Vorbelegung des Profils (Bauschritt 3/5, 31.08.2026)
+
+# (31.08.2026, Bauschritt 3/5 der Vorbelegung): Aus der Sprachlehrforschung geliehen und
+# nicht in diesem Projekt gemessen — eine Faustregel für den rezeptiven Grundwortschatz je
+# GER-Niveau, keine eigene Auszählung von LibreVerbum. „Keine Angabe" (kein Eintrag hier)
+# bedeutet keine Vorbelegung; das entscheidet der Aufrufer von `write_vocabulary_preset`,
+# nicht diese Tabelle.
+_PRESET_WORD_COUNT: dict[CefrLevel, int] = {
+    CefrLevel.A1: 500,
+    CefrLevel.A2: 1000,
+    CefrLevel.B1: 2000,
+    CefrLevel.B2: 3500,
+    CefrLevel.C1: 5000,
+}
+
+# Programmbestandteil im Paket, nicht Nutzerdaten — der Kern findet ihn relativ zu sich
+# selbst (technik.md §9, „Die Regel gilt für Nutzerdaten, nicht für Programmbestandteile").
+_WORDFREQ_PRESET_PATH = Path(__file__).parent / "wordfreq_en_5000.txt"
+
+
+def _load_wordfreq_lemmas(count: int) -> list[str]:
+    """Liest die ersten `count` Grundformen aus der eingefrorenen Grundwortschatzliste
+    (`wordfreq_en_5000.txt`) — Kommentarkopf überspringen (jede mit „#" beginnende oder
+    leere Zeile), Rangfolge beibehalten. Die Datei selbst versichert: Ein Präfix
+    beliebiger Länge ist eine gültige Auswahl der `count` häufigsten Grundformen — welche
+    Länge ein Niveau bekommt, entscheidet `_PRESET_WORD_COUNT`, nicht diese Funktion."""
+    lemmas = []
+    with _WORDFREQ_PRESET_PATH.open(encoding="utf-8") as handle:
+        for line in handle:
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#"):
+                lemmas.append(stripped)
+    return lemmas[:count]
+
+
+def write_vocabulary_preset(
+    *, dictionary_path: Path, profile_path: Path, cefr_level: CefrLevel | None, timestamp: datetime
+) -> int:
+    """Vorbelegung des Profils beim Anlegen (Bauschritt 3/5, 31.08.2026, konzept.md,
+    „Bewusst offen", „Woher der Nutzer seinen Grundwortschatz bekommt"): trägt **alle**
+    Wörterbuchbedeutungen der häufigsten Grundformen des gewählten Sprachniveaus als
+    `KnowledgeState.KNOWN` mit `Origin.PRESET` ein, ohne Buch und Kapitel
+    (`entities.Event`, „book und chapter_number sind None bei Origin.PRESET").
+
+    `cefr_level is None` heißt „keine Angabe": Diese Funktion schreibt dann **nichts** —
+    kein Ereignis, kein Aufruf von `profile.record_preset`, das Sprachniveau bleibt
+    unverändert (nicht einmal auf `None` gesetzt: „keine Angabe" beim Anlegen ist kein
+    Zurücksetzen eines vorhandenen Niveaus, das ist Sache einer anderen Bedienhandlung).
+    Sonst werden `_PRESET_WORD_COUNT[cefr_level]` Grundformen aus `wordfreq_en_5000.txt`
+    gelesen (`_load_wordfreq_lemmas`).
+
+    Die Liste trägt keine Wortart — eine geratene, feste Wortart träfe entweder nur die
+    neun Mehrworteinträge der Liste oder gar keine der übrigen (Auftragstext). Die
+    Wortarten kommen deshalb aus dem Wörterbuch, mit derselben Vorrichtung wie
+    `run_chapter`: Eine Grundform ohne Leerzeichen ist ein Einzelwort und läuft über
+    `dictionary.pos_variant_lists` (die Umkehrung von `candidate_lists` — hier ist die
+    Wortart nicht bekannt, sondern wird gesucht), für jede im Wörterbuch gefundene Wortart
+    ein eigenes `(Lemma, Bedeutungen)`-Paar. Eine Grundform mit Leerzeichen ist ein
+    Mehrwortausdruck und läuft über `dictionary.contiguous_candidates` mit `Lemma.pos =
+    ""`, wie `extraction.extract_contiguous_candidates` es für einen echten Kapiteldurchlauf
+    vergäbe (`tools/build_wordfreq_preset.py`: die neun „Schönheitsfehler" der Liste
+    entstehen auf demselben Wendungsweg) — bewusst **nicht**
+    `dictionary.particle_verb_candidates`, dessen `uncertain`-Platzhalter für eine
+    Wortfolge ohne Eintrag hier nie entstehen darf (siehe unten).
+
+    Beide Wege liefern für eine Grundform ohne Fund **keine** Bedeutung:
+    `pos_variant_lists` eine leere Liste je Grundform ohne erkannte Wortart,
+    `contiguous_candidates` eine leere Liste ohne bestandenen Filter — nie einen
+    `uncertain`-Platzhalter. Was der Kern beim Nachschlagen nicht findet, wird nicht
+    vorbelegt: Eine Grundform ohne Wörterbucheintrag hat keine Bedeutung, die man als
+    bekannt buchen könnte, und ein `uncertain`-Eintrag darf nie als bekannt gebucht werden
+    (Auftragstext).
+
+    Schreibt über `profile.record_preset` in einer einzigen Transaktion (ganz oder gar
+    nicht) und liefert die Zahl der gebuchten Ereignisse."""
+    if cefr_level is None:
+        return 0
+
+    lemma_texts = _load_wordfreq_lemmas(_PRESET_WORD_COUNT[cefr_level])
+    single_word_texts = [text for text in lemma_texts if " " not in text]
+    expression_texts = [text for text in lemma_texts if " " in text]
+
+    single_word_variants = dictionary.pos_variant_lists(dictionary_path, single_word_texts)
+    expression_matches = dictionary.contiguous_candidates(
+        dictionary_path, [Lemma(text=text, pos="") for text in expression_texts]
+    )
+
+    senses: list[Sense] = []
+    for variants in single_word_variants:
+        for _lemma, group in variants:
+            senses.extend(group)
+    for matches in expression_matches:
+        senses.extend(matches)
+
+    events = [
+        Event(
+            sense=sense,
+            knowledge_state=KnowledgeState.KNOWN,
+            origin=Origin.PRESET,
+            timestamp=timestamp,
+            book=None,
+            chapter_number=None,
+        )
+        for sense in senses
+    ]
+
+    con = profile.open_profile(profile_path)
+    try:
+        profile.record_preset(con, events, cefr_level)
+    finally:
+        con.close()
+    return len(events)

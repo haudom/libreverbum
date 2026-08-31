@@ -920,3 +920,54 @@ def test_real_dictionary_has_no_index_on_written_rep(real_dictionary_path: Path)
     # wäre. `assert indexes == []` schiede dann unwiderruflich fehl, wiederherstellbar nur
     # durch erneutes Herunterladen der 20 MB.
     assert set(indexes) <= {dictionary.INDEX_NAME, dictionary.INDEX_NAME_NOCASE}
+
+
+# ------------------------------------- pos_variants/pos_variant_lists (Bauschritt 3/5 der
+# ------------------------------------- Vorbelegung, 31.08.2026)
+
+
+def test_pos_variants_word_class_comes_from_the_dictionary_not_a_fixed_value(
+    mini_dictionary_db: Path,
+) -> None:
+    """Bauschritt 3/5 der Vorbelegung, Auftragstext: „Eine feste Wortart zu schreiben wäre
+    der stille Fehlschlag" — die Wortart eines (Grundform, Wortart)-Paars kommt aus dem
+    Fund, nicht aus einer Annahme. `bank` trägt im Mini-Wörterbuch nur Substantiv-Einträge,
+    `draw` sowohl Verb- als auch Substantiv-Einträge; eine feste Wortart, gleich welche,
+    verfehlte mindestens eines der beiden Wörter."""
+    bank_variants = dictionary.pos_variants(mini_dictionary_db, "bank")
+    draw_variants = dictionary.pos_variants(mini_dictionary_db, "draw")
+
+    assert {lemma.pos for lemma, _ in bank_variants} == {"NOUN"}
+    assert {lemma.pos for lemma, _ in draw_variants} == {"VERB", "NOUN"}
+
+
+def test_pos_variants_groups_all_senses_of_one_wordclass_into_one_pair(
+    mini_dictionary_db: Path,
+) -> None:
+    """`bank` trägt zwei Substantiv-Bedeutungen (Geldinstitut, Flussufer) — beide gehören
+    zu **einem** (Grundform, Wortart)-Paar, nicht zu zweien."""
+    variants = dictionary.pos_variants(mini_dictionary_db, "bank")
+
+    assert len(variants) == 1
+    lemma, senses = variants[0]
+    assert lemma == Lemma(text="bank", pos="NOUN")
+    assert {sense.wikdict_trans_list for sense in senses} == {"Bank", "Ufer"}
+
+
+def test_pos_variants_is_empty_for_a_lemma_without_a_dictionary_entry(
+    mini_dictionary_db: Path,
+) -> None:
+    """Eine Grundform ohne Wörterbucheintrag liefert eine leere Liste, kein
+    `uncertain`-Ergebnis: `pos_variants` ist ein reiner Nachschlagevorgang, kein
+    Kandidat aus einem Kapiteldurchlauf."""
+    assert dictionary.pos_variants(mini_dictionary_db, "flumplewort") == []
+
+
+def test_pos_variant_lists_matches_individual_pos_variants_calls(mini_dictionary_db: Path) -> None:
+    """`pos_variant_lists` über eine geteilte Verbindung liefert dieselben Paare wie
+    einzelne `pos_variants`-Aufrufe, in derselben Reihenfolge wie die Eingabe."""
+    texts = ["bank", "draw", "flumplewort"]
+
+    batched = dictionary.pos_variant_lists(mini_dictionary_db, texts)
+
+    assert batched == [dictionary.pos_variants(mini_dictionary_db, text) for text in texts]

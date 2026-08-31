@@ -980,3 +980,97 @@ def test_event_sense_id_index_exists(tmp_path: Path) -> None:
     }
 
     assert "event_sense_id" in indexes
+
+
+# ----------------------------------------------- record_preset (Bauschritt 3/5 der
+# ----------------------------------------------- Vorbelegung, 31.08.2026)
+
+
+def test_record_preset_books_every_given_event_and_sets_the_level(tmp_path: Path) -> None:
+    """`record_preset` schreibt jedes übergebene Ereignis und setzt das Sprachniveau in
+    einer Transaktion. Auftragstext: „gebucht wird alle Wörterbuchbedeutungen einer
+    vorbelegten Grundform" — beide Bedeutungen von `bank` (Geldinstitut, Flussufer) landen
+    hier als zwei Ereignisse, nicht nur die bestbewertete."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    bank_institution = Sense(
+        lemma=Lemma(text="bank", pos="NOUN"),
+        wikdict_sense="institution",
+        wikdict_trans_list="Bank",
+        wikdict_lexentry="eng/bank__Noun__1",
+    )
+    bank_shore = Sense(
+        lemma=Lemma(text="bank", pos="NOUN"),
+        wikdict_sense="edge of river or lake",
+        wikdict_trans_list="Ufer",
+        wikdict_lexentry="eng/bank__Noun__2",
+    )
+    red_sense = Sense(
+        lemma=Lemma(text="red", pos="ADJ"),
+        wikdict_sense="having red as its colour",
+        wikdict_trans_list="rot | Rot",
+        wikdict_lexentry="eng/red__Adjective__1",
+    )
+    timestamp = datetime.now(UTC)
+    events = [
+        _preset_event(bank_institution, timestamp),
+        _preset_event(bank_shore, timestamp),
+        _preset_event(red_sense, timestamp),
+    ]
+
+    profile.record_preset(con, events, CefrLevel.A1)
+
+    assert con.execute("SELECT count(*) FROM event").fetchone()[0] == 3
+    assert profile.get_cefr_level(con) == CefrLevel.A1
+    for sense in (bank_institution, bank_shore, red_sense):
+        sense_id = profile.ensure_sense(con, sense)
+        recorded = profile.events_for_sense(con, sense_id)
+        assert len(recorded) == 1
+        assert recorded[0].origin == Origin.PRESET
+        assert recorded[0].knowledge_state == KnowledgeState.KNOWN
+        assert recorded[0].book is None
+        assert recorded[0].chapter_number is None
+
+
+def test_record_preset_writes_nothing_if_one_event_fails_partway_through(tmp_path: Path) -> None:
+    """Auftragstext: „Die Vorbelegung muss es ganz oder gar nicht geben — ein halb
+    geschriebenes Profil ist schlimmer als keins." Ein naiver Zeitstempel im dritten von
+    drei Ereignissen bricht `record_preset` ab (Regel 13, `_record_event`) — im Profil
+    steht danach **nichts** von diesem Aufruf: weder die beiden zuvor gültigen Ereignisse
+    noch die dafür angelegten lemma-/sense-Zeilen noch das Niveau."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    good_sense_1 = Sense(
+        lemma=Lemma(text="bank", pos="NOUN"),
+        wikdict_trans_list="Bank",
+        wikdict_lexentry="eng/bank__Noun__1",
+    )
+    good_sense_2 = Sense(
+        lemma=Lemma(text="red", pos="ADJ"),
+        wikdict_trans_list="rot",
+        wikdict_lexentry="eng/red__Adjective__1",
+    )
+    broken_sense = Sense(
+        lemma=Lemma(text="street", pos="NOUN"),
+        wikdict_trans_list="Straße",
+        wikdict_lexentry="eng/street__Noun__1",
+    )
+    naive_timestamp = datetime(2026, 8, 31, 12, 0, 0)  # ohne Zeitzone
+    events = [
+        _preset_event(good_sense_1, datetime.now(UTC)),
+        _preset_event(good_sense_2, datetime.now(UTC)),
+        Event(
+            sense=broken_sense,
+            knowledge_state=KnowledgeState.KNOWN,
+            origin=Origin.PRESET,
+            timestamp=naive_timestamp,
+            book=None,
+            chapter_number=None,
+        ),
+    ]
+
+    with pytest.raises(ValueError):
+        profile.record_preset(con, events, CefrLevel.B1)
+
+    assert con.execute("SELECT count(*) FROM event").fetchone()[0] == 0
+    assert con.execute("SELECT count(*) FROM sense").fetchone()[0] == 0
+    assert con.execute("SELECT count(*) FROM lemma").fetchone()[0] == 0
+    assert profile.get_cefr_level(con) is None

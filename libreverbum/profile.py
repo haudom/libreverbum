@@ -48,10 +48,18 @@ GUID idempotent: ein zweiter Export derselben Bedeutung legt keine zweite Zeile 
 (`entities.CefrLevel`, `None` für „keine Angabe") — eine Angabe über das Profil selbst,
 nicht über ein Buch oder Kapitel, in der eigenen Tabelle `profile` mit genau einer Zeile
 (siehe `_SCHEMA` unten, Kommentar bei `CREATE TABLE profile`, für die Abgrenzung gegen
-eine allgemeine Schlüssel-Wert-Tabelle). Das Schreiben der Vorbelegung selbst —
-Ereignisse zu den häufigsten Grundformen des gewählten Niveaus — ist nicht Sache dieses
-Moduls, sondern des nächsten Bauschritts; `record_event` mit `Origin.PRESET` trägt
-bereits, was er braucht.
+eine allgemeine Schlüssel-Wert-Tabelle).
+
+`record_preset` (Bauschritt 3/5 der Vorbelegung, 31.08.2026) schreibt die Ereignisse einer
+Vorbelegung **und** das gewählte Niveau in einer einzigen Transaktion — ganz oder gar
+nicht: Gemessen an 18.644 Ereignissen kostet `record_event` in einer Schleife 441 s (jeder
+Aufruf committet für sich), dasselbe Sammelschreiben in einer Transaktion 0,2 s. Dafür
+teilen sich `ensure_book`, `ensure_lemma`, `ensure_sense` und `record_event` ihre Logik
+seit diesem Bauschritt mit einem unbestätigten Kern (`_ensure_book`, `_ensure_lemma`,
+`_ensure_sense`, `_record_event`), den `record_preset` ohne Zwischen-Commit wiederverwendet
+— welche Bedeutungen eine Grundform bekommt, ist Sache des Aufrufers (`pipeline`, der
+einzige Ort, der `dictionary` und `profile` zugleich kennen darf, technik.md §7); dieses
+Modul kennt `en-de.sqlite3` weiterhin an keiner Stelle.
 """
 
 from __future__ import annotations
@@ -310,13 +318,13 @@ def open_profile(path: Path) -> sqlite3.Connection:
     return con
 
 
-def ensure_book(con: sqlite3.Connection, book: Book) -> int:
-    """Liefert die id des Buchs, legt die Zeile an, falls sie fehlt. Identität über
-    `title` und `author` — dieselbe Bemessung wie `entities.Book`."""
+def _ensure_book(con: sqlite3.Connection, book: Book) -> int:
+    """Unbestätigter Kern von `ensure_book` (Bauschritt 3/5 der Vorbelegung, 31.08.2026):
+    `record_preset` braucht dieselbe Logik ohne Zwischen-Commit, damit ihr Sammelschreiben
+    in einer einzigen Transaktion bleibt — ganz oder gar nicht."""
     con.execute(
         "INSERT OR IGNORE INTO book (title, author) VALUES (?, ?)", (book.title, book.author)
     )
-    con.commit()
     row = con.execute(
         "SELECT id FROM book WHERE title = ? AND author = ?", (book.title, book.author)
     ).fetchone()
@@ -324,15 +332,46 @@ def ensure_book(con: sqlite3.Connection, book: Book) -> int:
     return int(row[0])
 
 
-def ensure_lemma(con: sqlite3.Connection, lemma: Lemma) -> int:
-    """Liefert die id der Grundform, legt die Zeile an, falls sie fehlt. Identität über
-    `text` und `pos` — dieselbe Bemessung wie `entities.Lemma`."""
-    con.execute("INSERT OR IGNORE INTO lemma (text, pos) VALUES (?, ?)", (lemma.text, lemma.pos))
+def ensure_book(con: sqlite3.Connection, book: Book) -> int:
+    """Liefert die id des Buchs, legt die Zeile an, falls sie fehlt. Identität über
+    `title` und `author` — dieselbe Bemessung wie `entities.Book`."""
+    book_id = _ensure_book(con, book)
     con.commit()
+    return book_id
+
+
+def _ensure_lemma(con: sqlite3.Connection, lemma: Lemma) -> int:
+    """Unbestätigter Kern von `ensure_lemma` — siehe `_ensure_book`."""
+    con.execute("INSERT OR IGNORE INTO lemma (text, pos) VALUES (?, ?)", (lemma.text, lemma.pos))
     row = con.execute(
         "SELECT id FROM lemma WHERE text = ? AND pos = ?", (lemma.text, lemma.pos)
     ).fetchone()
     assert row is not None  # INSERT OR IGNORE + UNIQUE(text, pos) garantieren die Zeile
+    return int(row[0])
+
+
+def ensure_lemma(con: sqlite3.Connection, lemma: Lemma) -> int:
+    """Liefert die id der Grundform, legt die Zeile an, falls sie fehlt. Identität über
+    `text` und `pos` — dieselbe Bemessung wie `entities.Lemma`."""
+    lemma_id = _ensure_lemma(con, lemma)
+    con.commit()
+    return lemma_id
+
+
+def _ensure_sense(con: sqlite3.Connection, sense: Sense) -> int:
+    """Unbestätigter Kern von `ensure_sense` — siehe `_ensure_book`."""
+    lemma_id = _ensure_lemma(con, sense.lemma)
+    con.execute(
+        "INSERT OR IGNORE INTO sense "
+        "(lemma_id, wikdict_lexentry, wikdict_sense, wikdict_trans_list) VALUES (?, ?, ?, ?)",
+        (lemma_id, sense.wikdict_lexentry, sense.wikdict_sense, sense.wikdict_trans_list),
+    )
+    row = con.execute(
+        "SELECT id FROM sense WHERE lemma_id = ? AND wikdict_lexentry IS ? "
+        "AND wikdict_sense IS ? AND wikdict_trans_list IS ?",
+        (lemma_id, sense.wikdict_lexentry, sense.wikdict_sense, sense.wikdict_trans_list),
+    ).fetchone()
+    assert row is not None  # INSERT OR IGNORE + sense_identity garantieren die Zeile
     return int(row[0])
 
 
@@ -345,20 +384,9 @@ def ensure_sense(con: sqlite3.Connection, sense: Sense) -> int:
     zusammen. Die drei `wikdict_`-Felder sind Momentaufnahmen aus dem Wörterbuch, keine
     Fremdschlüssel dorthin (Regel 3) — dieses Modul öffnet `en-de.sqlite3` nie.
     """
-    lemma_id = ensure_lemma(con, sense.lemma)
-    con.execute(
-        "INSERT OR IGNORE INTO sense "
-        "(lemma_id, wikdict_lexentry, wikdict_sense, wikdict_trans_list) VALUES (?, ?, ?, ?)",
-        (lemma_id, sense.wikdict_lexentry, sense.wikdict_sense, sense.wikdict_trans_list),
-    )
+    sense_id = _ensure_sense(con, sense)
     con.commit()
-    row = con.execute(
-        "SELECT id FROM sense WHERE lemma_id = ? AND wikdict_lexentry IS ? "
-        "AND wikdict_sense IS ? AND wikdict_trans_list IS ?",
-        (lemma_id, sense.wikdict_lexentry, sense.wikdict_sense, sense.wikdict_trans_list),
-    ).fetchone()
-    assert row is not None  # INSERT OR IGNORE + sense_identity garantieren die Zeile
-    return int(row[0])
+    return sense_id
 
 
 def ensure_occurrence(con: sqlite3.Connection, occurrence: Occurrence) -> int:
@@ -399,25 +427,11 @@ def ensure_occurrence(con: sqlite3.Connection, occurrence: Occurrence) -> int:
     return int(row[0])
 
 
-def record_event(con: sqlite3.Connection, event: Event) -> int:
-    """Hängt ein Ereignis an — der Kenntnisstand wird nie überschrieben, nur ergänzt
-    (technik.md §4, „Kernentscheidung: Ereignisfolge statt überschreibbarem Zustand").
-
-    Legt Buch und Bedeutung (samt Grundform) an, falls sie noch fehlen, und liefert die id
-    des neuen Ereignisses. Ein naiver (nicht zeitzonenbehafteter) Zeitstempel wird
-    zurückgewiesen (Regel 13), bevor Buch oder Bedeutung überhaupt angelegt werden. Ein
-    zeitzonenbehafteter Zeitstempel wird vor dem Speichern auf UTC normalisiert (Befund 1,
-    Review T9) — ein Ereignis entsteht in der Ortszeit des Nutzers, und erst nach der
-    Normalisierung ist die lexikografische Sortierung über die TEXT-Spalte in
-    `events_for_sense` wieder mit der zeitlichen Reihenfolge deckungsgleich.
-
-    `event.book` ist `None` bei einer Vorbelegung (`Origin.PRESET`, technik.md §4,
-    Schemafassung 2) — dann bleiben `book_id`/`chapter_number` in der Zeile `NULL`, ohne
-    dass eine Kapitelzeile bestehen muss. Ein Ereignis mit nur einem der beiden gesetzt
-    (Buch ohne Kapitelnummer oder umgekehrt) wird zurückgewiesen (Regel 13) — das wäre
-    weder ein reguläres Kapitel-Ereignis noch eine Vorbelegung, sondern ein Zustand, den
-    `entities.Event` nicht vorsieht.
-    """
+def _record_event(con: sqlite3.Connection, event: Event) -> int:
+    """Unbestätigter Kern von `record_event` (Bauschritt 3/5 der Vorbelegung, 31.08.2026)
+    — siehe `_ensure_book`: dieselben Prüfungen und dieselbe Schreiblogik, nur ohne
+    Zwischen-Commit, damit `record_preset` viele Ereignisse in einer einzigen Transaktion
+    schreiben kann."""
     # (Befund 5, Review T8): Ein naiver Zeitstempel landete unbemerkt als
     # „2026-08-18T00:00:00" neben zeitzonenbehafteten Werten wie „…+00:00" in derselben
     # Spalte. events_for_sense sortiert danach (Befund 3) und T9 vergleicht danach — ein
@@ -446,8 +460,8 @@ def record_event(con: sqlite3.Connection, event: Event) -> int:
     # (= 09:00 UTC), obwohl es das ältere Ereignis ist. Normalisieren statt nur prüfen, weil
     # das auch Altbestand mit unterschiedlichen Versätzen vereinheitlicht.
     timestamp = event.timestamp.astimezone(UTC)
-    sense_id = ensure_sense(con, event.sense)
-    book_id = ensure_book(con, event.book) if event.book is not None else None
+    sense_id = _ensure_sense(con, event.sense)
+    book_id = _ensure_book(con, event.book) if event.book is not None else None
     cursor = con.execute(
         "INSERT INTO event (sense_id, knowledge_state, origin, timestamp, book_id, chapter_number) "
         "VALUES (?, ?, ?, ?, ?, ?)",
@@ -460,9 +474,32 @@ def record_event(con: sqlite3.Connection, event: Event) -> int:
             event.chapter_number,
         ),
     )
-    con.commit()
     assert cursor.lastrowid is not None  # INSERT INTO auf einer rowid-Tabelle setzt sie stets
     return cursor.lastrowid
+
+
+def record_event(con: sqlite3.Connection, event: Event) -> int:
+    """Hängt ein Ereignis an — der Kenntnisstand wird nie überschrieben, nur ergänzt
+    (technik.md §4, „Kernentscheidung: Ereignisfolge statt überschreibbarem Zustand").
+
+    Legt Buch und Bedeutung (samt Grundform) an, falls sie noch fehlen, und liefert die id
+    des neuen Ereignisses. Ein naiver (nicht zeitzonenbehafteter) Zeitstempel wird
+    zurückgewiesen (Regel 13), bevor Buch oder Bedeutung überhaupt angelegt werden. Ein
+    zeitzonenbehafteter Zeitstempel wird vor dem Speichern auf UTC normalisiert (Befund 1,
+    Review T9) — ein Ereignis entsteht in der Ortszeit des Nutzers, und erst nach der
+    Normalisierung ist die lexikografische Sortierung über die TEXT-Spalte in
+    `events_for_sense` wieder mit der zeitlichen Reihenfolge deckungsgleich.
+
+    `event.book` ist `None` bei einer Vorbelegung (`Origin.PRESET`, technik.md §4,
+    Schemafassung 2) — dann bleiben `book_id`/`chapter_number` in der Zeile `NULL`, ohne
+    dass eine Kapitelzeile bestehen muss. Ein Ereignis mit nur einem der beiden gesetzt
+    (Buch ohne Kapitelnummer oder umgekehrt) wird zurückgewiesen (Regel 13) — das wäre
+    weder ein reguläres Kapitel-Ereignis noch eine Vorbelegung, sondern ein Zustand, den
+    `entities.Event` nicht vorsieht.
+    """
+    event_id = _record_event(con, event)
+    con.commit()
+    return event_id
 
 
 def events_for_sense(con: sqlite3.Connection, sense_id: int) -> list[Event]:
@@ -654,4 +691,36 @@ def set_cefr_level(con: sqlite3.Connection, level: CefrLevel | None) -> None:
     hier bewusst nicht: Ein adaptiver Test aus Phase 2 soll diesen einen Wert verfeinern,
     nicht eine zweite Herleitung neben der Ereignisfolge aufbauen)."""
     con.execute("UPDATE profile SET cefr_level = ? WHERE id = 1", (level,))
+    con.commit()
+
+
+def record_preset(con: sqlite3.Connection, events: Iterable[Event], cefr_level: CefrLevel) -> None:
+    """Schreibt die Ereignisse einer Vorbelegung und das gewählte Sprachniveau in **einer**
+    Transaktion (Bauschritt 3/5 der Vorbelegung, 31.08.2026, Auftragstext: „Die Vorbelegung
+    muss es ganz oder gar nicht geben — ein halb geschriebenes Profil ist schlimmer als
+    keins"): Bricht ein einzelnes Ereignis ab (naiver Zeitstempel, gemischtes
+    `book`/`chapter_number`, Regel 13), steht im Profil **nichts** von diesem Aufruf — kein
+    Teil der Ereignisse, nicht das Niveau.
+
+    Gemessen an 18.644 Ereignissen (Auftragstext): `record_event` in einer Schleife 441 s
+    — jeder Aufruf committet für sich —, dasselbe Sammelschreiben hier 0,2 s: Jedes
+    Ereignis läuft über den unbestätigten Kern `_record_event` (dieselbe Prüfung und
+    Schreiblogik wie `record_event`, nur ohne Zwischen-Commit), das Niveau über dieselbe
+    rohe `UPDATE`-Anweisung wie `set_cefr_level`, beides im selben, noch offenen
+    Transaktionsblock — erst danach **ein** `commit()`. Scheitert ein Schritt, holt
+    `rollback()` alles seit dem letzten Commit zurück, bevor der Fehler weitergereicht wird
+    (Regel 13: kein `except`, das nur protokolliert und weiterläuft, sondern eines, das den
+    Halbschritt zurücknimmt und den Fehler sichtbar lässt).
+
+    Wie die Ereignisse zustande kommen — welche Grundformen, welche Bedeutungen aus dem
+    Wörterbuch —, ist nicht Sache dieser Funktion: Sie kennt `en-de.sqlite3` nicht (Regel
+    4). Das erledigt `pipeline`, der einzige Ort, der `dictionary` und `profile` zugleich
+    kennen darf (technik.md §7)."""
+    try:
+        for event in events:
+            _record_event(con, event)
+        con.execute("UPDATE profile SET cefr_level = ? WHERE id = 1", (cefr_level,))
+    except Exception:
+        con.rollback()
+        raise
     con.commit()
