@@ -15,6 +15,7 @@ from libreverbum.entities import (
     Book,
     Card,
     CardDirection,
+    CefrLevel,
     Event,
     KnowledgeState,
     Lemma,
@@ -34,6 +35,19 @@ def _event(sense: Sense, state: KnowledgeState, timestamp: datetime) -> Event:
         timestamp=timestamp,
         book=_BOOK,
         chapter_number=1,
+    )
+
+
+def _preset_event(sense: Sense, timestamp: datetime) -> Event:
+    """Ein Vorbelegungs-Ereignis (technik.md §4, Schemafassung 2) — ohne Buch und
+    Kapitel, anders als `_event` oben."""
+    return Event(
+        sense=sense,
+        knowledge_state=KnowledgeState.KNOWN,
+        origin=Origin.PRESET,
+        timestamp=timestamp,
+        book=None,
+        chapter_number=None,
     )
 
 
@@ -817,3 +831,152 @@ def test_record_card_without_a_chapter_row_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(sqlite3.IntegrityError):
         profile.record_card(con, card)
+
+
+def test_an_event_without_book_and_chapter_can_be_written_and_read_back(tmp_path: Path) -> None:
+    """technik.md §4, Schemafassung 2: `event.book_id`/`event.chapter_number` dürfen NULL
+    sein — eine Vorbelegung gehört zu keinem Buch. Ein Ereignis ohne Buch und Kapitel
+    lässt sich schreiben und über `events_for_sense` wieder lesen, mit `book=None` und
+    `chapter_number=None` — keine Kapitelzeile ist dafür nötig."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    sense = Sense(
+        lemma=Lemma(text="life", pos="NOUN"),
+        wikdict_sense="the state of being alive",
+        wikdict_trans_list="Leben",
+        wikdict_lexentry="eng/life__Noun__1",
+    )
+
+    profile.record_event(con, _preset_event(sense, datetime.now(UTC)))
+
+    sense_id = profile.ensure_sense(con, sense)
+    events = profile.events_for_sense(con, sense_id)
+
+    assert len(events) == 1
+    assert events[0].book is None
+    assert events[0].chapter_number is None
+
+
+def test_recording_an_event_with_only_one_of_book_and_chapter_number_set_is_rejected(
+    tmp_path: Path,
+) -> None:
+    """Regel 13: Buch ohne Kapitelnummer (oder umgekehrt) ist weder ein reguläres
+    Kapitel-Ereignis noch eine Vorbelegung — `record_event` weist den gemischten Fall laut
+    zurück, statt eine der beiden Spalten stillschweigend NULL zu lassen."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    profile.ensure_book(con, _BOOK)
+    sense = Sense(
+        lemma=Lemma(text="life", pos="NOUN"),
+        wikdict_sense="the state of being alive",
+        wikdict_trans_list="Leben",
+        wikdict_lexentry="eng/life__Noun__1",
+    )
+
+    with pytest.raises(ValueError):
+        profile.record_event(
+            con,
+            Event(
+                sense=sense,
+                knowledge_state=KnowledgeState.KNOWN,
+                origin=Origin.TRIAGE,
+                timestamp=datetime.now(UTC),
+                book=_BOOK,
+                chapter_number=None,
+            ),
+        )
+
+
+def test_origin_preset_stays_distinguishable_from_origin_triage_after_reading_back(
+    tmp_path: Path,
+) -> None:
+    """`entities.Origin.PRESET` bleibt von `Origin.TRIAGE` unterscheidbar, wenn das Profil
+    zurückgelesen wird — beide Herkünfte durchlaufen dieselbe TEXT-Spalte und dieselbe
+    `Origin(...)`-Auflösung beim Lesen (Warnung aus dem Auftrag: ein per SQL an `Origin`
+    vorbeigeschriebenes `'preset'` brach beim Zurücklesen mit `ValueError` ab, bevor der
+    Wert Teil der Aufzählung war)."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    preset_sense = Sense(
+        lemma=Lemma(text="life", pos="NOUN"),
+        wikdict_sense="the state of being alive",
+        wikdict_trans_list="Leben",
+        wikdict_lexentry="eng/life__Noun__1",
+    )
+    triage_sense = Sense(
+        lemma=Lemma(text="portrait", pos="NOUN"),
+        wikdict_sense="a painted or drawn likeness of a person",
+        wikdict_trans_list="Porträt",
+        wikdict_lexentry="eng/portrait__Noun__1",
+    )
+    book_id = profile.ensure_book(con, _BOOK)
+    _add_chapter(con, book_id)
+    profile.record_event(con, _preset_event(preset_sense, datetime.now(UTC)))
+    profile.record_event(con, _event(triage_sense, KnowledgeState.KNOWN, datetime.now(UTC)))
+
+    preset_id = profile.ensure_sense(con, preset_sense)
+    triage_id = profile.ensure_sense(con, triage_sense)
+
+    assert profile.events_for_sense(con, preset_id)[0].origin == Origin.PRESET
+    assert profile.events_for_sense(con, triage_id)[0].origin == Origin.TRIAGE
+
+
+def test_a_version_1_profile_is_rejected_loudly_not_upgraded_silently(tmp_path: Path) -> None:
+    """Ein Profil der Fassung 1 wird nicht stillschweigend als Fassung 2 weiterverwendet:
+    `open_profile` bricht sichtbar ab (Regel 13). Entscheidung aus dem Bericht zu diesem
+    Bauschritt: lauter Abbruch statt Wanderung, weil im Bestand noch kein Profil der
+    Fassung 1 mit Wert existiert (`data/` gibt es im Arbeitsbaum nicht) — eine Migration
+    ohne echten Altbestand wäre Vorratsarbeit (Regel 14)."""
+    path = tmp_path / "profil.sqlite3"
+    con = sqlite3.connect(path)
+    con.execute("PRAGMA user_version = 1")
+    # Das historische Schema selbst ist hier nicht der Prüfgegenstand — geprüft wird der
+    # Versionsabgleich beim Öffnen, deshalb genügt eine Tabelle namens event.
+    con.execute("CREATE TABLE event(id INTEGER PRIMARY KEY)")
+    con.commit()
+    con.close()
+
+    with pytest.raises(ValueError, match=r"nicht stillschweigend weiterverwendet"):
+        profile.open_profile(path)
+
+
+def test_cefr_level_can_be_set_and_read_back(tmp_path: Path) -> None:
+    """Das Sprachniveau lässt sich setzen und zurücklesen: Nach `set_cefr_level(con,
+    CefrLevel.B1)` liefert `get_cefr_level` wieder `CefrLevel.B1`."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+
+    profile.set_cefr_level(con, CefrLevel.B1)
+
+    assert profile.get_cefr_level(con) == CefrLevel.B1
+
+
+def test_cefr_level_defaults_to_no_answer_and_is_distinguishable_from_a_set_level(
+    tmp_path: Path,
+) -> None:
+    """„keine Angabe" muss sich im Schema abbilden lassen und von jedem gesetzten Niveau
+    unterscheidbar bleiben: Ein frisches Profil liefert `None`, ein gesetztes Niveau einen
+    `CefrLevel`, und das Zurücksetzen auf `None` ist wieder „keine Angabe", nicht etwa
+    ununterscheidbar von einem gültigen Niveau."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+
+    assert profile.get_cefr_level(con) is None
+
+    profile.set_cefr_level(con, CefrLevel.A2)
+    assert profile.get_cefr_level(con) == CefrLevel.A2
+
+    profile.set_cefr_level(con, None)
+    assert profile.get_cefr_level(con) is None
+
+
+def test_event_sense_id_index_exists(tmp_path: Path) -> None:
+    """Regel 14, gemessener Anlass (technik.md §4, Schemafassung 2): Bei rund 18.600
+    Ereignissen kostet `compare_chapter_vocabulary` je Kapitel 2,1 s statt 0,4 s ohne
+    einen Index auf `event(sense_id)`. Geprüft wird, dass der Index existiert — nicht
+    seine Ausführungszeit, die gehört nicht in die Tests (dokumentation.md §5)."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+
+    indexes = {
+        row[0]
+        for row in con.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'event'"
+        )
+    }
+
+    assert "event_sense_id" in indexes

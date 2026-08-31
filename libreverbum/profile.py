@@ -30,8 +30,11 @@ Liefert
 user_version` (Regel 5). `ensure_book`, `ensure_lemma`, `ensure_sense` und
 `ensure_occurrence` liefern die bestehende oder neu angelegte Zeile anhand ihrer
 Identität. `record_event` hängt ein Ereignis an, ohne ein vorheriges zu ersetzen
-(technik.md §4, „Kernentscheidung: Ereignisfolge statt überschreibbarem Zustand");
-`events_for_sense` liest die volle Folge zu einer Bedeutung zurück.
+(technik.md §4, „Kernentscheidung: Ereignisfolge statt überschreibbarem Zustand") — bei
+`Origin.PRESET` ohne Buch und Kapitel (`event.book`/`event.chapter_number` sind dann
+`None`, Schemafassung 2, siehe unten). `events_for_sense` liest die volle Folge zu einer
+Bedeutung zurück, mit `book=None` für jedes Vorbelegungs-Ereignis darin — nicht ohne
+dieses Ereignis, das JOIN auf `book` verwirft keine Zeile (Regel 13).
 `current_knowledge_state` ist die Sicht darauf: das jüngste Ereignis je Bedeutung, `None`
 ohne jedes Ereignis. `compare_chapter_vocabulary` hält einen Kapitelwortschatz gegen diese
 Sicht: je Bedeutung `VocabularyStatus.UNKNOWN`, `.KNOWN` oder `.NEW_MEANING_OF_KNOWN_WORD`
@@ -40,6 +43,15 @@ Sicht: je Bedeutung `VocabularyStatus.UNKNOWN`, `.KNOWN` oder `.NEW_MEANING_OF_K
 Ereignis werden dabei nicht angelegt. `record_card` schreibt Vorkommen und Karte einer
 exportierten `Card` fest, mit derselben GUID, die im Anki-Deck steht (Regel 6) — über die
 GUID idempotent: ein zweiter Export derselben Bedeutung legt keine zweite Zeile an.
+
+`get_cefr_level`/`set_cefr_level` lesen und setzen das Sprachniveau des Lernenden
+(`entities.CefrLevel`, `None` für „keine Angabe") — eine Angabe über das Profil selbst,
+nicht über ein Buch oder Kapitel, in der eigenen Tabelle `profile` mit genau einer Zeile
+(siehe `_SCHEMA` unten, Kommentar bei `CREATE TABLE profile`, für die Abgrenzung gegen
+eine allgemeine Schlüssel-Wert-Tabelle). Das Schreiben der Vorbelegung selbst —
+Ereignisse zu den häufigsten Grundformen des gewählten Niveaus — ist nicht Sache dieses
+Moduls, sondern des nächsten Bauschritts; `record_event` mit `Origin.PRESET` trägt
+bereits, was er braucht.
 """
 
 from __future__ import annotations
@@ -50,7 +62,17 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 
-from libreverbum.entities import Book, Card, Event, KnowledgeState, Lemma, Occurrence, Origin, Sense
+from libreverbum.entities import (
+    Book,
+    Card,
+    CefrLevel,
+    Event,
+    KnowledgeState,
+    Lemma,
+    Occurrence,
+    Origin,
+    Sense,
+)
 
 
 class VocabularyStatus(StrEnum):
@@ -70,7 +92,11 @@ class VocabularyStatus(StrEnum):
 
 # REGEL (dokumentation.md §4 Regel 5): PRAGMA user_version ab der ersten Fassung gesetzt,
 # bei jeder Schemaänderung zu erhöhen. Ohne die Zahl ist eine spätere Migration Ratearbeit.
-SCHEMA_VERSION = 1
+# Fassung 2 (Bauschritt 2/5 der Vorbelegung): event.book_id/chapter_number dürfen NULL
+# sein, ein Index auf event(sense_id) kam hinzu, dazu die Tabelle `profile` für das
+# Sprachniveau. Eine Profildatei der Fassung 1 wird deshalb nicht mehr geöffnet — siehe
+# open_profile, „Eine ältere Fassung wird nicht stillschweigend weiterverwendet".
+SCHEMA_VERSION = 2
 
 # REGEL (dokumentation.md §4 Regel 4, technik.md §4 „Getrennte Datei — nicht mit dem
 # Wörterbuch mischen"): Profil und Wörterbuch liegen in getrennten Dateien. Kein Bezeichner
@@ -140,16 +166,31 @@ CREATE TABLE occurrence(
 -- REGEL (technik.md §4, „Kernentscheidung: Ereignisfolge statt überschreibbarem Zustand"):
 -- Zeilen werden angehängt, nie geändert — dieses Modul enthält kein UPDATE auf `event` und
 -- kein UNIQUE über sense_id, das die Folge auf einen einzigen Stand zusammenzwänge.
+--
+-- Schemafassung 2: book_id/chapter_number dürfen NULL sein — eine Vorbelegung
+-- (Origin.PRESET) gehört zu keinem Buch (technik.md §4, „Jetzt billig, später teuer" gilt
+-- sinngemäß: derselbe Fall trifft auch den Anki-Rückkanal aus Phase 3). Der
+-- zusammengesetzte Fremdschlüssel greift bei SQLite nicht, sobald eine seiner Spalten NULL
+-- ist (SQLites einzige unterstützte MATCH-Art ist MATCH SIMPLE) — ein Vorbelegungs-Ereignis
+-- braucht deshalb keine Kapitelzeile. Der CHECK verhindert den gemischten Fall (eine Spalte
+-- gesetzt, die andere NULL), den weder Fremdschlüssel noch NOT NULL allein ausschließen.
 CREATE TABLE event(
     id INTEGER PRIMARY KEY,
     sense_id INTEGER NOT NULL REFERENCES sense(id),
     knowledge_state TEXT NOT NULL,
     origin TEXT NOT NULL,
     timestamp TEXT NOT NULL,
-    book_id INTEGER NOT NULL REFERENCES book(id),
-    chapter_number INTEGER NOT NULL,
+    book_id INTEGER REFERENCES book(id),
+    chapter_number INTEGER,
+    CHECK ((book_id IS NULL) = (chapter_number IS NULL)),
     FOREIGN KEY (book_id, chapter_number) REFERENCES chapter(book_id, number)
 );
+
+-- Schemafassung 2, gemessener Anlass (Auftrag Bauschritt 2/5): Bei rund 18.600 Ereignissen
+-- kostet profile.compare_chapter_vocabulary je Kapitel 2,1 s statt 0,4 s ohne diesen Index
+-- — und es wächst mit dem Profil unbemerkt weiter (Regel 14 verlangt genau diesen
+-- gemessenen Anlass für einen Index, kein Zwischenspeicher auf Vorrat).
+CREATE INDEX event_sense_id ON event(sense_id);
 
 CREATE TABLE card(
     id INTEGER PRIMARY KEY,
@@ -158,12 +199,29 @@ CREATE TABLE card(
     card_direction TEXT NOT NULL,
     guid TEXT NOT NULL UNIQUE
 );
+
+-- Schemafassung 2: Das Sprachniveau ist eine Angabe über den Lernenden, nicht über ein
+-- Buch oder Kapitel — deshalb eine eigene Tabelle statt einer Spalte in `book` oder
+-- `chapter`. Bewusst keine allgemeine Schlüssel-Wert-Tabelle (setting(key, value)), die
+-- Regel 14 als Abstraktion über einer einzigen Umsetzung untersagt: `profile` trägt eine
+-- konkrete, typisierte Spalte für genau einen Zweck. Genau eine Zeile (CHECK id = 1), von
+-- open_profile beim Schemaaufbau angelegt, damit get_cefr_level/set_cefr_level nie
+-- zwischen „keine Zeile" und „Niveau ist NULL" unterscheiden müssen — NULL heißt „keine
+-- Angabe" (entities.CefrLevel wird beim Rücklesen daraus erzeugt, nie geraten).
+CREATE TABLE profile(
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    cefr_level TEXT
+);
+INSERT INTO profile (id, cefr_level) VALUES (1, NULL);
 """
 
 
-# (Befund 2, Review T8): Die sieben Tabellennamen des Schemas, um beim Öffnen zu prüfen,
-# ob eine Datei mit passender Schemaversion auch wirklich dieses Schema trägt.
-_TABLE_NAMES = frozenset({"book", "chapter", "lemma", "sense", "occurrence", "event", "card"})
+# (Befund 2, Review T8): Die Tabellennamen des Schemas, um beim Öffnen zu prüfen, ob eine
+# Datei mit passender Schemaversion auch wirklich dieses Schema trägt. Seit Fassung 2 acht
+# Tabellen (`profile` kam hinzu).
+_TABLE_NAMES = frozenset(
+    {"book", "chapter", "lemma", "sense", "occurrence", "event", "card", "profile"}
+)
 
 
 def open_profile(path: Path) -> sqlite3.Connection:
@@ -171,16 +229,23 @@ def open_profile(path: Path) -> sqlite3.Connection:
     (technik.md §4, „Tabellen im Überblick") und setzt `PRAGMA user_version` (Regel 5).
 
     Eine bestehende Datei mit unpassender Schemaversion bricht sichtbar ab (Regel 13)
-    statt sie unbemerkt weiterzuverwenden. Eine Migration über diese Prüfung hinaus ist
-    nicht Teil dieses Moduls (Regel 14) — es gibt bisher nur eine Fassung.
+    statt sie unbemerkt weiterzuverwenden.
+
+    **Eine ältere Fassung wird nicht stillschweigend weiterverwendet.** Für den Übergang
+    von Fassung 1 auf 2 (Bauschritt 2/5 der Vorbelegung: `event.book_id`/`chapter_number`
+    werden `NULL`-fähig, dazu die Tabelle `profile`) ist das ein lauter Abbruch, keine
+    Wanderung: Im Bestand existiert noch kein Profil mit Wert (`data/` gibt es im
+    Arbeitsbaum nicht), und eine Migration ohne echten Altbestand wäre Vorratsarbeit
+    (Regel 14). Träfe künftig doch ein Profil der Fassung 1 mit Wert ein, ist das hier zu
+    entscheiden — nicht durch stillschweigendes Weiterlaufen.
 
     `user_version = 0` heißt bei SQLite auch „irgendeine fremde Datei, die diese Zeile nie
     gesetzt hat" — etwa eine Kopie von en-de.sqlite3. Das Schema wird deshalb nur angelegt,
     wenn die Datei noch keine einzige Tabelle trägt; sonst Abbruch mit Meldung (Regel 13)
     statt eines vermischten Bestands (technik.md §4, „Getrennte Datei — nicht mit dem
-    Wörterbuch mischen"). Bei passender Version wird ebenso geprüft, dass alle sieben
-    Tabellen tatsächlich vorhanden sind — sonst bricht erst die nächste Abfrage darauf mit
-    einer nichtssagenden Meldung ab.
+    Wörterbuch mischen"). Bei passender Version wird ebenso geprüft, dass alle Tabellen
+    tatsächlich vorhanden sind — sonst bricht erst die nächste Abfrage darauf mit einer
+    nichtssagenden Meldung ab.
 
     Bricht sichtbar mit einer deutschen Meldung ab (Regel 13), wenn das Verzeichnis von
     `path` nicht existiert — statt `sqlite3`s englische Fremdmeldung „unable to open
@@ -228,10 +293,19 @@ def open_profile(path: Path) -> sqlite3.Connection:
                 f"Tabelle(n) {', '.join(sorted(missing_tables))} — vermutlich eine fremde "
                 "Datei mit zufällig passender Versionsnummer."
             )
+    elif version < SCHEMA_VERSION:
+        con.close()
+        raise ValueError(
+            f"Profildatei {path} hat Schemaversion {version}, erwartet {SCHEMA_VERSION} — "
+            "eine ältere Profilfassung wird nicht stillschweigend weiterverwendet. Dieses "
+            "Modul schreibt keine Migration (Regel 14, kein Anlass ohne echten Altbestand); "
+            "wer den Inhalt übernehmen will, liest ihn mit der alten Programmfassung aus."
+        )
     else:
         con.close()
         raise ValueError(
-            f"Profildatei {path} hat Schemaversion {version}, erwartet {SCHEMA_VERSION}."
+            f"Profildatei {path} hat Schemaversion {version}, erwartet {SCHEMA_VERSION} — "
+            "neuer als von dieser Programmfassung erwartet."
         )
     return con
 
@@ -336,6 +410,13 @@ def record_event(con: sqlite3.Connection, event: Event) -> int:
     Review T9) — ein Ereignis entsteht in der Ortszeit des Nutzers, und erst nach der
     Normalisierung ist die lexikografische Sortierung über die TEXT-Spalte in
     `events_for_sense` wieder mit der zeitlichen Reihenfolge deckungsgleich.
+
+    `event.book` ist `None` bei einer Vorbelegung (`Origin.PRESET`, technik.md §4,
+    Schemafassung 2) — dann bleiben `book_id`/`chapter_number` in der Zeile `NULL`, ohne
+    dass eine Kapitelzeile bestehen muss. Ein Ereignis mit nur einem der beiden gesetzt
+    (Buch ohne Kapitelnummer oder umgekehrt) wird zurückgewiesen (Regel 13) — das wäre
+    weder ein reguläres Kapitel-Ereignis noch eine Vorbelegung, sondern ein Zustand, den
+    `entities.Event` nicht vorsieht.
     """
     # (Befund 5, Review T8): Ein naiver Zeitstempel landete unbemerkt als
     # „2026-08-18T00:00:00" neben zeitzonenbehafteten Werten wie „…+00:00" in derselben
@@ -348,13 +429,25 @@ def record_event(con: sqlite3.Connection, event: Event) -> int:
             "erwartet wird ein zeitzonenbehafteter Zeitstempel (UTC), siehe "
             'entities.Event, „timestamp ist zeitzonenbehaftet".'
         )
+    # REGEL (technik.md §4, Schemafassung 2, „event.book_id und event.chapter_number auf
+    # NULL öffnen"): Buch und Kapitelnummer sind gemeinsam gesetzt oder gemeinsam None —
+    # der gemischte Fall wäre in der Datenbank durch den CHECK zwar ebenfalls
+    # ausgeschlossen, bricht dort aber erst mit sqlite3.IntegrityError ab, ohne zu sagen,
+    # welches der beiden Felder fehlt.
+    if (event.book is None) != (event.chapter_number is None):
+        raise ValueError(
+            f"Ereignis für {event.sense.lemma.text!r} hat nur eines von book/chapter_number "
+            f"gesetzt (book={event.book!r}, chapter_number={event.chapter_number!r}) — "
+            "erwartet wird entweder beides oder, bei einer Vorbelegung (Origin.PRESET), "
+            "keines von beiden."
+        )
     # (Befund 1, Review T9): Unterschiedliche UTC-Versätze in derselben TEXT-Spalte sortieren
     # lexikografisch falsch — „…T10:30:00+02:00" (= 08:30 UTC) stünde nach „…T09:00:00+00:00"
     # (= 09:00 UTC), obwohl es das ältere Ereignis ist. Normalisieren statt nur prüfen, weil
     # das auch Altbestand mit unterschiedlichen Versätzen vereinheitlicht.
     timestamp = event.timestamp.astimezone(UTC)
     sense_id = ensure_sense(con, event.sense)
-    book_id = ensure_book(con, event.book)
+    book_id = ensure_book(con, event.book) if event.book is not None else None
     cursor = con.execute(
         "INSERT INTO event (sense_id, knowledge_state, origin, timestamp, book_id, chapter_number) "
         "VALUES (?, ?, ?, ?, ?, ?)",
@@ -375,7 +468,12 @@ def record_event(con: sqlite3.Connection, event: Event) -> int:
 def events_for_sense(con: sqlite3.Connection, sense_id: int) -> list[Event]:
     """Die volle Ereignisfolge zu einer Bedeutung, älteste zuerst — unverkürzt: Der aktuelle
     Kenntnisstand ist erst die Ableitung, die `current_knowledge_state` als Sicht darauf
-    bildet."""
+    bildet.
+
+    Ein Vorbelegungs-Ereignis (`Origin.PRESET`) hat kein Buch — deshalb ein `LEFT JOIN` auf
+    `book`, nicht `JOIN`: Ein `JOIN` würde jede Zeile mit `book_id IS NULL` stillschweigend
+    aus dem Ergebnis werfen (Regel 13) — das Ereignis wäre da, bliebe aber aus jeder Folge
+    verschwunden, ohne dass etwas darauf hinwiese."""
     sense_row = con.execute(
         "SELECT l.text, l.pos, s.wikdict_lexentry, s.wikdict_sense, s.wikdict_trans_list "
         "FROM sense s JOIN lemma l ON l.id = s.lemma_id WHERE s.id = ?",
@@ -398,7 +496,7 @@ def events_for_sense(con: sqlite3.Connection, sense_id: int) -> list[Event]:
     # also muss `e.timestamp` das führende Sortierkriterium sein.
     rows = con.execute(
         "SELECT e.knowledge_state, e.origin, e.timestamp, b.title, b.author, e.chapter_number "
-        "FROM event e JOIN book b ON b.id = e.book_id WHERE e.sense_id = ? "
+        "FROM event e LEFT JOIN book b ON b.id = e.book_id WHERE e.sense_id = ? "
         "ORDER BY e.timestamp, e.id",
         (sense_id,),
     ).fetchall()
@@ -408,7 +506,7 @@ def events_for_sense(con: sqlite3.Connection, sense_id: int) -> list[Event]:
             knowledge_state=KnowledgeState(knowledge_state),
             origin=Origin(origin),
             timestamp=datetime.fromisoformat(timestamp),
-            book=Book(title=title, author=author),
+            book=Book(title=title, author=author) if title is not None else None,
             chapter_number=chapter_number,
         )
         for knowledge_state, origin, timestamp, title, author, chapter_number in rows
@@ -532,3 +630,28 @@ def record_card(con: sqlite3.Connection, card: Card) -> int:
     row = con.execute("SELECT id FROM card WHERE guid = ?", (card.guid,)).fetchone()
     assert row is not None  # INSERT OR IGNORE + UNIQUE(guid) garantieren die Zeile
     return int(row[0])
+
+
+def get_cefr_level(con: sqlite3.Connection) -> CefrLevel | None:
+    """Das Sprachniveau des Lernenden (`entities.CefrLevel`), `None` für „keine Angabe".
+
+    Liest die einzige Zeile der Tabelle `profile` (Schemafassung 2) — `open_profile` legt
+    sie beim Schemaaufbau mit `cefr_level = NULL` an, die Zeile fehlt also nie."""
+    row = con.execute("SELECT cefr_level FROM profile WHERE id = 1").fetchone()
+    assert row is not None  # open_profile legt die Zeile beim Schemaaufbau stets an
+    level = row[0]
+    return CefrLevel(level) if level is not None else None
+
+
+def set_cefr_level(con: sqlite3.Connection, level: CefrLevel | None) -> None:
+    """Setzt das Sprachniveau des Lernenden — `None` trägt „keine Angabe" ein, unter-
+    scheidbar von jedem gesetzten Niveau (`get_cefr_level`).
+
+    Ein `UPDATE` auf die einzige Zeile von `profile`, kein `INSERT`: Anders als bei einem
+    `Event` gibt es hier nur den einen aktuellen Stand, kein Verlauf — das Niveau ist eine
+    Momentaufnahme des Lernenden, nicht ein Ereignis mit Herkunft und Zeitpunkt
+    (technik.md §4, „Kernentscheidung: Ereignisfolge statt überschreibbarem Zustand" gilt
+    hier bewusst nicht: Ein adaptiver Test aus Phase 2 soll diesen einen Wert verfeinern,
+    nicht eine zweite Herleitung neben der Ereignisfolge aufbauen)."""
+    con.execute("UPDATE profile SET cefr_level = ? WHERE id = 1", (level,))
+    con.commit()

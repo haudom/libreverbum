@@ -8,8 +8,8 @@ das einzige, das jeder Schritt importieren darf (technik.md §7, „Die Importre
 Liefert
 -------
 `Book`, `Chapter`, `Lemma`, `Sense`, `Occurrence`, `Event` und `Card` als Datenklassen,
-dazu `KnowledgeState`, `Origin` und `CardDirection`. **Nicht** den Kenntnisstand: Der ist
-die Ableitung aus der Ereignisfolge und entsteht in `profile`.
+dazu `KnowledgeState`, `Origin`, `CardDirection` und `CefrLevel`. **Nicht** den
+Kenntnisstand: Der ist die Ableitung aus der Ereignisfolge und entsteht in `profile`.
 
 Alle Klassen sind `frozen`. Ein Vorkommen, ein Ereignis und eine Karte sind Feststellungen
 zu einem Zeitpunkt; geändert wird nicht der Gegenstand, sondern es kommt ein neues Ereignis
@@ -37,13 +37,17 @@ class KnowledgeState(StrEnum):
 class Origin(StrEnum):
     """Herkunft einer Kenntnisangabe.
 
-    Phase 1 kennt nur die drei Herkünfte der Triage. Sie sind zu unterscheiden, weil sie
-    verschieden viel behaupten: Eine Sammelaktion stuft hunderte Wörter mit einem Tastendruck
-    ein, die Wortobergrenze stellt zurück, ohne dass der Nutzer das Wort gesehen hat."""
+    Die Herkünfte benennen den **Akt**, nicht das Ergebnis: Eine Sammelaktion stuft
+    hunderte Wörter mit einem Tastendruck ein, die Wortobergrenze stellt zurück, ohne dass
+    der Nutzer das Wort gesehen hat, und die Vorbelegung (`PRESET`) trägt Bedeutungen des
+    Grundwortschatzes beim Anlegen des Profils pauschal als bekannt ein, bevor der Nutzer
+    das Wort je gesehen hat (konzept.md, „Bewusst offen", „Woher der Nutzer seinen
+    Grundwortschatz bekommt")."""
 
     TRIAGE = "triage"
     BULK_MARK = "bulk_mark"
     WORD_LIMIT = "word_limit"
+    PRESET = "preset"
 
 
 class CardDirection(StrEnum):
@@ -52,6 +56,24 @@ class CardDirection(StrEnum):
     EN_DE = "en_de"
     DE_EN = "de_en"
     CLOZE = "cloze"
+
+
+class CefrLevel(StrEnum):
+    """Sprachniveau nach dem Gemeinsamen europäischen Referenzrahmen (GER), wie es der
+    Nutzer beim Anlegen des Profils angibt (konzept.md, „Bewusst offen", „Woher der Nutzer
+    seinen Grundwortschatz bekommt").
+
+    Bezeichner bewusst `CefrLevel`/`cefr_level`, nicht `level`: Der Bezeichner `level` ist
+    in dokumentation.md §2 bereits für die Gliederungsebene der Navigation vergeben
+    (`epub.ChapterReference.level`) — ein zweiter, andersartiger Gebrauch verwechselte
+    beides (dokumentation.md §1). **`C2` wird bewusst nicht angeboten**: Wer C2 einträfe,
+    hätte kaum unbekannte Grundformen mehr vorzubelegen — die Stufen darunter genügen."""
+
+    A1 = "a1"
+    A2 = "a2"
+    B1 = "b1"
+    B2 = "b2"
+    C1 = "c1"
 
 
 @dataclass(frozen=True)
@@ -207,14 +229,22 @@ class Event:
     Zustand"). `book` und `chapter_number` statt eines vollständigen `Chapter`, aus
     demselben Grund wie bei `Occurrence`. `timestamp` ist zeitzonenbehaftet (UTC) — der
     Kenntnisstand vergleicht nach dem jüngsten Ereignis, und dafür brauchen alle Ereignisse
-    dieselbe Zeitbasis."""
+    dieselbe Zeitbasis.
+
+    `book` und `chapter_number` sind `None` bei `Origin.PRESET`: Eine Vorbelegung des
+    Grundwortschatzes (konzept.md, „Bewusst offen", „Woher der Nutzer seinen
+    Grundwortschatz bekommt") gehört zu keinem Buch. Beide sind gemeinsam gesetzt oder
+    gemeinsam `None` — nie nur eines von beiden, `profile.record_event` weist die
+    gemischte Kombination zurück (Regel 13). Wer `book`/`chapter_number` liest, ohne den
+    `None`-Fall zu behandeln, verliert Vorbelegungs-Ereignisse still aus jeder Auswertung,
+    die nach Buch filtert oder gruppiert."""
 
     sense: Sense
     knowledge_state: KnowledgeState
     origin: Origin
     timestamp: datetime
-    book: Book
-    chapter_number: int
+    book: Book | None
+    chapter_number: int | None
 
 
 @dataclass(frozen=True)

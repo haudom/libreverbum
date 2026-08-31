@@ -75,6 +75,7 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | bekannt / lernt / zurückgestellt / vergessen | `known` / `learning` / `deferred` / `forgotten` |
 | Herkunft und Zeitpunkt (einer Kenntnisangabe) | `origin`, `timestamp` |
 | Vorbelegung (Grundwortschatz als bekannt vorbelegen) | `preset` |
+| Sprachniveau (nach GER, A1–C1, für die Vorbelegung) | `cefr_level` (`CefrLevel`) — **nicht** `level`, das ist die Gliederungsebene der Navigation |
 | unbekannt / bekannt / neue Bedeutung eines bekannten Wortes (Abgleich Kapitelwortschatz ↔ Profil) | `unknown` / `known` / `new_meaning_of_known_word` (`VocabularyStatus`) |
 | Triage, Sammelaktion, Wortobergrenze | `triage`, `bulk_mark`, `word_limit` |
 | Wörterbuch, Nachschlagen | `dictionary`, `lookup` |
