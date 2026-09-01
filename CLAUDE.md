@@ -183,6 +183,7 @@ python tools/bundle_check.py buch.txt                 # Bündelgrößen gegen Ei
 python tools/nlp_check.py buch.txt                    # spaCy gegen Stanza
 python tools/epub_check.py buch.epub                  # EPUB-Struktur und Fließtext
 python tools/epub_check.py --summary *.epub           # eine Zeile je Buch
+python tools/print_fit_check.py                       # Blattkapazität, echt gedruckt
 python tools/build_wordfreq_preset.py …               # erzeugt statt zu messen (s. u.)
 ```
 
@@ -202,8 +203,11 @@ Einzelheiten im Kopf des Skripts.
 
 **Wer ein Skript aufruft, das den Kern importiert, braucht `PYTHONPATH=.`** — das Paket
 `libreverbum` ist in `.venv/` nicht installiert, und ohne die Zuweisung bricht
-`ambiguity_check.py` mit `ModuleNotFoundError` ab. Aufzurufen also aus dem Wurzelverzeichnis
-des Repositoriums.
+`ambiguity_check.py` mit `ModuleNotFoundError` ab. Dasselbe gilt für `print_fit_check.py`
+(`libreverbum.printout`, `libreverbum.entities`) — es druckt die echte Druckseite des
+Kerns statt eine nachgebaute (technik.md §8c, „Offene Punkte"), und braucht daneben einen
+echten, lokal gefundenen Browser (Edge oder Chrome, headless) für den Ausdruck zu PDF.
+Aufzurufen also aus dem Wurzelverzeichnis des Repositoriums.
 
 `sense_check.py` sucht einen lokalen Modellserver auf den üblichen Adressen ab
 (llama-server, LM Studio, Ollama, …) oder nimmt `--url` — **ohne** `/v1`, das hängen die
