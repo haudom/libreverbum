@@ -168,6 +168,22 @@ WORD_BLOCK_SIZE = 25
 # bricht um, statt abzubrechen").
 EXPRESSION_BLOCK_SIZE = 11
 
+# (Befund B, Durchsicht 5fda1b9): `label` ist stets ein Plural ("Wörter"/"Wendungen",
+# `cli.main`) — bei genau einem Eintrag liest „1 Wörter noch nicht geprüft." grammatisch
+# falsch. Nur diese beiden Werte kommen als `label` vor; eine zweistellige
+# Übersetzungstabelle für den Singularfall genügt dafür, keine allgemeine
+# Pluralmaschinerie (dokumentation.md §4 Regel 14).
+_SINGULAR_LABEL = {"Wörter": "Wort", "Wendungen": "Wendung"}
+
+
+def _count_label(count: int, label: str) -> str:
+    """`count` mit `label` im passenden Numerus — „1 Wort", aber „0 Wörter"/„2 Wörter"
+    (Befund B, Durchsicht 5fda1b9). Ein `label`, das nicht in `_SINGULAR_LABEL` steht,
+    bleibt unverändert im Plural stehen, statt eine Ausnahme zu werfen — diese Funktion
+    kennt nur die beiden heute tatsächlich vorkommenden Werte, keine allgemeine Regel."""
+    word = _SINGULAR_LABEL.get(label, label) if count == 1 else label
+    return f"{count} {word}"
+
 
 @dataclass(frozen=True)
 class TriagePass:
@@ -462,14 +478,14 @@ def run_triage_pass(
     (`run_triage_blocks`), dorthin, wo tatsächlich feststeht, dass sie ungeprüft bleiben."""
     if resolution.known or resolution.resolved_known:
         write_line(
-            f"{resolution.known + resolution.resolved_known} {label} laut Profil bereits "
-            f"bekannt ({resolution.resolved_known} davon erst nach Auflösen der Bedeutung) "
-            "— nicht erneut abgefragt."
+            f"{_count_label(resolution.known + resolution.resolved_known, label)} laut "
+            f"Profil bereits bekannt ({resolution.resolved_known} davon erst nach Auflösen "
+            "der Bedeutung) — nicht erneut abgefragt."
         )
     if resolution.skipped:
         write_line(
-            f"{resolution.skipped} {label} übersprungen: keine der Wörterbuchbedeutungen "
-            "war zuzuordnen."
+            f"{_count_label(resolution.skipped, label)} übersprungen: keine der "
+            "Wörterbuchbedeutungen war zuzuordnen."
         )
 
     entries = resolution.entries
@@ -679,7 +695,19 @@ def run_triage_blocks(
     über `_BlockPrefetch.cancel` auch **abbestellt** (Festlegung 4, Befund 4, Durchsicht
     1cfb1e4): Der Faden ist Daemon und hält das Programmende nicht auf, läuft ohne die
     Abbestellung aber weiter und verbraucht dabei Modellaufrufe, deren Ergebnis niemand
-    mehr ansieht."""
+    mehr ansieht.
+
+    Die hier gemeldete Restzahl steht in derselben Bilanz wie in `pipeline.
+    resolve_triage_entries` (Docstring dort: „ergibt wieder len(entries)"), nur über alle
+    Blöcke dieses Aufrufs aufsummiert statt über einen einzigen: gemeldeter Rest (`len(
+    current)`, bei einem Abbruch zusätzlich `triage_pass.unasked`) + entschiedene
+    Einträge (jede erzeugte `Card` und jedes „kenne ich"/„überspringen" aus Sammel- und
+    Einzelabfrage, über alle Blöcke) + `known` + `skipped` (ebenfalls über alle Blöcke,
+    aus `resolution.known`/`resolution.resolved_known`/`resolution.skipped`) ergibt wieder
+    `len(entries)`, die Kapitelmenge, mit der dieser Aufruf begonnen hat. Ohne diesen
+    Hinweis hat ein Prüfer der Durchsicht von 5fda1b9 erst gegen eine um `known` und
+    `skipped` zu kurze Formel gerechnet und einen Fehlbetrag von 934 Einträgen eine Weile
+    für einen eigenen Befund gehalten."""
     cards: list[Card] = []
     resolution = resolve_visible_block(entries)
     block_number = 1
@@ -717,7 +745,9 @@ def run_triage_blocks(
             # (Befund 9, Durchsicht 1cfb1e4): Die gemeldete Zahl zählt zusätzlich
             # `triage_pass.unasked` — die im laufenden Block selbst noch nicht
             # entschiedenen Einträge, die `len(current)` allein nicht sieht.
-            write_line(f"{len(current) + triage_pass.unasked} {label} noch nicht geprüft.")
+            write_line(
+                f"{_count_label(len(current) + triage_pass.unasked, label)} noch nicht geprüft."
+            )
             if prefetch is not None:
                 prefetch.cancel()
             return cards
@@ -725,7 +755,7 @@ def run_triage_blocks(
             write_line(f"Alle {label} für dieses Kapitel durchgesehen.")
             return cards
         if not _ask_continue(read_line, write_line, len(current)):
-            write_line(f"{len(current)} {label} noch nicht geprüft.")
+            write_line(f"{_count_label(len(current), label)} noch nicht geprüft.")
             assert (
                 prefetch is not None
             )  # current ist nicht leer, siehe oben — also wurde vorgeladen

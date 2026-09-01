@@ -336,6 +336,39 @@ def test_run_triage_pass_combines_both_ways_of_being_already_known_in_one_messag
     assert "25 Wörter" in matching[0]
 
 
+def test_run_triage_pass_reports_the_already_known_count_in_the_singular_for_exactly_one_word(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """Befund B (Durchsicht 5fda1b9): Bei genau einem laut Profil bereits bekannten
+    Eintrag muss die Meldung „1 Wort … bereits bekannt" lauten, nicht „1 Wörter … bereits
+    bekannt" — derselbe Fehler wie bei der Meldung „N noch nicht geprüft" aus
+    `run_triage_blocks`, hier an der Meldung aus `run_triage_pass` geprüft.
+
+    Verfälschungsprobe: Ohne `_count_label` (stattdessen `f"{...} {label} laut Profil …"`
+    wie vor dieser Behebung) steht in `matching[0]` „1 Wörter", nicht „1 Wort" — dieser
+    Test war daran rot, siehe Bericht."""
+    resolution = pipeline.TriageResolution(
+        entries=[], known=1, resolved_known=0, skipped=0, remaining=[]
+    )
+    written: list[str] = []
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: (_ for _ in ()).throw(AssertionError("keine Frage erwartet")),
+        write_line=written.append,
+    )
+
+    matching = [line for line in written if "bereits bekannt" in line]
+    assert len(matching) == 1
+    assert "1 Wort " in matching[0]
+    assert "1 Wörter" not in matching[0]
+
+
 def test_run_triage_pass_reports_entries_skipped_for_no_matching_sense(
     profile_con: sqlite3.Connection,
 ) -> None:
@@ -362,6 +395,38 @@ def test_run_triage_pass_reports_entries_skipped_for_no_matching_sense(
     matching = [line for line in written if "übersprungen" in line]
     assert len(matching) == 1
     assert "2 Wörter" in matching[0]
+
+
+def test_run_triage_pass_reports_the_skipped_count_in_the_singular_for_exactly_one_expression(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """Befund B (Durchsicht 5fda1b9): Dieselbe Grammatikkorrektur wie bei der Meldung
+    „bereits bekannt", hier für `resolution.skipped` und mit `label="Wendungen"` — die
+    zweite der beiden Bezeichnungen, die `_count_label` heute kennt, damit der Singular
+    nicht nur für „Wörter" geprüft ist.
+
+    Verfälschungsprobe: Ohne `_count_label` steht in `matching[0]` „1 Wendungen", nicht
+    „1 Wendung" — dieser Test war daran rot, siehe Bericht."""
+    resolution = pipeline.TriageResolution(
+        entries=[], known=0, resolved_known=0, skipped=1, remaining=[]
+    )
+    written: list[str] = []
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wendungen",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: (_ for _ in ()).throw(AssertionError("keine Frage erwartet")),
+        write_line=written.append,
+    )
+
+    matching = [line for line in written if "übersprungen" in line]
+    assert len(matching) == 1
+    assert "1 Wendung " in matching[0]
+    assert "1 Wendungen" not in matching[0]
 
 
 def test_new_meaning_of_a_known_word_is_marked_in_the_display(
@@ -649,7 +714,12 @@ def test_run_triage_blocks_treats_enter_as_no_at_the_continuation_question(
     )
 
     assert cards == []
-    assert any("1 Wörter" in line and "noch nicht geprüft" in line for line in written)
+    # (Befund B, Durchsicht 5fda1b9): Singular bei genau einem Eintrag — „1 Wort", nicht
+    # „1 Wörter". Ein eigener, gezielter Singulartest steht unten
+    # (`test_run_triage_blocks_reports_the_unchecked_count_in_the_singular_for_exactly_
+    # one_entry`); dieser Test hier bleibt an derselben Meldung, nur mit der berichtigten
+    # Grammatik.
+    assert any("1 Wort" in line and "noch nicht geprüft" in line for line in written)
 
 
 def test_run_triage_blocks_asks_the_continuation_question_again_on_invalid_input(
@@ -660,7 +730,7 @@ def test_run_triage_blocks_asks_the_continuation_question_again_on_invalid_input
     erneuten Frage — dieselbe Handhabung wie `_ask_action`.
 
     Verfälschungsprobe: Deutet `_ask_continue` eine unbekannte Eingabe stillschweigend als
-    „nein" statt erneut zu fragen, endet die Schleife dort mit „1 Wörter noch nicht
+    „nein" statt erneut zu fragen, endet die Schleife dort mit „1 Wort noch nicht
     geprüft" statt mit dem zweiten, leeren Block bis „Alle Wörter … durchgesehen" —
     `resolve_block` wird seit dem Vorladen (Bauschritt 3/4) ohnehin schon für den
     zweiten Block angestoßen, sobald der erste feststeht, unabhängig vom Ausgang dieser
@@ -723,7 +793,7 @@ def test_run_triage_blocks_does_not_ask_to_continue_after_q(
     Antwortliste nicht hergibt — `next(answers)` wirft `StopIteration`. Test war damit rot,
     bevor die Prüfung auf `aborted` vor der Fortsetzungsfrage stand. Zählt die Meldung nur
     `len(current)` statt `len(current) + triage_pass.unasked` (der Stand vor Befund 9),
-    steht dort „1 Wörter" statt „3 Wörter" — dieselbe Verfälschung macht diesen Test
+    steht dort „1 Wort" statt „3 Wörter" — dieselbe Verfälschung macht diesen Test
     ebenfalls rot."""
     leftover = [_vocabulary_entry("x")]
     resolve_block, _calls = _scripted_resolver(
@@ -796,6 +866,49 @@ def test_run_triage_blocks_reports_unfinished_after_q_in_the_last_block(
     matching = [line for line in written if "noch nicht geprüft" in line]
     assert len(matching) == 1
     assert "3 Wörter" in matching[0]
+
+
+def test_run_triage_blocks_reports_the_unasked_count_in_the_singular_for_exactly_one_entry(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """Befund B (Durchsicht 5fda1b9): dieselbe Grammatikkorrektur wie bei
+    `test_run_triage_blocks_treats_enter_as_no_at_the_continuation_question`, hier für den
+    Zweig nach `q` (`len(current) + triage_pass.unasked`) statt nach „nein"
+    (`len(current)` allein) — beide Zweige rufen `_count_label` auf, aber an
+    unterschiedlichen Stellen in `run_triage_blocks`, und nur ein Test je Stelle belegt,
+    dass beide tatsächlich korrigiert sind. Ein Kapitel mit genau einem Worteintrag, `q`
+    beim ersten und einzigen Eintrag, kein weiterer Block: `unasked == 1`, `current == []`.
+
+    Verfälschungsprobe: Ohne `_count_label` an dieser Stelle steht in `matching[0]`
+    „1 Wörter", nicht „1 Wort" — dieser Test war daran rot, siehe Bericht."""
+    resolve_block, _calls = _scripted_resolver(
+        [
+            pipeline.TriageResolution(
+                entries=_entries(1), known=0, resolved_known=0, skipped=0, remaining=[]
+            )
+        ]
+    )
+    answers = iter(["", "q"])  # keine Sammelaktion, dann sofortiger Abbruch bei word0
+    written: list[str] = []
+
+    cards = interaction.run_triage_blocks(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        entries=[_vocabulary_entry("a")],
+        resolve_visible_block=resolve_block,
+        resolve_silent_block=lambda block, _cancelled: resolve_block(block),
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(answers),
+        write_line=written.append,
+    )
+
+    assert cards == []
+    matching = [line for line in written if "noch nicht geprüft" in line]
+    assert len(matching) == 1
+    assert "1 Wort " in matching[0]
+    assert "1 Wörter" not in matching[0]
 
 
 def test_run_triage_blocks_does_not_ask_to_continue_when_nothing_remains(

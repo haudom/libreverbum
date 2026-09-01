@@ -1395,3 +1395,62 @@ def test_resolve_silently_stops_within_one_more_progress_call_after_cancellation
         "Der Abbruch muss nach spätestens einem weiteren Fortschrittsaufruf greifen, "
         f"tatsächlich liefen {len(progress_calls)}."
     )
+
+
+def test_resolve_silently_writes_nothing_to_the_screen_while_resolving_a_block(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """(Befund A, Durchsicht 5fda1b9): technik.md §12, Festlegung 3 verlangt, dass ein
+    vorgeladener Block **nichts** ausgibt — die sich fortschreibende Statuszeile
+    (`cli.display.safe_print_progress`) schriebe aus dem Hintergrundfaden mitten in die
+    Triage-Anzeige, über der der Nutzer gerade entscheidet. Bis zur Abbestellung (Befund
+    4, Durchsicht 1cfb1e4) war das baulich erzwungen, weil `_resolve_silently` `on_progress`
+    schlicht `None` ließ; seither hängt es allein am Rumpf von `_stop_if_cancelled`, das
+    heute nur die Abbestellung prüft und sonst nichts tut — kein Test belegte das bisher.
+
+    Verfälschungsprobe: Schreibt `_stop_if_cancelled` zusätzlich dieselbe
+    Fortschrittszeile wie `_resolve_with_progress`s `_on_progress`
+    (`safe_print_progress(f"Bedeutungen werden aufgelöst: {_examined} von {_total} …")`),
+    bleiben alle anderen Tests aus `test_cli_main.py`, `test_cli_interaction.py` und
+    `test_cli_display.py` grün (66 Tests, siehe Auftragstext) — nur dieser Test hier
+    bemerkt es, weil er die Aufrufe von `safe_print_progress` tatsächlich mitzählt, statt
+    nur die Kürze von `_stop_if_cancelled` beim Lesen zu unterstellen."""
+    progress_calls: list[str] = []
+    monkeypatch.setattr(
+        "cli.main.safe_print_progress", lambda text, **_kwargs: progress_calls.append(text)
+    )
+    monkeypatch.setattr("cli.main.profile.open_profile", lambda _path: sqlite3.connect(":memory:"))
+
+    def _fake_resolve_triage_entries(
+        *,
+        con: sqlite3.Connection,
+        entries: Sequence[pipeline.VocabularyEntry],
+        limit: int,
+        url: str,
+        get_model_name: Callable[[], str],
+        order: str,
+        on_progress: Callable[[int, int, int, int], None] | None = None,
+    ) -> pipeline.TriageResolution:
+        assert on_progress is not None
+        for index in range(5):
+            on_progress(index + 1, 5, index + 1, limit)
+        return pipeline.TriageResolution(
+            entries=[], known=0, resolved_known=0, skipped=0, remaining=[]
+        )
+
+    monkeypatch.setattr("cli.main.pipeline.resolve_triage_entries", _fake_resolve_triage_entries)
+
+    cli_main._resolve_silently(
+        profile_path=tmp_path / "profil.sqlite3",
+        entries=[],
+        limit=5,
+        url="http://127.0.0.1:0/v1",
+        get_model_name=lambda: "test-model",
+        order="new_words_first",
+        cancelled=threading.Event(),
+    )
+
+    assert progress_calls == [], (
+        "Der stille Vorladeblock hat auf dem Bildschirm geschrieben - Festlegung 3 aus "
+        "technik.md §12 verlangt, dass er nichts ausgibt."
+    )
