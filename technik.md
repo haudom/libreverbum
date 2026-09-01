@@ -1773,7 +1773,9 @@ Zwei Beobachtungen daraus:
 > sichtbaren Hinweis, dass die Grenzen nicht aus dem Buch stammen.
 
 Beim Calibre-Konvertat heißt das vier „Kapitel" zu je rund 30.000 Wörtern. Die Triage
-bleibt dank Wortobergrenze (konzept.md, Schritt 4) benutzbar; die Zusage des Konzepts,
+bleibt benutzbar, weil sie in Blöcken läuft und der Nutzer nach jedem gefragt wird
+(konzept.md §4, „Nachtrag 01.09.2026"; bis dahin stand hier die Wortobergrenze, die
+dieselbe Wirkung hatte); die Zusage des Konzepts,
 danach ein Kapitel am Stück zu lesen, wird sie nicht. Der saubere Weg führt über die
 Quelle: Calibre kann für solche Dateien ein Inhaltsverzeichnis erzeugen. Der Nachtrag zu
 Abnahmekriterium 1 in konzept.md hält das fest.
@@ -2556,7 +2558,8 @@ andere Gründe:
 > **Wie diese drei Zahlen gemessen sind** — festgehalten aus demselben Grund wie das Rezept
 > der `importance`-Rangliste oben: `tools/dorian_gray.epub` Nr. 10 gegen ein frisch
 > vorbelegtes Profil, `pipeline.resolve_triage_entries` mit `limit = 25`
-> (`cli.interaction.WORD_LIMIT`), gezählt werden die gezeigten Einträge mit
+> (`cli.interaction.WORD_BLOCK_SIZE`, damals `WORD_LIMIT`), gezählt werden die gezeigten
+> Einträge mit
 > `Sense.uncertain`. **Die Zusammensetzung der 25 hängt am Modell**, weil ein erst beim
 > Auflösen als `KNOWN` erkannter Eintrag keinen Platz verbraucht
 > (`TriageResolution.resolved_known`) — gemessen deshalb mit dem festgelegten `gemma4:e4b`
@@ -2790,10 +2793,15 @@ Vier Festlegungen dazu, die ersten beiden nicht verhandelbar:
    jeder vorgeladene läuft still. Ist er bei der Fortsetzungsfrage noch nicht fertig,
    sagt eine Zeile das und der Nutzer wartet sichtbar, statt vor einer stummen
    Eingabeaufforderung zu sitzen.
-4. **Das Ende wartet nicht auf den Faden.** Wer „nein" sagt oder mit `q` abbricht, will
-   heraus; ein noch laufender Vorladeblock kostet sonst bis zu ein halbe Minute
-   Modellaufrufe, deren Ergebnis niemand mehr ansieht. Der Faden wird deshalb so geführt,
-   dass er das Programmende nicht aufhält — sein Ergebnis wird schlicht verworfen.
+4. **Das Ende bestellt den Faden ab, es wartet nicht bloß nicht auf ihn.** Wer „nein"
+   sagt oder mit `q` abbricht, will heraus. Ein Faden, der danach weiterrechnet, hält zwar
+   das Programmende nicht auf — er belegt aber den Modellserver, der Anfragen nacheinander
+   abarbeitet, und stiehlt damit dem **nächsten** Durchlauf die Zeit: gemessen (Durchsicht
+   1cfb1e4) brauchte der erste Wendungsblock nach einem `q` im Wortdurchlauf **7,39 s statt
+   3,85 s**, weil sich seine Anfragen 1:1 mit den verworfenen abwechselten. Abbestellt wird
+   über den `on_progress`-Rückruf, den `resolve_triage_entries` ohnehin nach jedem Eintrag
+   aufruft; der Abbruch greift damit nach spätestens einem laufenden Modellaufruf. Ein
+   abbestellter Faden ist **kein Fehlschlag** — sein Ergebnis wird verworfen, ohne Meldung.
 
 Der Vorfilter (Schritt 1 in `resolve_triage_entries`) arbeitet mit dem Profilstand von
 **vor** dem laufenden Block. Das ist hingenommen und kein Fehler: Ein Kapiteleintrag steht
@@ -2822,6 +2830,14 @@ dort gerechnete Zahl hielt beim echten Druck nicht.
   entsteht — kein gemessener Anlass, also Regel 14
 - **Über Kapitelgrenzen hinweg wird nicht vorgeladen.** Der Durchlauf ist auf ein Kapitel
   angelegt (Abschnitt 7); „ganzes Buch auf einmal" ist Phase 2 (konzept.md, „Phasenplan")
+- **Was mit den fertigen Blöcken geschieht, wenn ein späterer scheitert, ist nicht
+  entschieden.** Bricht der Modellserver im dritten Block weg, endet der Lauf sichtbar
+  (Festlegung 2) — aber **vor** dem Export, und die zwei vollständig durchentschiedenen
+  Blöcke ergeben kein Anki-Deck. Die Ereignisse stehen im Profil, doch `learning` gilt nicht
+  als bekannt: Der nächste Lauf fragt dieselben Wörter erneut und zahlt dieselben
+  Modellaufrufe. Aufgefallen bei der Durchsicht von 1cfb1e4. Das ist eine inhaltliche Frage
+  („exportiert ein abgebrochener Lauf, was er hat?"), keine Bauentscheidung — sie gehört
+  besprochen, bevor sie nebenbei beantwortet wird
 
 ---
 

@@ -142,7 +142,8 @@ anzulegen ([technik.md](technik.md) §8b).
 
 Manche Dateien — vor allem Calibre-Konvertate — nennen im Inhaltsverzeichnis nur die
 groben Teile eines Romans. Die Kapitelliste zeigt dann drei Einträge zu je 60.000 bis
-80.000 Wörtern: Die Triage bleibt dank Wortobergrenze benutzbar, die Zusage, danach ein
+80.000 Wörtern: Die Triage bleibt dank der blockweisen Portionierung benutzbar, die
+Zusage, danach ein
 Kapitel am Stück zu lesen, wird sie nicht ([technik.md](technik.md) §8, „Nachtrag
 28.08.2026: ein Kapitel ist nicht ein Dokument").
 
