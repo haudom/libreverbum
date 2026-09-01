@@ -364,16 +364,19 @@ def run_triage_pass(
     Kandidaten verlangte, und verfehlte bei 65,8 % mehrdeutigen Grundformen je Kapitel
     (technik.md §3, Nachtrag 18.08.2026) die meisten bereits bekannten Wörter.
 
-    Vier Zählungen werden gemeldet, nicht verschwiegen (Regel 13): laut Vorfilter bereits
-    bekannt (`resolution.known`) und erst nach dem Auflösen als bekannt erkannt
-    (`resolution.resolved_known`) in einer gemeinsamen Meldung — beide Wege buchen dieselbe
-    Bedeutung als `KNOWN`, nur zu verschiedenen Zeitpunkten im Ablauf, und eine getrennte
-    Zahl ohne die andere wäre wieder die Lücke aus Befund mittel, Durchsicht 46ef37b (im
-    Auftragsbeispiel: „4 bereits bekannt" statt der tatsächlichen 25). Übersprungene
-    Einträge (`resolution.skipped`, Befund schwer 1, Durchsicht 46ef37b): Kandidaten
-    bestanden, aber das Modell wählte „keine passt" — kein Wort, über das der Nutzer hätte
-    entscheiden können, deshalb weder Anzeige noch Buchung, nur diese Zählung. Über die
-    Wortobergrenze hinaus zurückgestellte Einträge (`resolution.deferred`)."""
+    Drei Zählungen und eine Restliste werden gemeldet, nicht verschwiegen (Regel 13): laut
+    Vorfilter bereits bekannt (`resolution.known`) und erst nach dem Auflösen als bekannt
+    erkannt (`resolution.resolved_known`) in einer gemeinsamen Meldung — beide Wege buchen
+    dieselbe Bedeutung als `KNOWN`, nur zu verschiedenen Zeitpunkten im Ablauf, und eine
+    getrennte Zahl ohne die andere wäre wieder die Lücke aus Befund mittel, Durchsicht
+    46ef37b (im Auftragsbeispiel: „4 bereits bekannt" statt der tatsächlichen 25).
+    Übersprungene Einträge (`resolution.skipped`, Befund schwer 1, Durchsicht 46ef37b):
+    Kandidaten bestanden, aber das Modell wählte „keine passt" — kein Wort, über das der
+    Nutzer hätte entscheiden können, deshalb weder Anzeige noch Buchung, nur diese
+    Zählung. Noch nicht geprüfte Einträge (`resolution.remaining`, technik.md §12,
+    „Blockweise Triage mit Vorladen — entschieden"): der Rest für den nächsten Block —
+    die Blockschleife, die ihn erneut vorlegt, ist ein späterer Bauschritt, hier wird er
+    nur gezählt und gemeldet."""
     if resolution.known or resolution.resolved_known:
         write_line(
             f"{resolution.known + resolution.resolved_known} {label} laut Profil bereits "
@@ -385,8 +388,8 @@ def run_triage_pass(
             f"{resolution.skipped} {label} übersprungen: keine der Wörterbuchbedeutungen "
             "war zuzuordnen."
         )
-    if resolution.deferred:
-        write_line(f"{resolution.deferred} {label} zurückgestellt (Wortobergrenze erreicht).")
+    if resolution.remaining:
+        write_line(f"{len(resolution.remaining)} {label} noch nicht geprüft.")
 
     entries = resolution.entries
     if not entries:

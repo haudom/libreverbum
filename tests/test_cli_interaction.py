@@ -105,7 +105,7 @@ def test_bulk_action_marks_all_more_frequent_words(profile_con: sqlite3.Connecti
     bedient): Position 3 markiert die drei häufigsten Wörter als bekannt, der Rest wird
     einzeln gefragt."""
     resolution = pipeline.TriageResolution(
-        entries=_entries(5), known=0, resolved_known=0, skipped=0, deferred=0
+        entries=_entries(5), known=0, resolved_known=0, skipped=0, remaining=[]
     )
     answers = iter(["3", "s", "s"])  # Sammelaktion bis 3, dann zwei individuelle "skip"
 
@@ -138,7 +138,7 @@ def test_bulk_action_does_not_mark_a_word_behind_the_selected_position(
     der Positionsauflösung sichtbar würde."""
     tied = [_resolved_entry("tied_a", "NOUN", 1, "A"), _resolved_entry("tied_b", "NOUN", 1, "B")]
     resolution = pipeline.TriageResolution(
-        entries=tied, known=0, resolved_known=0, skipped=0, deferred=0
+        entries=tied, known=0, resolved_known=0, skipped=0, remaining=[]
     )
     answers = iter(["1", "s"])
 
@@ -166,7 +166,7 @@ def test_learning_a_word_creates_a_card_with_the_already_resolved_sense(
     T16-Durchsicht) — kein weiterer Modellaufruf an dieser Stelle, `entry.sense` wird
     unverändert übernommen."""
     resolution = pipeline.TriageResolution(
-        entries=_entries(1), known=0, resolved_known=0, skipped=0, deferred=0
+        entries=_entries(1), known=0, resolved_known=0, skipped=0, remaining=[]
     )
     answers = iter(["", "l"])
 
@@ -221,7 +221,7 @@ def test_expressions_reach_the_triage_and_the_resulting_card(
         known=0,
         resolved_known=0,
         skipped=0,
-        deferred=0,
+        remaining=[],
     )
     answers = iter(["", "l"])
 
@@ -260,7 +260,7 @@ def test_run_triage_pass_reports_entries_the_pipeline_already_filtered_as_known(
     aus `resolution.known` meldet und ausschließlich zeigt, was tatsächlich in
     `resolution.entries` steht."""
     resolution = pipeline.TriageResolution(
-        entries=_entries(1), known=1, resolved_known=0, skipped=0, deferred=0
+        entries=_entries(1), known=1, resolved_known=0, skipped=0, remaining=[]
     )
     written: list[str] = []
     answers = iter(["", "s"])  # keine Sammelaktion, dann "skip" für word0
@@ -291,7 +291,7 @@ def test_run_triage_pass_combines_both_ways_of_being_already_known_in_one_messag
     Vorfilters (`resolution.known`). Im Auftragsbeispiel fehlten so 21 von 25 Wörtern in
     der gemeldeten Zahl (4 statt 25)."""
     resolution = pipeline.TriageResolution(
-        entries=[], known=4, resolved_known=21, skipped=0, deferred=0
+        entries=[], known=4, resolved_known=21, skipped=0, remaining=[]
     )
     written: list[str] = []
 
@@ -319,7 +319,7 @@ def test_run_triage_pass_reports_entries_skipped_for_no_matching_sense(
     wählte (`resolution.skipped`), wird gezählt gemeldet — Regel 13, keine stille
     Störungsmeldung."""
     resolution = pipeline.TriageResolution(
-        entries=[], known=0, resolved_known=0, skipped=2, deferred=0
+        entries=[], known=0, resolved_known=0, skipped=2, remaining=[]
     )
     written: list[str] = []
 
@@ -350,7 +350,7 @@ def test_new_meaning_of_a_known_word_is_marked_in_the_display(
         "bank", "NOUN", 2, "Ufer", status=VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD
     )
     resolution = pipeline.TriageResolution(
-        entries=[entry], known=0, resolved_known=0, skipped=0, deferred=0
+        entries=[entry], known=0, resolved_known=0, skipped=0, remaining=[]
     )
     written: list[str] = []
     answers = iter(["", "s"])
@@ -385,7 +385,7 @@ def test_a_word_without_a_dictionary_entry_keeps_its_uncertain_marker_when_learn
         status=VocabularyStatus.UNKNOWN,
     )
     resolution = pipeline.TriageResolution(
-        entries=[entry], known=0, resolved_known=0, skipped=0, deferred=0
+        entries=[entry], known=0, resolved_known=0, skipped=0, remaining=[]
     )
     answers = iter(["", "l"])
 
@@ -424,7 +424,7 @@ def test_learning_a_word_without_a_dictionary_entry_is_refused_for_de_en(
         status=VocabularyStatus.UNKNOWN,
     )
     resolution = pipeline.TriageResolution(
-        entries=[entry], known=0, resolved_known=0, skipped=0, deferred=0
+        entries=[entry], known=0, resolved_known=0, skipped=0, remaining=[]
     )
     answers = iter(["", "l", "s"])
     lines: list[str] = []
@@ -471,7 +471,7 @@ def test_learning_a_word_whose_form_has_no_boundary_in_the_sentence_is_refused_f
         status=VocabularyStatus.UNKNOWN,
     )
     resolution = pipeline.TriageResolution(
-        entries=[entry], known=0, resolved_known=0, skipped=0, deferred=0
+        entries=[entry], known=0, resolved_known=0, skipped=0, remaining=[]
     )
     answers = iter(["", "l", "s"])
     lines: list[str] = []

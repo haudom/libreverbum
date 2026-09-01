@@ -960,7 +960,117 @@ def test_resolve_triage_entries_stops_once_the_limit_of_kept_entries_is_reached(
 
     assert len(resolution.entries) == limit
     assert len(model_server_double.requests) == limit
-    assert resolution.deferred == total - limit
+    assert len(resolution.remaining) == total - limit
+
+
+def test_resolve_triage_entries_followup_call_continues_where_the_previous_call_stopped(
+    profile_path: Path, model_server_double: ModelServerDouble
+) -> None:
+    """technik.md §12, „Blockweise Triage mit Vorladen — entschieden", Abschnitt „Der Kern
+    liefert den Rest mit, statt ihn wegzuwerfen": Ein Folgeaufruf von
+    `resolve_triage_entries` mit `entries=resolution.remaining` liefert die nächsten
+    Einträge in Häufigkeitsreihenfolge, wiederholt keinen bereits gelieferten Eintrag, und
+    die Zählzusicherung gilt für jeden der beiden Aufrufe für sich (jeweils gegen die
+    Größe seiner eigenen Eingabemenge).
+
+    Verfälschungsprobe: `remaining=[entries_by_occurrence[o] for o in ordered[examined + 1 :]]`
+    statt `ordered[examined:]` lässt beim ersten Aufruf einen Eintrag zwischen `entries`
+    und `remaining` durchfallen — dieser Test war daran rot, weil `word10` dann weder in
+    `first.entries` noch in `first.remaining` (und damit auch nicht in `second.entries`)
+    auftauchte und die Zählzusicherung des ersten Aufrufs `total - 1` statt `total` ergab."""
+    total = 30
+    limit = 10
+    entries = [
+        pipeline.VocabularyEntry(
+            occurrence=_triage_occurrence(f"word{i}", "NOUN", frequency=total - i),
+            candidates=[_triage_sense(f"word{i}", "NOUN", f"Übersetzung{i}")],
+            status={},
+        )
+        for i in range(total)
+    ]
+    model_server_double.choice = 1
+
+    con = profile.open_profile(profile_path)
+    try:
+        first = pipeline.resolve_triage_entries(
+            con=con,
+            entries=entries,
+            limit=limit,
+            url=model_server_double.url,
+            get_model_name=lambda: model_server_double.model_name,
+        )
+        second = pipeline.resolve_triage_entries(
+            con=con,
+            entries=first.remaining,
+            limit=limit,
+            url=model_server_double.url,
+            get_model_name=lambda: model_server_double.model_name,
+        )
+    finally:
+        con.close()
+
+    first_words = [entry.occurrence.lemma.text for entry in first.entries]
+    second_words = [entry.occurrence.lemma.text for entry in second.entries]
+
+    assert first_words == [f"word{i}" for i in range(0, 10)]
+    assert second_words == [f"word{i}" for i in range(10, 20)]
+    assert set(first_words).isdisjoint(second_words)
+    assert len(first.remaining) == total - limit
+    assert {entry.occurrence.lemma.text for entry in second.remaining} == {
+        f"word{i}" for i in range(20, 30)
+    }
+    assert len(model_server_double.requests) == 2 * limit
+
+    for resolution, input_size in ((first, total), (second, len(first.remaining))):
+        summed = (
+            resolution.known
+            + resolution.resolved_known
+            + resolution.skipped
+            + len(resolution.remaining)
+            + len(resolution.entries)
+        )
+        assert summed == input_size
+
+
+def test_resolve_triage_entries_remaining_is_empty_once_the_limit_exceeds_the_input(
+    profile_path: Path, model_server_double: ModelServerDouble
+) -> None:
+    """technik.md §12: `remaining` ist das Ende-Signal für die Blockschleife des nächsten
+    Bauschritts — ist `limit` größer als die Zahl der Einträge, wurde jeder Eintrag
+    angefasst, und `remaining` muss leer sein, nicht bloß klein.
+
+    Verfälschungsprobe: `remaining=[entries_by_occurrence[o] for o in ordered]` statt
+    `ordered[examined:]` (die Schnitt-Stelle vergessen, jeder Eintrag landet unabhängig
+    von `examined` in `remaining`) lässt hier alle fünf Einträge in `remaining`
+    auftauchen, obwohl jeder von ihnen auch in `resolution.entries` steht — dieser Test
+    war an `resolution.remaining == []` rot. Ein reines Off-by-one an der Abbruchbedingung
+    (`len(resolved) > limit` statt `>=`) besteht diesen Test dagegen zufällig auch, weil
+    `limit=100` hier nie erreicht wird — dafür steht der nicht-leere Fall oben in
+    `test_resolve_triage_entries_stops_once_the_limit_of_kept_entries_is_reached`."""
+    entries = [
+        pipeline.VocabularyEntry(
+            occurrence=_triage_occurrence(f"word{i}", "NOUN", frequency=10 - i),
+            candidates=[_triage_sense(f"word{i}", "NOUN", f"Übersetzung{i}")],
+            status={},
+        )
+        for i in range(5)
+    ]
+    model_server_double.choice = 1
+
+    con = profile.open_profile(profile_path)
+    try:
+        resolution = pipeline.resolve_triage_entries(
+            con=con,
+            entries=entries,
+            limit=100,
+            url=model_server_double.url,
+            get_model_name=lambda: model_server_double.model_name,
+        )
+    finally:
+        con.close()
+
+    assert resolution.remaining == []
+    assert len(resolution.entries) == len(entries)
 
 
 def test_resolve_triage_entries_skips_and_never_lets_a_no_match_reach_the_profile(
@@ -1042,13 +1152,14 @@ def test_resolve_triage_entries_skips_and_never_lets_a_no_match_reach_the_profil
 def test_resolve_triage_entries_counts_add_up_to_the_input_size(
     profile_path: Path, model_server_double: ModelServerDouble
 ) -> None:
-    """Befund mittel, Durchsicht 46ef37b: `known + resolved_known + skipped + deferred +
-    len(resolution.entries)` muss wieder die Zahl der übergebenen Einträge ergeben — sonst
-    verschwindet ein Teil unbeziffert aus jeder Meldung, wie im Auftragsbeispiel
-    („4" statt „25" bereits bekannt: 4 + 1.360 + 25 = 1.389 statt 1.410).
+    """Befund mittel, Durchsicht 46ef37b: `known + resolved_known + skipped +
+    len(resolution.remaining) + len(resolution.entries)` muss wieder die Zahl der
+    übergebenen Einträge ergeben — sonst verschwindet ein Teil unbeziffert aus jeder
+    Meldung, wie im Auftragsbeispiel („4" statt „25" bereits bekannt: 4 + 1.360 + 25 =
+    1.389 statt 1.410).
 
-    Eine Häufigkeitskaskade mit je einem Eintrag für jede der vier Zählungen und der
-    behaltenen Liste: `alpha` (Vorfilter bekannt, kein Modellaufruf), `vault`
+    Eine Häufigkeitskaskade mit je einem Eintrag für jede der drei Zählungen, die
+    Restliste und die behaltene Liste: `alpha` (Vorfilter bekannt, kein Modellaufruf), `vault`
     (mehrdeutig, wie der `bank`-Fall erst nach Auflösen als bekannt erkannt), `spring`
     (mehrdeutig, Modell wählt „keine passt" trotz echter Kandidaten, Befund schwer 1),
     `pen` (bleibt in der Triage) und `quiz` (mit `limit=1` nie erreicht — die
@@ -1132,7 +1243,7 @@ def test_resolve_triage_entries_counts_add_up_to_the_input_size(
     assert resolution.known == 1
     assert resolution.resolved_known == 1
     assert resolution.skipped == 1
-    assert resolution.deferred == 1
+    assert [entry.occurrence.lemma.text for entry in resolution.remaining] == ["quiz"]
     assert [entry.occurrence.lemma.text for entry in resolution.entries] == ["pen"]
     assert len(model_server_double.requests) == 3
 
@@ -1140,7 +1251,7 @@ def test_resolve_triage_entries_counts_add_up_to_the_input_size(
         resolution.known
         + resolution.resolved_known
         + resolution.skipped
-        + resolution.deferred
+        + len(resolution.remaining)
         + len(resolution.entries)
     )
     assert total == len(all_entries)
@@ -1221,7 +1332,10 @@ def test_resolve_triage_entries_needs_at_most_limit_model_calls_when_enough_cert
     assert resolution.resolved_known == 1
     assert resolution.skipped == 0
     assert resolution.known == 0
-    assert resolution.deferred == len(partial_entries)
+    assert len(resolution.remaining) == len(partial_entries)
+    assert {entry.occurrence.lemma.text for entry in resolution.remaining} == {
+        entry.occurrence.lemma.text for entry in partial_entries
+    }
     assert {entry.occurrence.lemma.text for entry in resolution.entries} == {
         f"keep{i}" for i in range(limit)
     }
@@ -1229,7 +1343,7 @@ def test_resolve_triage_entries_needs_at_most_limit_model_calls_when_enough_cert
         resolution.known
         + resolution.resolved_known
         + resolution.skipped
-        + resolution.deferred
+        + len(resolution.remaining)
         + len(resolution.entries)
     )
     assert total == len(all_entries)

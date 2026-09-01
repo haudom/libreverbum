@@ -405,9 +405,10 @@ class TriageResolution:
     """Ergebnis von `resolve_triage_entries` für **einen** Decksel (Wörter oder Wendungen,
     `cli/interaction.py`, „Festlegung: getrennte Decksel"): `entries` — höchstens `limit`
     aufgelöste Einträge, in Häufigkeitsreihenfolge, bereit für die interaktive Triage —,
-    dazu vier Zählungen für deren Meldungen davor, die zusammen mit `len(entries)` wieder
-    die volle Eingabemenge ergeben (`resolve_triage_entries`, Schritte 1, 3, 4, 6; Befund
-    mittel, Durchsicht 46ef37b — vorher verschwand `resolved_known` unbeziffert).
+    dazu drei Zählungen für deren Meldungen davor und `remaining`, der Rest für den
+    nächsten Block; zusammen mit `len(entries)` ergeben sie über `len(remaining)` wieder
+    die volle Eingabemenge (`resolve_triage_entries`, Schritte 1, 3, 4, 6; Befund mittel,
+    Durchsicht 46ef37b — vorher verschwand `resolved_known` unbeziffert).
 
     `known`: wie viele Einträge der kostenlose Vorfilter bereits verworfen hat, weil jede
     ihrer Bedeutungen bekannt war (Abnahmekriterium 6, Schritt 1). `resolved_known`: wie
@@ -419,17 +420,25 @@ class TriageResolution:
     viele Einträge trotz echter Wörterbuchkandidaten übersprungen wurden, weil das Modell
     „keine passt" wählte (Schritt 3; Befund schwer 1, Durchsicht 46ef37b — siehe
     `_resolve_sense`); anders als `known` und `resolved_known` steht dahinter **keine**
-    Bedeutung, die gebucht werden könnte. `deferred`: wie viele der übrigen, nach
-    Häufigkeit sortierten Einträge die Wortobergrenze gar nicht mehr erreicht hat
-    (Schritt 6) — unangetastet wie das bisherige Verhalten von
-    `triage.defer_beyond_word_limit`, nur an **behaltenen** statt an gesehenen Einträgen
-    gezählt."""
+    Bedeutung, die gebucht werden könnte.
+
+    `remaining`: die Einträge, die dieser Aufruf **gar nicht mehr angefasst** hat, weil
+    `limit` bereits erreicht war (Schritt 6) — `ordered[examined:]`, zurückübersetzt von
+    `Occurrence` auf `VocabularyEntry` über `entries_by_occurrence`. Anders als die frühere
+    Wortobergrenze (bis 01.09.2026 hier `deferred: int`) ist das kein endgültig verfallener
+    Rest mehr: Der Aufrufer legt `remaining` einem weiteren Aufruf von
+    `resolve_triage_entries` als `entries` vor und erhält so den nächsten Block der
+    blockweisen Triage (technik.md §12, „Blockweise Triage mit Vorladen — entschieden",
+    Abschnitt „Der Kern liefert den Rest mit, statt ihn wegzuwerfen") — die Funktion selbst
+    führt dafür weder Zustand noch Iterator, derselbe Aufruf mit weniger Einträgen genügt.
+    Die Reihenfolge innerhalb `remaining` ist unerheblich, ein Folgeaufruf sortiert selbst
+    neu (Schritt 2); die Vollständigkeit ist es nicht."""
 
     entries: list[ResolvedEntry]
     known: int
     resolved_known: int
     skipped: int
-    deferred: int
+    remaining: list[VocabularyEntry]
 
 
 def _all_candidates_known(entry: VocabularyEntry) -> bool:
@@ -590,10 +599,13 @@ def resolve_triage_entries(
        greift nicht, weil nicht *jede* Bedeutung bekannt ist, das Modell löst auf, und die
        Geldhaus-Bedeutung erscheint markiert).
     5. Abbruch, sobald auf diese Art `limit` Einträge **behalten** wurden.
-    6. Was danach in der sortierten Liste noch steht, wird nicht mehr angerührt: kein
-       Modellaufruf, keine Anzeige, kein Ereignis — dieselbe Wirkung wie die bisherige
-       Wortobergrenze, nur an behaltenen statt an gesehenen Einträgen gezählt
-       (`TriageResolution.deferred`).
+    6. Was danach in der sortierten Liste noch steht, wird in diesem Aufruf nicht mehr
+       angerührt: kein Modellaufruf, keine Anzeige, kein Ereignis. Anders als die frühere
+       Wortobergrenze ist das kein endgültig verfallener Rest mehr, sondern der
+       Ausgangspunkt des nächsten Blocks (`TriageResolution.remaining`, technik.md §12,
+       „Blockweise Triage mit Vorladen — entschieden"). Der Aufrufer legt `remaining`
+       demselben `resolve_triage_entries` als `entries` vor und bekommt so den
+       Folgeblock — die Funktion selbst führt dafür weder Zustand noch Iterator.
 
     Die **Anzeigereihenfolge** bleibt in beiden Fällen Häufigkeit: Die behaltenen Einträge
     werden am Ende erneut nach `triage.sort_by_frequency` sortiert, unabhängig davon, in
@@ -601,11 +613,11 @@ def resolve_triage_entries(
     Auswahlstrategie aus Schritt 2 in die Triage durch, in der weiterhin die häufigsten
     Wörter zuerst stehen sollen (konzept.md §4).
 
-    `known + resolved_known + skipped + deferred + len(resolution.entries)` ergibt wieder
-    `len(entries)` — die Zahl der hier übergebenen Einträge, unabhängig davon, wie sie sich
-    auf die vier Zählungen und die behaltene Liste verteilen. Die Zusicherung dazu steht in
-    `tests/test_pipeline.py` (Auftrag zu Befund mittel, Durchsicht 46ef37b) — die
-    zweistufige Auswahl führt keine neue Zählung ein, sie ändert nur die Reihenfolge, in
+    `known + resolved_known + skipped + len(resolution.remaining) + len(resolution.entries)`
+    ergibt wieder `len(entries)` — die Zahl der hier übergebenen Einträge, unabhängig davon,
+    wie sie sich auf die drei Zählungen und die beiden Listen verteilen. Die Zusicherung
+    dazu steht in `tests/test_pipeline.py` (Auftrag zu Befund mittel, Durchsicht 46ef37b) —
+    die zweistufige Auswahl führt keine neue Zählung ein, sie ändert nur die Reihenfolge, in
     der Schritt 3 die Einträge vorlegt.
 
     `on_progress`, falls übergeben, wird nach **jedem** Schritt 3/4-Durchlauf mit vier
@@ -631,17 +643,23 @@ def resolve_triage_entries(
         raise ValueError(f'order = "{order}" ist unzulässig — erlaubt sind {erlaubt}.')
 
     known_entries = [entry for entry in entries if _all_candidates_known(entry)]
-    remaining = [entry for entry in entries if not _all_candidates_known(entry)]
-    entries_by_occurrence = {entry.occurrence: entry for entry in remaining}
+    # (Bauschritt 1/4, Blockweise Triage, 01.09.2026): eigener Name statt `remaining`, um
+    # nicht mit `TriageResolution.remaining` (dem Rest für den nächsten Block, unten)
+    # zusammenzufallen — diese Liste ist der Rest **nach dem Vorfilter**, nicht der Rest
+    # nach `limit`.
+    undetermined_entries = [entry for entry in entries if not _all_candidates_known(entry)]
+    entries_by_occurrence = {entry.occurrence: entry for entry in undetermined_entries}
 
     if order == "new_words_first":
-        certain_entries = [entry for entry in remaining if _no_candidate_known(entry)]
-        partial_entries = [entry for entry in remaining if not _no_candidate_known(entry)]
+        certain_entries = [entry for entry in undetermined_entries if _no_candidate_known(entry)]
+        partial_entries = [
+            entry for entry in undetermined_entries if not _no_candidate_known(entry)
+        ]
         ordered = triage.sort_by_frequency(
             entry.occurrence for entry in certain_entries
         ) + triage.sort_by_frequency(entry.occurrence for entry in partial_entries)
     else:  # "frequency" — das bisherige Verhalten, geprüft ist order oben bereits
-        ordered = triage.sort_by_frequency(entry.occurrence for entry in remaining)
+        ordered = triage.sort_by_frequency(entry.occurrence for entry in undetermined_entries)
 
     resolved: list[ResolvedEntry] = []
     resolved_known = 0
@@ -689,7 +707,7 @@ def resolve_triage_entries(
         known=len(known_entries),
         resolved_known=resolved_known,
         skipped=skipped,
-        deferred=len(ordered) - examined,
+        remaining=[entries_by_occurrence[occurrence] for occurrence in ordered[examined:]],
     )
 
 
