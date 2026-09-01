@@ -2729,7 +2729,7 @@ unter zwei Grundformen — wird ein Eintrag einmal zu viel gezeigt, nicht einer 
 
 ### Folge: die Druckseite bricht um, statt abzubrechen
 
-`printout.render_chapter_page` wies bisher mehr als `MAX_ENTRIES = 36` Einträge sichtbar
+`printout.write_printout` wies bisher mehr als `MAX_ENTRIES = 36` Einträge sichtbar
 zurück (Regel 13) — richtig, solange die Wortobergrenze garantierte, dass nie mehr ankamen.
 Diese Garantie ist weg: Wer vier Blöcke durchgeht, kann mehr als 36 Karten haben. Der
 Abbruch wird deshalb zum **Seitenumbruch**; Abnahmekriterium 5 ist mit derselben Änderung
