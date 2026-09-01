@@ -4,6 +4,7 @@ zweispaltig, auf so viele Blätter umbrechend wie nötig (Abnahmekriterium 5, na
 
 from __future__ import annotations
 
+from collections import Counter
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -40,32 +41,44 @@ def _entry(
 
 
 class _StructureParser(HTMLParser):
-    """Sammelt Body-Text, Style-Inhalt und die Zahl der Listeneinträge — dasselbe
-    Werkzeug wie `epub._FlowingTextParser` (dokumentation.md §5, „für die Struktur genügt
-    html.parser"), hier auf die erzeugte Druckseite angewendet."""
+    """Sammelt Body-Text, Style-Inhalt, die Zahl der Listeneinträge und — je Eintrag — die
+    tatsächlich ausgegebene Wortform (`span.wort`) — dasselbe Werkzeug wie
+    `epub._FlowingTextParser` (dokumentation.md §5, „für die Struktur genügt
+    html.parser"), hier auf die erzeugte Druckseite angewendet. `word_forms` liefert eine
+    exakte Liste statt einer Teilstring-Prüfung auf `body_text` (Befund 4, Durchsicht
+    4fa3c8e): `wort3` ist Teilstring von `wort30`…`wort36`, `body_text` allein kann eine
+    Vereinigungsprüfung deshalb nicht tragen."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self._body_parts: list[str] = []
         self._style_parts: list[str] = []
         self._in_style = False
+        self._in_word_span = False
         self.list_item_count = 0
+        self.word_forms: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag == "style":
             self._in_style = True
         elif tag == "li":
             self.list_item_count += 1
+        elif tag == "span" and ("class", "wort") in attrs:
+            self._in_word_span = True
 
     def handle_endtag(self, tag: str) -> None:
         if tag == "style":
             self._in_style = False
+        elif tag == "span":
+            self._in_word_span = False
 
     def handle_data(self, data: str) -> None:
         if self._in_style:
             self._style_parts.append(data)
         else:
             self._body_parts.append(data)
+            if self._in_word_span:
+                self.word_forms.append(data)
 
     @property
     def body_text(self) -> str:
@@ -79,6 +92,15 @@ class _StructureParser(HTMLParser):
 def _parse(path: Path) -> _StructureParser:
     parser = _StructureParser()
     parser.feed(path.read_text(encoding="utf-8"))
+    return parser
+
+
+def _parse_fragment(fragment: str) -> _StructureParser:
+    """Wie `_parse`, aber auf einen Teilstring statt eine Datei angewendet — für die
+    Prüfung je einzelnem Blatt (Befund 3, Durchsicht 4fa3c8e), etwa nach einem Schnitt an
+    `<div class="blatt">`."""
+    parser = _StructureParser()
+    parser.feed(fragment)
     return parser
 
 
@@ -106,6 +128,29 @@ def test_page_declares_two_columns_and_a_page_size(tmp_path: Path) -> None:
     parser = _parse(path)
     assert "@page" in parser.style_text
     assert "columns" in parser.style_text
+
+
+def test_sheet_container_forces_a_page_break_except_after_the_last_sheet(tmp_path: Path) -> None:
+    """Befund 2, Durchsicht 4fa3c8e; technik.md §12, „Folge: die Druckseite bricht um,
+    statt abzubrechen": Der Blatt-Container (`div.blatt`) erzwingt den Seitenumbruch
+    selbst, statt ihn dem natürlichen Fließverhalten des Browsers zu überlassen — sonst
+    fielen zwei Blätter im Ausdruck wieder auf ein Blatt zusammen. Das letzte Blatt ist
+    davon ausgenommen (`:last-of-type`), sonst endete der Ausdruck auf einer leeren Seite.
+    Verfälschungsprobe: den ganzen `div.blatt { … }`-Block aus `_CSS` entfernt ließ diese
+    Prüfung fehlschlagen (kein `page-break-after`/`break-after` mehr im Style-Text), ebenso
+    das alleinige Entfernen der `:last-of-type`-Ausnahme (keine Gegenregel mehr, die den
+    Umbruch nach dem letzten Blatt wieder aufhebt)."""
+    path = tmp_path / "kapitelliste.html"
+
+    printout.write_printout(path, [_entry("beehive", "Bienenstock")])
+
+    style = _parse(path).style_text
+    assert "div.blatt {" in style
+    assert "page-break-after: always;" in style
+    assert "break-after: page;" in style
+    assert "div.blatt:last-of-type {" in style
+    assert "page-break-after: auto;" in style
+    assert "break-after: auto;" in style
 
 
 def test_book_and_chapter_appear_as_heading(tmp_path: Path) -> None:
@@ -203,10 +248,15 @@ def test_exactly_max_entries_plus_one_yields_second_sheet_with_a_single_entry(
     Eintrag — kein Eintrag geht verloren, keiner erscheint doppelt (Vereinigung geprüft,
     nicht nur die Anzahl). Verfälschungsprobe: Alle Einträge doch auf ein Blatt gepackt
     (Gruppierung übersprungen, `_group_entries` gibt `[ordered]` zurück) ließ diese
-    Prüfung fehlschlagen, weil nur ein `div.blatt` statt zwei entstand."""
+    Prüfung fehlschlagen, weil nur ein `div.blatt` statt zwei entstand. Zweite
+    Verfälschungsprobe (Befund 4, Durchsicht 4fa3c8e): den ersten Eintrag jeder Gruppe in
+    `_sheet_html` zusätzlich ein zweites Mal ausgegeben ließ die alte Teilstring-Prüfung
+    (`word in parser.body_text`) unbemerkt grün, weil sie ein doppelt vorkommendes Wort
+    nicht von einem einmal vorkommenden unterscheidet — die Zählung über
+    `Counter(parser.word_forms)` fällt dabei rot."""
     path = tmp_path / "kapitelliste.html"
     entries = [_entry(f"wort{n}", f"übersetzung{n}") for n in range(printout.MAX_ENTRIES + 1)]
-    expected_word_forms = {occurrence.word_form for occurrence, _ in entries}
+    expected_word_forms = Counter(occurrence.word_form for occurrence, _ in entries)
 
     printout.write_printout(path, entries)
 
@@ -218,8 +268,11 @@ def test_exactly_max_entries_plus_one_yields_second_sheet_with_a_single_entry(
 
     parser = _parse(path)
     assert parser.list_item_count == len(entries)
-    found_word_forms = {word for word in expected_word_forms if word in parser.body_text}
-    assert found_word_forms == expected_word_forms
+    # Zählung statt Teilstring-Prüfung (Befund 4, Durchsicht 4fa3c8e): `wort3 in
+    # body_text` wäre auch bei `wort30`…`wort36` wahr — erst der Abgleich der
+    # tatsächlich ausgegebenen Wortformen als Menge (mit Häufigkeit) hält die
+    # Docstring-Zusage „keiner erscheint doppelt, Vereinigung geprüft".
+    assert Counter(parser.word_forms) == expected_word_forms
 
 
 def test_capacity_limit_accepts_exactly_the_maximum_on_a_single_sheet(tmp_path: Path) -> None:
@@ -236,6 +289,33 @@ def test_capacity_limit_accepts_exactly_the_maximum_on_a_single_sheet(tmp_path: 
     assert document.count('<div class="blatt">') == 1
     parser = _parse(path)
     assert "Blatt" not in parser.body_text
+
+
+def test_sorting_is_continuous_across_a_sheet_boundary(tmp_path: Path) -> None:
+    """Befund 3, Durchsicht 4fa3c8e; `_group_entries`-Docstring: „Gruppen entstehen nur
+    durch Schneiden, nicht durch Umsortieren" — die alphabetische Sortierung
+    (Moduldocstring, „Warum alphabetisch") gilt durchgehend über die Blattgrenze hinweg,
+    nicht nur innerhalb eines Blatts: Der letzte Eintrag von Blatt 1 steht vor dem ersten
+    Eintrag von Blatt 2. Verfälschungsprobe: `_sheet_html` sortiert jede Gruppe zusätzlich
+    rückwärts, bevor sie ausgegeben wird (`group = list(reversed(group))`), ließ diese
+    Prüfung fehlschlagen — innerhalb jedes Blatts stand die Reihenfolge dann verkehrt, und
+    der letzte Eintrag von Blatt 1 lag hinter dem ersten Eintrag von Blatt 2."""
+    path = tmp_path / "kapitelliste.html"
+    entries = [
+        _entry(f"wort{n:03d}", f"übersetzung{n:03d}") for n in range(printout.MAX_ENTRIES + 1)
+    ]
+    # Absichtlich nicht bereits sortiert übergeben, damit die Prüfung `write_printout`s
+    # eigene Sortierung testet, nicht die Übergabereihenfolge.
+    printout.write_printout(path, list(reversed(entries)))
+
+    document = path.read_text(encoding="utf-8")
+    sheets = document.split('<div class="blatt">')[1:]
+    assert len(sheets) == 2
+    first_sheet_words = _parse_fragment(sheets[0]).word_forms
+    second_sheet_words = _parse_fragment(sheets[1]).word_forms
+    assert first_sheet_words == sorted(first_sheet_words)
+    assert second_sheet_words == sorted(second_sheet_words)
+    assert first_sheet_words[-1] < second_sheet_words[0]
 
 
 def test_rejects_an_empty_word_list(tmp_path: Path) -> None:

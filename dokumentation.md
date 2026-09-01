@@ -91,6 +91,7 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | Karte, Deck, Kartenrichtung, Lückentext | `card`, `deck`, `card_direction`, `cloze` |
 | Kartenvorlage (genankis `Model` — „Modell" bleibt dem Sprachmodell vorbehalten, technik.md §3) | `note_model` |
 | Druckausgabe | `printout` |
+| Blattzählung („Blatt n von m", nur bei mehr als einem Blatt) | `sheet_label` |
 | unsicher (markierter Eintrag) | `uncertain` |
 | Gegenstand des Kernablaufs | `entity` |
 | Durchlauf, Verkettung der Schritte | `pipeline` |

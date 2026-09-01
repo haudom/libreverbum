@@ -16,8 +16,8 @@ Voraussetzungen
 ---------------
 `entries` sind bereits übersetzt oder als `uncertain` bestätigt (Abschnitt „Wie mit
 `uncertain` verfahren wird" unten) und gehören zu **einem** Kapitel: dieselbe Annahme wie
-bei `triage.defer_beyond_word_limit` (konzept.md §4, „Obergrenze pro Kapitel"), hier
-erneut geprüft (`_ensure_single_chapter`), weil dieses Modul nach technik.md §7, „Die
+bei `triage.defer_beyond_word_limit` (konzept.md §4, „Nachtrag 01.09.2026"), hier erneut
+geprüft (`_ensure_single_chapter`), weil dieses Modul nach technik.md §7, „Die
 Importregel" nur `entities` importieren darf und weder `triage` noch `dictionary` selbst
 kennen darf.
 
@@ -120,7 +120,7 @@ from libreverbum.entities import Occurrence, Sense
 # Zeilenhöhe), nicht der Triage — anders als zuvor hier angenommen, und verschieden von
 # `triage.defer_beyond_word_limit(word_limit)`, das dieselbe Zahl über eine ganz andere
 # Rechnung erreichte (Wortobergrenze pro Kapitel, konzept.md §4). Ob und wie `entries`
-# und `expressions` aus `pipeline.run_chapter` zusammen auf diese eine Seite kommen, ist
+# und `expressions` aus `pipeline.run_chapter` zusammen in die Druckausgabe kommen, ist
 # die noch offene T16-Entscheidung (bauplan.md T16, „213 Wendungen je Kapitel"); dieser
 # Wert begrenzt nur, was `write_printout` je Blatt unterbringt, unabhängig davon, was T16
 # am Ende hineinlegt.
@@ -146,6 +146,11 @@ from libreverbum.entities import Occurrence, Sense
 # unter der tatsächlichen Kapazität. Wer diese Zahl neu misst, misst gegen dieselbe
 # Arial-Metrik und dasselbe CSS wie hier — ändert sich eines von beiden, ist die Rechnung
 # neu zu ziehen.
+#
+# (Befund 5, Durchsicht 4fa3c8e): Der Verweis im Moduldocstring, Abschnitt
+# „Voraussetzungen", zeigte zuvor auf „konzept.md §4, »Obergrenze pro Kapitel«" — einen
+# Anker, den es seit dem Nachtrag 01.09.2026 in konzept.md §4 nicht mehr gibt (dort nur
+# noch als zitierte alte Fassung). Nachgezogen auf „konzept.md §4, »Nachtrag 01.09.2026«".
 MAX_ENTRIES = 36
 
 
@@ -206,13 +211,16 @@ def _pos_label(pos: str) -> str | None:
         raise ValueError(f"Kein Wortart-Kürzel für {pos!r} hinterlegt.") from error
 
 
+# (Befund 5, Durchsicht 4fa3c8e): Der Verweis zeigte zuvor auf „konzept.md §4, »pro
+# Kapitel«" — einen Anker, den es seit dem Nachtrag 01.09.2026 in konzept.md §4 nicht mehr
+# gibt (dort nur noch als zitierte alte Fassung). Nachgezogen auf den gültigen Stand.
 def _ensure_single_chapter(entries: Sequence[tuple[Occurrence, Sense]]) -> None:
     """Bricht sichtbar ab, wenn `entries` Vorkommen aus mehr als einem Kapitel enthält —
     dieselbe Prüfung wie `triage._ensure_single_chapter`, hier eigenständig geschrieben,
     weil dieses Modul `triage` nicht importieren darf (technik.md §7, „Die
     Importregel"). Die Druckseite ist eine Kapitelliste (bauplan.md T14); Wörter aus zwei
-    Kapiteln auf einem Blatt wären eine stillschweigend erweiterte Obergrenze
-    (konzept.md §4, „pro Kapitel")."""
+    Kapiteln auf einem Blatt wären eine stillschweigend erweiterte Kapazität je Blatt
+    (technik.md §12, „Folge: die Druckseite bricht um, statt abzubrechen")."""
     chapters = {(occurrence.book, occurrence.chapter_number) for occurrence, _ in entries}
     if len(chapters) > 1:
         gefundene = ", ".join(
@@ -307,11 +315,14 @@ def _sheet_html(
     beim zweiten Blatt nicht mehr, wozu es gehört — und, bei mehr als einem Blatt, einer
     Blattzählung „Blatt n von sheet_count"; bei genau einem Blatt entfällt sie, „Blatt 1
     von 1" wäre Lärm."""
-    zaehlung = f" – Blatt {sheet_number} von {sheet_count}" if sheet_count > 1 else ""
+    # (Befund 8, Durchsicht 4fa3c8e): `zaehlung` war ein deutscher Bezeichner
+    # (dokumentation.md §1) — umbenannt, Begriff „Blattzählung" in dokumentation.md §2
+    # nachgetragen.
+    sheet_label = f" – Blatt {sheet_number} von {sheet_count}" if sheet_count > 1 else ""
     items = "\n    ".join(_entry_html(occurrence, sense) for occurrence, sense in group)
     return f"""<div class="blatt">
     <h1>{book_title}</h1>
-    <p class="kapitel">Kapitel {chapter_number}{zaehlung}</p>
+    <p class="kapitel">Kapitel {chapter_number}{sheet_label}</p>
     <ul class="wortliste">
     {items}
     </ul>
