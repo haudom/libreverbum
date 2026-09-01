@@ -22,9 +22,11 @@
 # Lemmatisierung in mehrere Token und werden dadurch zu Mehrworteinträgen —
 # Bildungsregel 3 nennt token.lemma_.lower() in der Einzahl, umgesetzt ist die
 # Verkettung über alle Token einer Form. Tote Plätze sind sie nicht: Der Kern
-# bildet auf dem Wendungsweg (extraction.extract_expression_candidates) nach
-# genau derselben Vorschrift Grundformen aus mehreren Token, sie können also
-# treffen. Sie bleiben stehen, weil die Messwerte der Entscheidung auf genau
+# bildet auf dem Wendungsweg für zusammenhängende Wortfolgen
+# (extraction.extract_contiguous_candidates, pos = "") nach genau derselben
+# Vorschrift Grundformen aus mehreren Token, sie können also treffen. Der zweite
+# Wendungsweg (extract_particle_verb_candidates, pos = "VERB") ist nicht gemeint.
+# Sie bleiben stehen, weil die Messwerte der Entscheidung auf genau
 # dieser Liste beruhen: „go to“, „can not“, „get to“, „do not“, „i m“, „i d“, „that s“, „will not“, „i ve“.
 #
 # Diese Datei trägt kein pos. Der Abgleichschlüssel des Profils ist (text, pos),
@@ -37,7 +39,7 @@
 # Grundformen — welches Niveau welche Länge bekommt, entscheidet nicht diese
 # Datei.
 #
-# Erzeugt am 31.08.2026 mit tools/build_wordfreq_preset.py.
+# Erzeugt am 01.09.2026 mit tools/build_wordfreq_preset.py.
 #
 # Lizenz: Die wordfreq-Häufigkeitsdaten stehen unter CC BY-SA 4.0, ebenso diese
 # bearbeitete Auswahl daraus (Top N, auf Grundformen gefaltet, nichtalphabetische

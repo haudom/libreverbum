@@ -549,6 +549,11 @@ betroffenen Testdateien laufen lassen" verkleinert das Problem, löst es aber ni
 > `needs_calibre_split_epub`) stillschweigend, und die Durchsicht hält für grün, was gar
 > nicht gelaufen ist.
 
+**Die eigenen Messskripte der Durchsicht liegen dagegen außerhalb dieses Ordners.** Sonst
+prüft das Tor sie mit — und ihr Rot sieht aus wie Rot des durchgesehenen Commits: Am
+01.09.2026 machten 18 Meldungen aus dem Prüfcode selbst `ruff format --check .` und
+`ruff check .` rot, in einem Commit, der beide bestanden hatte.
+
 Das Vorgehen hat sich in drei Durchsichten und drei Abnahmeläufen im August 2026 bewährt und
 kostet einen Befehl. Es ersetzt nicht das Tor auf der Seite des Bauenden (CLAUDE.md, „Prüfen
 vor »fertig«"), sondern beantwortet dessen offene Frage: woran „grün" bei zwei Bearbeitern

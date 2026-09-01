@@ -162,8 +162,8 @@ für die Uhr, während der Text die Wache meint.
 
 *Später erweiterbar durch:* adaptiven Vokabeltest zur Erstschätzung und Import bestehender
 Anki-Decks. Die **Angabe des Sprachniveaus** ist seit dem 01.09.2026 gebaut — A1 bis C1,
-C2 wird nicht angeboten („Bewusst offen" unten, [technik.md](technik.md) §11). Die
-Datenstruktur muss diese Quellen aufnehmen können, ohne umgebaut zu werden; für die
+C2 wird nicht angeboten ([technik.md](technik.md) §11, „Warum C2 nicht angeboten wird").
+Die Datenstruktur muss diese Quellen aufnehmen können, ohne umgebaut zu werden; für die
 Niveau-Angabe hat sie es getragen: Die Ereignisfolge selbst blieb unangetastet, es genügte
 eine neue Herkunft (`Origin.PRESET`) neben zwei nullbaren Spalten und einer achten Tabelle
 ([technik.md](technik.md) §4, „Fassung 2").
@@ -319,7 +319,7 @@ Kern, nicht darunter").
 - ~~Ablage des Profils (Datenbankform)~~ — **entschieden am 11.08.2026**,
   siehe [technik.md](technik.md)
 
-- ~~**Woher der Nutzer seinen Grundwortschatz bekommt**~~ — **entschieden am 01.09.2026**,
+- ~~**Woher der Nutzer seinen Grundwortschatz bekommt**~~ — **entschieden am 31.08.2026**,
   siehe [technik.md](technik.md) §11. Beim Anlegen des Profils wird nach dem Sprachniveau
   gefragt (A1 bis C1 oder ausdrücklich „keine Angabe"); die häufigsten N englischen
   Grundformen gelten dann als bekannt, gebucht mit der eigenen Herkunft `Origin.PRESET`.
@@ -374,8 +374,9 @@ Kern, nicht darunter").
 **Die vier ursprünglichen Fragen sind entschieden**; die technischen Festlegungen samt
 Begründung und Messwerten stehen in [technik.md](technik.md). Die fünf Punkte darüber sind
 am 26.08.2026 aus der Abnahme T17, dem Gespräch darüber und der Auflösung der
-Nacharbeitsliste neu hinzugekommen. Der erste davon ist am 01.09.2026 entschieden und
-gebaut; die vier übrigen sind es **nicht** — sie werden erst besprochen, dann gebaut.
+Nacharbeitsliste neu hinzugekommen. Der erste davon ist am 31.08.2026 entschieden und am
+01.09.2026 gebaut; die vier übrigen sind es **nicht** — sie werden erst besprochen, dann
+gebaut.
 
 ---
 

@@ -3,15 +3,14 @@
 
 Hintergrund
 -----------
-konzept.md, „Bewusst offen" (erster Punkt): Beim Anlegen des Profils soll der Nutzer
-gefragt werden, ob die häufigsten englischen Grundformen einmalig als bekannt eingetragen
-werden. Datenquelle ist `wordfreq` 3.1.1 — aber **als eingefrorene Datei im Repository**,
-nicht als Abhängigkeit des Projekts: Wer die Vorbelegung nutzt, braucht `wordfreq` zur
-Laufzeit nicht, und die Liste bleibt reproduzierbar, ohne dass ein späteres `wordfreq`-
-Update sie stillschweigend verschiebt. Dieses Skript erzeugt genau die Datei, die im
-Repository liegt (`libreverbum/wordfreq_en_5000.txt`) — es ist damit kein Messskript wie
-seine Nachbarn (`*_check.py`), sondern das Bauskript für einen ausgelieferten Bestandteil
-des Programms.
+technik.md §11: Beim Anlegen des Profils wird der Nutzer nach seinem Sprachniveau gefragt;
+die häufigsten N englischen Grundformen gelten dann einmalig als bekannt. Datenquelle ist
+`wordfreq` 3.1.1 — aber **als eingefrorene Datei im Repository**, nicht als Abhängigkeit
+des Projekts: Wer die Vorbelegung nutzt, braucht `wordfreq` zur Laufzeit nicht, und die
+Liste bleibt reproduzierbar, ohne dass ein späteres `wordfreq`-Update sie stillschweigend
+verschiebt. Dieses Skript erzeugt genau die Datei, die im Repository liegt
+(`libreverbum/wordfreq_en_5000.txt`) — es ist damit kein Messskript wie seine Nachbarn
+(`*_check.py`), sondern das Bauskript für einen ausgelieferten Bestandteil des Programms.
 
 Warum zwei Umgebungen und zwei Stufen
 --------------------------------------
@@ -53,14 +52,19 @@ Regel 3: Sie nennt `token.lemma_.lower()` in der Einzahl, umgesetzt ist die Verk
 **alle** Token einer Form (`" ".join(…)`) — bei einer einformigen Eingabe dasselbe, bei
 einer zerfallenden nicht.
 
-**Tote Plätze sind das nicht.** `extraction.extract_expression_candidates` bildet je Satz
-aus jedem n-Gramm alphabetischer Token eine Grundform nach genau derselben Vorschrift; „go
-to", „get to", „do not", „can not" und „will not" entstehen dort laufend. Die Einträge
-wirken also — auf dem Wendungsweg statt auf dem Wortweg. Sie bleiben bewusst drin: Die
-Messwerte, auf denen die Entscheidung für die Vorbelegung beruht, stammen von genau dieser
-Liste, und eine nachträgliche Bereinigungsregel gäbe es nirgends sonst im Projekt. Der Kopf
-der erzeugten Datei nennt die tatsächlich gefundenen Einträge — ausgezählt bei diesem Lauf,
-nicht aus einer früheren Messung übernommen.
+**Tote Plätze sind das nicht.** `extraction.extract_contiguous_candidates` bildet je Satz
+aus jedem n-Gramm alphabetischer Token eine Grundform nach genau derselben Vorschrift und
+vergibt ihr `pos = ""` (`extraction._NO_SINGLE_POS`); „go to", „get to", „do not", „can
+not" und „will not" entstehen dort laufend. Die Einträge wirken also — auf dem Wendungsweg
+statt auf dem Wortweg. Gemeint ist ausschließlich **dieser** der beiden Wendungswege: Der
+andere, `extraction.extract_particle_verb_candidates`, stammt aus der Abhängigkeitsanalyse
+und vergibt `pos = "VERB"`; auf ihm entsteht keiner der Mehrworteinträge dieser Liste, und
+genau daran hängt der letzte offene Punkt von technik.md §11.
+
+Sie bleiben bewusst drin: Die Messwerte, auf denen die Entscheidung für die Vorbelegung
+beruht, stammen von genau dieser Liste, und eine nachträgliche Bereinigungsregel gäbe es
+nirgends sonst im Projekt. Der Kopf der erzeugten Datei nennt die tatsächlich gefundenen
+Einträge — ausgezählt bei diesem Lauf, nicht aus einer früheren Messung übernommen.
 
 Was diese Datei nicht entscheidet: den Abgleichschlüssel
 ---------------------------------------------------------
@@ -224,9 +228,11 @@ def _build_header(
         "# Lemmatisierung in mehrere Token und werden dadurch zu Mehrworteinträgen —",
         "# Bildungsregel 3 nennt token.lemma_.lower() in der Einzahl, umgesetzt ist die",
         "# Verkettung über alle Token einer Form. Tote Plätze sind sie nicht: Der Kern",
-        "# bildet auf dem Wendungsweg (extraction.extract_expression_candidates) nach",
-        "# genau derselben Vorschrift Grundformen aus mehreren Token, sie können also",
-        "# treffen. Sie bleiben stehen, weil die Messwerte der Entscheidung auf genau",
+        "# bildet auf dem Wendungsweg für zusammenhängende Wortfolgen",
+        '# (extraction.extract_contiguous_candidates, pos = "") nach genau derselben',
+        "# Vorschrift Grundformen aus mehreren Token, sie können also treffen. Der zweite",
+        '# Wendungsweg (extract_particle_verb_candidates, pos = "VERB") ist nicht gemeint.',
+        "# Sie bleiben stehen, weil die Messwerte der Entscheidung auf genau",
         f"# dieser Liste beruhen: {multiword_text}.",
         "#",
         "# Diese Datei trägt kein pos. Der Abgleichschlüssel des Profils ist (text, pos),",

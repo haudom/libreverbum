@@ -2282,7 +2282,7 @@ ist keine Abhängigkeit des Projekts.**
 |---|---|
 | Zuordnung Niveau → N | A1 = 500, A2 = 1.000, B1 = 2.000, B2 = 3.500, C1 = 5.000, dazu „keine Angabe" (es wird nichts vorbelegt). Feste Tabelle `pipeline.PRESET_WORD_COUNT`, keine Einstellung |
 | Quelle | `wordfreq` 3.1.1, Liste `large_en` (`wordlist="best"`), 60.000 Formen exportiert und über spaCy `en_core_web_md` auf Grundformen zurückgeführt — dieselbe Modellfassung wie in `extraction.py` |
-| Ausgeliefert | `libreverbum/wordfreq_en_5000.txt`: 5.000 Grundformen in Rangfolge, in jedem Lauf per SHA-256 gegen Veränderung gesichert |
+| Ausgeliefert | `libreverbum/wordfreq_en_5000.txt`: 5.000 Grundformen in Rangfolge. In jedem **Testlauf** per SHA-256 gegen Veränderung gesichert (`tests/test_wordfreq_preset.py`, `test_wordfreq_preset_content_is_frozen`) — zur Laufzeit rechnet `pipeline._load_wordfreq_lemmas` keine Prüfsumme |
 | Erzeugt von | `tools/build_wordfreq_preset.py` — das einzige Skript in `tools/`, das nicht misst, sondern erzeugt, und dafür zwei Umgebungen braucht |
 | Lizenz | **CC BY-SA 4.0**, nicht die MIT-Lizenz des übrigen Bestands — siehe „Lizenzlage" unten |
 | Gebucht als | `KnowledgeState.KNOWN` mit `Origin.PRESET`, ohne Buch und Kapitel (Abschnitt 4, „Fassung 2") |
@@ -2342,19 +2342,50 @@ Ranglistenfehler.
 
 **`importance` misst keine Texthäufigkeit.** Es misst, wie gut ein Begriff in Wiktionary
 belegt ist: `the` steht auf Rang 1.125, `seem` auf 5.807, `least` auf 66.423, während die
-Ränge 1 bis 50 an `water`, `cat`, `dog`, `donkey` und `cinnamon` gehen. Für eine
-Wörterbuchoberfläche ist das ein sinnvolles Maß; für einen Grundwortschatz ist es das
-falsche.
+Ränge 1 bis 50 an konkrete Dingwörter gehen — `water` (1), `cat` (12), `stone` (14),
+`dog` (18), `donkey` (43), `fish` (48), `pen` (50). Für eine Wörterbuchoberfläche ist das
+ein sinnvolles Maß; für einen Grundwortschatz ist es das falsche.
+
+> **Wie diese Rangliste gerechnet ist.** Festgehalten, weil die Messstände Wegwerfdateien
+> waren und dieses Dokument sie ersetzt: Ohne das Rezept ist ein einzeln nachgerechneter
+> Rang nicht als Fehler von einem Rezeptunterschied zu unterscheiden. Ein Rang je
+> `written_rep` — **ohne** `lower()`, also getrennt nach Schreibweise —, gebildet aus dem
+> höchsten `importance`-Wert der Zeilen dieser Schreibweise:
+>
+> ```sql
+> SELECT written_rep, max(importance) FROM translation
+> WHERE written_rep IS NOT NULL AND importance IS NOT NULL
+> GROUP BY written_rep ORDER BY 2 DESC
+> ```
+>
+> Das ergibt 124.751 Ränge (`tools/en-de.sqlite3`, nachgerechnet am 01.09.2026). Ein
+> anderes Rezept — `lower(written_rep)`, oder die Summe statt des Maximums — verschiebt
+> jede Zahl dieses Abschnitts.
 
 Die Abdeckung sagt dasselbe leiser: Bei N = 2.000 deckt `wordfreq` 51,2 % der Grundformen
 und 70,7 % der Vorkommen des Kapitels, `importance` 47,4 % und 63,0 % — und `wordfreq`
 schreibt dafür 21 % **weniger** Bedeutungen ins Profil.
 
-Der Preis von `wordfreq` steht auf der anderen Seite: 8,0 % seiner 2.000 besten Grundformen
-haben gar keine Wörterbuchzeile, 12,8 % keine unter einer Inhaltswortart; bei `importance`
-sind es 0 % beziehungsweise 4,8 % — kein Wunder, es stammt aus derselben Datei. Das ist der
-erwartbare Preis einer projektfremden Rangliste und wird in Kauf genommen: Was das
-Wörterbuch nicht kennt, wird nicht vorbelegt, sondern übergangen.
+Der Preis von `wordfreq` steht auf der anderen Seite. Es sind **zwei** Zahlen, aus **zwei**
+verschiedenen Abfragen, und die eine wird leicht für die andere gehalten — beide über die
+2.000 besten Grundformen, beide am 01.09.2026 gegen `tools/en-de.sqlite3` nachgerechnet:
+
+| gemessen wird | `wordfreq` | `importance` |
+|---|---|---|
+| **keine Wörterbuchzeile überhaupt** — kein `written_rep`, das der Grundform gleicht, Groß- und Kleinschreibung genau wie in `dictionary._single_word_matches` | **8,0 %** (159 von 2.000) | 0 % |
+| **keine Zeile unter einer Inhaltswortart** — kein `lexentry` mit `Noun`, `Verb`, `Adjective`, `Adverb` oder `Interjection`; schließt die Zeile darüber ein | **12,8 %** (256 von 2.000) | 4,8 % |
+
+Die zweite Zeile ist die Zahl, an der die Vorbelegung tatsächlich hängt: Nachgeschlagen wird
+über `(Grundform, Wortart)`, nicht über die Grundform allein. Dass `importance` oben bei 0 %
+steht, ist kein Wunder — es stammt aus derselben Datei.
+
+> **Falle beim Nachrechnen:** Die naheliegendere, aber falsche Abfrage `written_rep = ?
+> COLLATE NOCASE` ergibt für die erste Zeile nur 1,5 % (29 von 2.000). Wer die 8,0 % so
+> nachrechnet, hält sie für einen Fehler, obwohl beide Zahlen stimmen — sie messen
+> Verschiedenes. Der Kern vergleicht genau, deshalb tut es diese Messung auch.
+
+Das ist der erwartbare Preis einer projektfremden Rangliste und wird in Kauf genommen: Was
+das Wörterbuch nicht kennt, wird nicht vorbelegt, sondern übergangen.
 
 ### Was ein Niveau tatsächlich ins Profil trägt
 
@@ -2423,8 +2454,18 @@ andere Gründe:
 1. **Die eingefrorene Liste trägt 5.000 Grundformen.** Oberhalb von C1 ist aus ihr nichts
    mehr auszugeben
 2. **Der Anteil ohne Wörterbucheintrag wächst mit N.** Von den 25 in der Triage gezeigten
-   Einträgen waren 2 ohne Wörterbucheintrag bei A1, 6 bei B1 und 9 bei C1; ein
-   C2-Kontingent träfe auf einen noch größeren ungedeckten Rest
+   Einträgen waren 2 ohne Wörterbucheintrag bei A1 (`no`, `right`), 6 bei B1 und 9 bei C1;
+   ein C2-Kontingent träfe auf einen noch größeren ungedeckten Rest
+
+> **Wie diese drei Zahlen gemessen sind** — festgehalten aus demselben Grund wie das Rezept
+> der `importance`-Rangliste oben: `tools/dorian_gray.epub` Nr. 10 gegen ein frisch
+> vorbelegtes Profil, `pipeline.resolve_triage_entries` mit `limit = 25`
+> (`cli.interaction.WORD_LIMIT`), gezählt werden die gezeigten Einträge mit
+> `Sense.uncertain`. **Die Zusammensetzung der 25 hängt am Modell**, weil ein erst beim
+> Auflösen als `KNOWN` erkannter Eintrag keinen Platz verbraucht
+> (`TriageResolution.resolved_known`) — gemessen deshalb mit dem festgelegten `gemma4:e4b`
+> (Abschnitt 3), am 01.09.2026 dreimal wiederholt mit jedes Mal demselben Ergebnis. Wer mit
+> einem anderen Modell nachrechnet, bekommt womöglich andere Zahlen und keinen Befund.
 
 ### Was die Vorbelegung nicht löst
 

@@ -128,10 +128,14 @@ def test_wordfreq_preset_multiword_entries_reach_the_expression_path() -> None:
     """Die Mehrworteinträge sind **keine** toten Plätze: `extraction` bildet
     Wendungsgrundformen nach derselben Vorschrift (`" ".join(token.lemma_.lower() …)`), so
     dass `go to`, `can not` und ihresgleichen sehr wohl auf eine Grundform des Kerns
-    treffen. Der Kopf darf das Gegenteil nicht behaupten (Befund 2, Review Bauschritt 1)."""
+    treffen. Der Kopf darf das Gegenteil nicht behaupten (Befund 2, Review Bauschritt 1)
+    und muss den **richtigen** der beiden Wendungswege nennen — den für zusammenhängende
+    Wortfolgen mit `pos = ""`, nicht den Partikelweg mit `pos = "VERB"` (Befund 1,
+    Durchsicht 1ee2771: hier stand ein Funktionsname, den es nicht gibt)."""
     header = "\n".join(line for line in _lines(PRESET_PATH) if line.startswith("#"))
     assert "Tote Plätze sind sie nicht" in header
-    assert "extract_expression_candidates" in header
+    assert "extract_contiguous_candidates" in header
+    assert "extract_particle_verb_candidates" in header
 
 
 def test_wordfreq_preset_header_leaves_the_match_key_open() -> None:

@@ -34,11 +34,11 @@ zeigt. Eine eigene Marke, damit ihr Fehlen nicht die vierzehn Sherlock-/Dorian-G
 mit übersprungen lässt, die `needs_epub` tragen.
 
 Die Marke `needs_wordfreq` prüft weder Datei noch Paket, sondern eine **zweite Umgebung**:
-`wordfreq` ist bewusst keine Abhängigkeit des Projekts (konzept.md, „Bewusst offen") und
-liegt deshalb nie in `.venv/`, während spaCy und `en_core_web_md` nur dort liegen. Der
-Reproduktionstest zu `tools/build_wordfreq_preset.py` braucht beides und läuft deshalb
-zweistufig — Stufe 1 mit dem Interpreter aus `LIBREVERBUM_WORDFREQ_PYTHON`, Stufe 2 mit
-`sys.executable`. Fehlt die Variable, wird übersprungen.
+`wordfreq` ist bewusst keine Abhängigkeit des Projekts (technik.md §11) und liegt deshalb
+nie in `.venv/`, während spaCy und `en_core_web_md` nur dort liegen. Der Reproduktionstest
+zu `tools/build_wordfreq_preset.py` braucht beides und läuft deshalb zweistufig — Stufe 1
+mit dem Interpreter aus `LIBREVERBUM_WORDFREQ_PYTHON`, Stufe 2 mit `sys.executable`. Fehlt
+die Variable, wird übersprungen.
 """
 
 from __future__ import annotations
