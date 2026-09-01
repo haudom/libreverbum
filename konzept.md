@@ -361,8 +361,8 @@ Kern, nicht darunter").
   wird erreichbar) und löst zugleich die Bremsfrage: Die Sammelaktion sieht in jedem Block
   wieder eine vollständige, nummerierte Liste, statt zum Laufband zu werden. Die Verzahnung
   mit Abnahmekriterium 5 war schon am 26.08.2026 entschieden — die Druckseite fasst
-  gemessen 36 Einträge ([technik.md](technik.md) §8c) und **darf mehrere Blätter belegen**;
-  der Kriterientext ist mit dem Bau nachgezogen
+  gedruckt gemessen 33 Einträge ([technik.md](technik.md) §8c, „Nachtrag 01.09.2026") und
+  **darf mehrere Blätter belegen**; der Kriterientext ist mit dem Bau nachgezogen
 - ~~**Ob jenseits der Wortobergrenze etwas ins Profil geschrieben wird**~~ — **entschieden
   am 01.09.2026: nichts.** Mit der blockweisen Triage gibt es keine Grenze mehr, hinter der
   etwas ohne Zutun des Nutzers verfiele: Wer aufhört, hat auf die Fortsetzungsfrage

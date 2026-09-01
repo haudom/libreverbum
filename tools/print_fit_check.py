@@ -121,9 +121,13 @@ WHICH_CANDIDATES = [("msedge", "Edge"), ("google-chrome", "Chrome"), ("chromium"
 
 DEFAULT_ENTRY_COUNTS = [25, 30, 33, 35, 36, 37, 40]
 # ../technik.md §8c: Median 12, p90 32, p95 45, p99 76 über alle 157.801 `trans_list`-
-# Werte. 60 und 65 aus dem Auftrag: „bei 60 hält es noch", „die Schwelle liegt bei rund
-# 65 Zeichen".
-DEFAULT_LENGTHS = [12, 32, 45, 60, 65, 76]
+# Werte. Dazu 60 und 65 aus der ersten Messung („bei 60 hält es noch") und **74, 75, 78,
+# 80** aus der Messreihe vom 01.09.2026: Genau dort brach die alte Kapazität von 36, und
+# genau diese Längen fehlten in der ersten Vorgabe — ein Lauf ohne eigene `--length`-Angabe
+# hätte den Bruch deshalb nicht gefunden und die 36 bestätigt. Wer eine Kapazität prüft,
+# muss die Umgebung ihrer Bruchstelle mitmessen, nicht nur die Verteilungspunkte
+# (../technik.md §8c, „Nachtrag 01.09.2026: echt gedruckt statt gerechnet").
+DEFAULT_LENGTHS = [12, 32, 45, 60, 65, 74, 75, 78, 80]
 DEFAULT_P99_LENGTH = 76
 DEFAULT_TIMEOUT = 30.0
 
