@@ -8,7 +8,8 @@ Aufruf von der Kommandozeile: Wörterbuch beziehen oder indizieren
 (`libreverbum.dictionary`), EPUB wählen, Kapitel wählen, `pipeline.run_chapter`,
 je Decksel eine blockweise Triage über `interaction.run_triage_blocks` (Bedeutung vor der
 Triage auflösen über `pipeline.resolve_triage_entries`, Befund schwer 1, zweite
-T16-Durchsicht; Blockschleife samt Fortsetzungsfrage seit Bauschritt 2/4, technik.md §12),
+T16-Durchsicht; Blockschleife samt Fortsetzungsfrage seit Bauschritt 2/4, Vorladen des
+nächsten Blocks im Hintergrund seit Bauschritt 3/4, technik.md §12),
 Triage über die Tastatur (Wörter, dann Wendungen), Export nach Anki und als Druckseite.
 
 Regel 9 (dokumentation.md §4), strukturelle Hälfte: Dieses Kommandozeilenprogramm hat
@@ -370,6 +371,55 @@ def _resolve_with_progress(
     return resolution
 
 
+def _resolve_silently(
+    *,
+    profile_path: Path,
+    entries: Sequence[pipeline.VocabularyEntry],
+    limit: int,
+    url: str,
+    get_model_name: Callable[[], str],
+    order: str,
+) -> pipeline.TriageResolution:
+    """Löst einen **vorgeladenen** Block auf (technik.md §12, „Vorladen: der nächste Block
+    entsteht, während der Nutzer entscheidet") — der Rückruf, den `interaction.
+    run_triage_blocks` als `resolve_silent_block` im Hintergrundfaden aufruft, während der
+    Hauptfaden den aktuellen Block noch durchentscheidet. Zwei Unterschiede zu
+    `_resolve_with_progress` oben, beide aus den bindenden Festlegungen in technik.md §12:
+
+    - **Eigene Profilverbindung** (Festlegung 1): `libreverbum.profile.open_profile` öffnet
+      mit `sqlite3.connect(path)`, **ohne** `check_same_thread=False` — eine Verbindung
+      gehört also dem Faden, der sie erzeugt hat, nicht der Datei. Der Hauptfaden schreibt
+      zur selben Zeit die Triage-Entscheidungen des laufenden Blocks über seine eigene
+      Verbindung (`_run`s `con`) auf dieselbe Datei; eine geteilte Verbindung wäre hier kein
+      Geschwindigkeitsproblem, sondern der in `sqlite3.ProgrammingError` sichtbare Fehler
+      "SQLite objects created in a thread can only be used in that same thread". Geöffnet
+      und wieder geschlossen wird deshalb **hier**, im Hintergrundfaden — `run_triage_blocks`
+      bekommt nichts davon zu sehen, nur das fertige Ergebnis oder die durchgereichte
+      Ausnahme (`cli.interaction._BlockPrefetch.join`).
+    - **Kein Fortschritt** (Festlegung 3): `on_progress` bleibt `None`. Die sich
+      fortschreibende Statuszeile aus `_resolve_with_progress` (`safe_print_progress`, per
+      Wagenrücklauf) schriebe aus diesem Faden mitten in die Triage-Anzeige, über der der
+      Nutzer gerade entscheidet — sie gehört allein dem ersten Block, den der Nutzer
+      tatsächlich abwartet.
+
+    Ein Fehlschlag (etwa der Modellserver, der mitten im Vorladen wegbricht) läuft
+    unverändert durch (Regel 13, dokumentation.md §4 — kein `except`, das nur protokolliert
+    und weiterläuft): `_BlockPrefetch` hält ihn im Hintergrundfaden fest und wirft ihn im
+    Hauptfaden erneut, sobald `run_triage_blocks` auf den Block wartet (Festlegung 2)."""
+    con = profile.open_profile(profile_path)
+    try:
+        return pipeline.resolve_triage_entries(
+            con=con,
+            entries=entries,
+            limit=limit,
+            url=url,
+            get_model_name=get_model_name,
+            order=order,
+        )
+    finally:
+        con.close()
+
+
 def _run(args: argparse.Namespace, *, read_line: ReadLine, write_line: WriteLine) -> int:
     data_dir = args.data_dir or config.default_data_dir()
     # Jeder Lauf nennt sein Datenverzeichnis: Wo Profil, Wörterbuch und config.toml
@@ -457,15 +507,28 @@ def _run(args: argparse.Namespace, *, read_line: ReadLine, write_line: WriteLine
         # Wendungen bleiben dabei getrennte Blockschleifen mit eigener Blockgröße (`cli.
         # interaction`, „Festlegung: getrennte Decksel"). `run_triage_blocks` (Bauschritt
         # 2/4, blockweise Triage) macht aus jedem `resolve_triage_entries`-Aufruf über
-        # `resolution.remaining` so lange den nächsten Block, bis der Nutzer aufhört.
+        # `resolution.remaining` so lange den nächsten Block, bis der Nutzer aufhört —
+        # jeden Folgeblock dabei bereits im Hintergrund vorgeladen (Bauschritt 3/4,
+        # technik.md §12, „Vorladen …"): `resolve_visible_block` (mit Fortschrittsanzeige)
+        # nur für den ersten Block, `resolve_silent_block` (eigene Profilverbindung, keine
+        # Ausgabe) für jeden vorgeladenen — siehe `_resolve_with_progress`/`_resolve_silently`
+        # oben.
         write_line("== Wörter ==")
         word_cards = interaction.run_triage_blocks(
             con=con,
             book=result.chapter.book,
             chapter_number=result.chapter.number,
             entries=result.entries,
-            resolve_block=lambda block: _resolve_with_progress(
+            resolve_visible_block=lambda block: _resolve_with_progress(
                 con=con,
+                entries=block,
+                limit=interaction.WORD_BLOCK_SIZE,
+                url=cfg.model_url,
+                get_model_name=get_model_name,
+                order=cfg.triage_order,
+            ),
+            resolve_silent_block=lambda block: _resolve_silently(
+                profile_path=cfg.profile_path,
                 entries=block,
                 limit=interaction.WORD_BLOCK_SIZE,
                 url=cfg.model_url,
@@ -483,8 +546,16 @@ def _run(args: argparse.Namespace, *, read_line: ReadLine, write_line: WriteLine
             book=result.chapter.book,
             chapter_number=result.chapter.number,
             entries=result.expressions,
-            resolve_block=lambda block: _resolve_with_progress(
+            resolve_visible_block=lambda block: _resolve_with_progress(
                 con=con,
+                entries=block,
+                limit=interaction.EXPRESSION_BLOCK_SIZE,
+                url=cfg.model_url,
+                get_model_name=get_model_name,
+                order=cfg.triage_order,
+            ),
+            resolve_silent_block=lambda block: _resolve_silently(
+                profile_path=cfg.profile_path,
                 entries=block,
                 limit=interaction.EXPRESSION_BLOCK_SIZE,
                 url=cfg.model_url,

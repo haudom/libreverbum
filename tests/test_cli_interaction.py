@@ -14,6 +14,7 @@ Blockschleife selbst (`run_triage_blocks`) hat ihre eigenen Tests weiter unten.
 from __future__ import annotations
 
 import sqlite3
+import threading
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 
@@ -548,7 +549,8 @@ def test_run_triage_blocks_asks_continue_and_hands_the_remainder_to_the_next_blo
         book=_BOOK,
         chapter_number=1,
         entries=initial_entries,
-        resolve_block=resolve_block,
+        resolve_visible_block=resolve_block,
+        resolve_silent_block=resolve_block,
         label="Wörter",
         card_direction=CardDirection.EN_DE,
         read_line=lambda _prompt: next(answers),
@@ -567,12 +569,20 @@ def test_run_triage_blocks_reports_the_exact_count_of_unchecked_entries_on_no(
     """„nein" beendet die Blockschleife und meldet die **Zahl** der ungeprüften Einträge —
     nicht nur, dass irgendetwas gemeldet wird.
 
+    Seit Bauschritt 3/4 (technik.md §12, „Vorladen …") stößt die Schleife den nächsten
+    Block bereits an, sobald der aktuelle feststeht — auch dann, wenn „nein" ihn später
+    verwirft; `len(calls)` ist deshalb kein stabiler Indikator mehr dafür, ob die Schleife
+    korrekt beendet (der Vorladeblock läuft dazu in einem eigenen Faden, dessen genauer
+    Abschlusszeitpunkt hier nicht geprüft wird — Wettlauf, dokumentation.md §5). Geprüft
+    wird deshalb an der **Meldung**, nicht an der Aufrufzahl.
+
     Verfälschungsprobe: Wird die Fortsetzungsfrage ignoriert und immer fortgesetzt (die
-    Rückgabe von `_ask_continue` nicht ausgewertet), ruft die Schleife `resolve_block` ein
-    zweites Mal auf, statt zu enden — `len(calls) == 1` schlägt fehl. Test war damit rot,
-    bevor `if not _ask_continue(...): return cards` stand."""
+    Rückgabe von `_ask_continue` nicht ausgewertet), fehlt die Meldung „... noch nicht
+    geprüft" — `run_triage_pass` liefe stattdessen ein zweites Mal durch die Einzelabfrage
+    und verlangte eine vierte Antwort, die `answers` nicht hergibt (`StopIteration`). Test
+    war damit rot, bevor `if not _ask_continue(...): return cards` stand."""
     leftover = [_vocabulary_entry("x"), _vocabulary_entry("y"), _vocabulary_entry("z")]
-    resolve_block, calls = _scripted_resolver(
+    resolve_block, _calls = _scripted_resolver(
         [
             pipeline.TriageResolution(
                 entries=_entries(1), known=0, resolved_known=0, skipped=0, remaining=leftover
@@ -587,7 +597,8 @@ def test_run_triage_blocks_reports_the_exact_count_of_unchecked_entries_on_no(
         book=_BOOK,
         chapter_number=1,
         entries=[_vocabulary_entry("a")],
-        resolve_block=resolve_block,
+        resolve_visible_block=resolve_block,
+        resolve_silent_block=resolve_block,
         label="Wörter",
         card_direction=CardDirection.EN_DE,
         read_line=lambda _prompt: next(answers),
@@ -595,7 +606,6 @@ def test_run_triage_blocks_reports_the_exact_count_of_unchecked_entries_on_no(
     )
 
     assert cards == []
-    assert len(calls) == 1
     matching = [line for line in written if "noch nicht geprüft" in line]
     assert len(matching) == 1
     assert "3 Wörter" in matching[0]
@@ -605,14 +615,17 @@ def test_run_triage_blocks_treats_enter_as_no_at_the_continuation_question(
     profile_con: sqlite3.Connection,
 ) -> None:
     """Enter beendet die Blockschleife ebenso wie „nein" — Aufhören ist die sichere
-    Vorgabe (dieselbe Handhabung wie bei der Sammelaktion, Enter = keine).
+    Vorgabe (dieselbe Handhabung wie bei der Sammelaktion, Enter = keine). Wie beim
+    vorigen Test wird an der Meldung geprüft, nicht an der Aufrufzahl von `resolve_block`
+    — seit dem Vorladen (Bauschritt 3/4) läuft ein zweiter Aufruf im Hintergrund an, egal
+    wie die Fortsetzungsfrage endet (technik.md §12).
 
     Verfälschungsprobe: Vertauscht `_ask_continue` die Vorgabe (Enter würde als „ja"
-    gelten), verlangt die Schleife einen zweiten `resolve_block`-Aufruf — `next(answers)`
-    lieft dafür ins Leere, `StopIteration` bricht den Test ab, statt ihn regulär enden zu
-    lassen. Test war damit rot, bevor `answer in ("", "n", "nein")` stand."""
+    gelten), verlangt `run_triage_pass` eine vierte Antwort für einen zweiten
+    Blockdurchlauf, die `answers` nicht hergibt — `next(answers)` wirft `StopIteration`.
+    Test war damit rot, bevor `answer in ("", "n", "nein")` stand."""
     leftover = [_vocabulary_entry("x")]
-    resolve_block, calls = _scripted_resolver(
+    resolve_block, _calls = _scripted_resolver(
         [
             pipeline.TriageResolution(
                 entries=_entries(1), known=0, resolved_known=0, skipped=0, remaining=leftover
@@ -627,7 +640,8 @@ def test_run_triage_blocks_treats_enter_as_no_at_the_continuation_question(
         book=_BOOK,
         chapter_number=1,
         entries=[_vocabulary_entry("a")],
-        resolve_block=resolve_block,
+        resolve_visible_block=resolve_block,
+        resolve_silent_block=resolve_block,
         label="Wörter",
         card_direction=CardDirection.EN_DE,
         read_line=lambda _prompt: next(answers),
@@ -635,7 +649,6 @@ def test_run_triage_blocks_treats_enter_as_no_at_the_continuation_question(
     )
 
     assert cards == []
-    assert len(calls) == 1
     assert any("1 Wörter" in line and "noch nicht geprüft" in line for line in written)
 
 
@@ -647,9 +660,13 @@ def test_run_triage_blocks_asks_the_continuation_question_again_on_invalid_input
     erneuten Frage — dieselbe Handhabung wie `_ask_action`.
 
     Verfälschungsprobe: Deutet `_ask_continue` eine unbekannte Eingabe stillschweigend als
-    „nein" statt erneut zu fragen, bleibt es beim einen `resolve_block`-Aufruf — `len(calls)
-    == 2` schlägt fehl. Test war damit rot, bevor die Schleife bei unbekannter Eingabe
-    erneut fragte, statt `False` zurückzugeben."""
+    „nein" statt erneut zu fragen, endet die Schleife dort mit „1 Wörter noch nicht
+    geprüft" statt mit dem zweiten, leeren Block bis „Alle Wörter … durchgesehen" —
+    `resolve_block` wird seit dem Vorladen (Bauschritt 3/4) ohnehin schon für den
+    zweiten Block angestoßen, sobald der erste feststeht, unabhängig vom Ausgang dieser
+    Frage; `calls[1] == leftover` bleibt deshalb nur bei tatsächlichem Fortsetzen ein
+    verlässlicher Beleg, nicht die reine Aufrufzahl. Test war damit rot, bevor die
+    Schleife bei unbekannter Eingabe erneut fragte, statt `False` zurückzugeben."""
     leftover = [_vocabulary_entry("x")]
     resolve_block, calls = _scripted_resolver(
         [
@@ -670,7 +687,8 @@ def test_run_triage_blocks_asks_the_continuation_question_again_on_invalid_input
         book=_BOOK,
         chapter_number=1,
         entries=[_vocabulary_entry("a")],
-        resolve_block=resolve_block,
+        resolve_visible_block=resolve_block,
+        resolve_silent_block=resolve_block,
         label="Wörter",
         card_direction=CardDirection.EN_DE,
         read_line=lambda _prompt: next(answers),
@@ -680,21 +698,27 @@ def test_run_triage_blocks_asks_the_continuation_question_again_on_invalid_input
     assert len(calls) == 2
     assert calls[1] == leftover
     assert any("Ungültige Eingabe" in line for line in written)
+    assert any("durchgesehen" in line for line in written)
+    assert not any("noch nicht geprüft" in line for line in written)
 
 
 def test_run_triage_blocks_does_not_ask_to_continue_after_q(
     profile_con: sqlite3.Connection,
 ) -> None:
     """Abnahmekriterium 7: `q` in der Einzelabfrage beendet die Blockschleife **ohne**
-    Fortsetzungsfrage — der Nutzer hat den Abbruch bereits erklärt.
+    Fortsetzungsfrage — der Nutzer hat den Abbruch bereits erklärt. Seit dem Vorladen
+    (Bauschritt 3/4, technik.md §12) hat die Schleife den nächsten Block zu diesem
+    Zeitpunkt bereits im Hintergrund angestoßen (er entsteht, sobald der aktuelle Block
+    feststeht, nicht erst nach einer bejahten Fortsetzungsfrage) — anders als vor jener
+    Behebung darf `resolve_block` deshalb durchaus ein zweites Mal aufgerufen worden sein;
+    was dieser Test prüft, ist einzig, dass darauf **nicht gewartet** wird.
 
     Verfälschungsprobe: Fragt `run_triage_blocks` nach einem Abbruch trotzdem weiter
     (fehlende `if triage_pass.aborted`-Prüfung), verlangt sie eine vierte Antwort, die die
     Antwortliste nicht hergibt — `next(answers)` wirft `StopIteration`. Test war damit rot,
-    bevor die Prüfung auf `aborted` vor der Fortsetzungsfrage stand. Der `resolve_block`-
-    Rückruf selbst darf dabei kein zweites Mal aufgerufen werden."""
+    bevor die Prüfung auf `aborted` vor der Fortsetzungsfrage stand."""
     leftover = [_vocabulary_entry("x")]
-    resolve_block, calls = _scripted_resolver(
+    resolve_block, _calls = _scripted_resolver(
         [
             pipeline.TriageResolution(
                 entries=_entries(2), known=0, resolved_known=0, skipped=0, remaining=leftover
@@ -709,7 +733,8 @@ def test_run_triage_blocks_does_not_ask_to_continue_after_q(
         book=_BOOK,
         chapter_number=1,
         entries=[_vocabulary_entry("a"), _vocabulary_entry("b")],
-        resolve_block=resolve_block,
+        resolve_visible_block=resolve_block,
+        resolve_silent_block=resolve_block,
         label="Wörter",
         card_direction=CardDirection.EN_DE,
         read_line=lambda _prompt: next(answers),
@@ -717,7 +742,6 @@ def test_run_triage_blocks_does_not_ask_to_continue_after_q(
     )
 
     assert cards == []
-    assert len(calls) == 1
     assert any("1 Wörter" in line and "noch nicht geprüft" in line for line in written)
 
 
@@ -746,7 +770,8 @@ def test_run_triage_blocks_does_not_ask_to_continue_when_nothing_remains(
         book=_BOOK,
         chapter_number=1,
         entries=[_vocabulary_entry("a")],
-        resolve_block=resolve_block,
+        resolve_visible_block=resolve_block,
+        resolve_silent_block=resolve_block,
         label="Wörter",
         card_direction=CardDirection.EN_DE,
         read_line=lambda _prompt: next(answers),
@@ -791,7 +816,8 @@ def test_run_triage_blocks_collects_cards_from_every_block_into_one_list(
         book=_BOOK,
         chapter_number=1,
         entries=[_vocabulary_entry("a")],
-        resolve_block=resolve_block,
+        resolve_visible_block=resolve_block,
+        resolve_silent_block=resolve_block,
         label="Wörter",
         card_direction=CardDirection.EN_DE,
         read_line=lambda _prompt: next(answers),
@@ -833,7 +859,8 @@ def test_run_triage_blocks_names_the_block_number_from_the_second_block_on(
         book=_BOOK,
         chapter_number=1,
         entries=[_vocabulary_entry("a")],
-        resolve_block=resolve_block,
+        resolve_visible_block=resolve_block,
+        resolve_silent_block=resolve_block,
         label="Wörter",
         card_direction=CardDirection.EN_DE,
         read_line=lambda _prompt: next(answers),
@@ -843,3 +870,289 @@ def test_run_triage_blocks_names_the_block_number_from_the_second_block_on(
     assert len(calls) == 2
     headings = [line for line in written if line.startswith("-- Wörter")]
     assert headings == ["-- Wörter: 1 --", "-- Wörter (Block 2): 1 --"]
+
+
+def test_run_triage_blocks_prefetches_the_next_block_before_the_continuation_question(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """technik.md §12, „Vorladen: der nächste Block entsteht, während der Nutzer
+    entscheidet": Der nächste Block wird angestoßen, sobald der aktuelle feststeht — nicht
+    erst, nachdem die Fortsetzungsfrage mit „ja" beantwortet ist. Geprüft wird die
+    **Reihenfolge** der Aufrufe, nicht nur, dass beide stattfinden: `read_line` wartet bei
+    der Fortsetzungsfrage auf `prefetch_started` (mit großzügigem Sicherheitsabstand statt
+    `sleep`, dokumentation.md §5) — unter der richtigen Umsetzung ist das Ereignis dort
+    längst gesetzt, weil der Aufruf lange vor der Sammel- und Einzelabfrage steht.
+
+    Verfälschungsprobe: Ruft `run_triage_blocks` `resolve_silent_block` erst nach einem
+    bejahten `_ask_continue` auf (die triviale Umsetzung ohne echtes Vorladen), ist
+    `prefetch_started` zum Zeitpunkt der Fortsetzungsfrage noch nicht gesetzt — der
+    `wait(timeout=2)` läuft ins Leere, `assert` schlägt fehl. Test war damit rot, bevor der
+    Vorladeaufruf vor `run_triage_pass` stand."""
+    leftover = [_vocabulary_entry("x")]
+    prefetch_started = threading.Event()
+
+    def resolve_visible(block: Sequence[pipeline.VocabularyEntry]) -> pipeline.TriageResolution:
+        return pipeline.TriageResolution(
+            entries=_entries(1), known=0, resolved_known=0, skipped=0, remaining=leftover
+        )
+
+    def resolve_silent(block: Sequence[pipeline.VocabularyEntry]) -> pipeline.TriageResolution:
+        prefetch_started.set()
+        return pipeline.TriageResolution(
+            entries=[], known=0, resolved_known=0, skipped=0, remaining=[]
+        )
+
+    def read_line(prompt: str) -> str:
+        if "weitermachen" in prompt:
+            assert prefetch_started.wait(timeout=2), (
+                "Vorladen wurde nicht vor der Fortsetzungsfrage angestoßen."
+            )
+            return "j"
+        if "Sammelaktion" in prompt:
+            return ""
+        return "s"
+
+    cards = interaction.run_triage_blocks(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        entries=[_vocabulary_entry("a")],
+        resolve_visible_block=resolve_visible,
+        resolve_silent_block=resolve_silent,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=read_line,
+        write_line=_no_op_write,
+    )
+
+    assert cards == []
+
+
+def test_run_triage_blocks_does_not_wait_for_a_still_running_prefetch_after_declining_to_continue(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """technik.md §12, Festlegung 4: Ein noch laufender Vorladeblock darf das Ende nicht
+    aufhalten — „nein" auf die Fortsetzungsfrage beendet die Blockschleife, ohne auf
+    `resolve_silent_block` zu warten.
+
+    Verfälschungsprobe: Ruft die Schleife nach „nein" trotzdem `prefetch.join()` auf
+    (statt direkt zurückzukehren), hängt dieser Test, weil `resolve_silent` hier
+    absichtlich nie zurückkehrt — er war damit rot, bevor der Rückweg bei „nein" ohne
+    diesen Aufruf auskam."""
+    leftover = [_vocabulary_entry("x")]
+    stuck = threading.Event()
+
+    def resolve_visible(block: Sequence[pipeline.VocabularyEntry]) -> pipeline.TriageResolution:
+        return pipeline.TriageResolution(
+            entries=_entries(1), known=0, resolved_known=0, skipped=0, remaining=leftover
+        )
+
+    def resolve_silent(block: Sequence[pipeline.VocabularyEntry]) -> pipeline.TriageResolution:
+        stuck.wait()  # kehrt in diesem Test absichtlich nie zurück
+        raise AssertionError("darf nicht erreicht werden")
+
+    answers = iter(["", "s", "n"])
+
+    cards = interaction.run_triage_blocks(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        entries=[_vocabulary_entry("a")],
+        resolve_visible_block=resolve_visible,
+        resolve_silent_block=resolve_silent,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(answers),
+        write_line=_no_op_write,
+    )
+
+    assert cards == []
+
+
+def test_run_triage_blocks_does_not_wait_for_a_still_running_prefetch_after_q(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """technik.md §12, Festlegung 4: derselbe Rückweg wie bei „nein", hier für den Abbruch
+    mit `q` in der Einzelabfrage — auch er darf nicht auf einen noch laufenden
+    Vorladeblock warten.
+
+    Verfälschungsprobe: Wartet die Schleife nach `q` trotzdem auf den Vorladefaden, hängt
+    dieser Test aus demselben Grund wie beim vorigen — `resolve_silent` kehrt hier
+    absichtlich nie zurück."""
+    leftover = [_vocabulary_entry("x")]
+
+    def resolve_visible(block: Sequence[pipeline.VocabularyEntry]) -> pipeline.TriageResolution:
+        return pipeline.TriageResolution(
+            entries=_entries(2), known=0, resolved_known=0, skipped=0, remaining=leftover
+        )
+
+    def resolve_silent(block: Sequence[pipeline.VocabularyEntry]) -> pipeline.TriageResolution:
+        threading.Event().wait()  # kehrt in diesem Test absichtlich nie zurück
+        raise AssertionError("darf nicht erreicht werden")
+
+    answers = iter(["", "q"])  # keine Sammelaktion, dann sofortiger Abbruch bei word0
+    written: list[str] = []
+
+    cards = interaction.run_triage_blocks(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        entries=[_vocabulary_entry("a"), _vocabulary_entry("b")],
+        resolve_visible_block=resolve_visible,
+        resolve_silent_block=resolve_silent,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(answers),
+        write_line=written.append,
+    )
+
+    assert cards == []
+    assert not any("weitermachen" in line for line in written)
+
+
+def test_run_triage_blocks_surfaces_a_prefetch_failure_when_the_block_is_awaited(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """technik.md §12, Festlegung 2: Bricht der Vorlade-Rückruf ab (etwa weil der
+    Modellserver wegbricht), erreicht der Fehler den Nutzer sichtbar, sobald auf den Block
+    gewartet wird — nicht als leerer Block, der wie „Kapitel fertig" aussähe (Regel 13,
+    dokumentation.md §4).
+
+    Verfälschungsprobe: Fängt `_BlockPrefetch` den Fehler und liefert stattdessen eine
+    leere `TriageResolution`, meldet `run_triage_blocks` fälschlich „durchgesehen" statt
+    die Ausnahme durchzureichen — kein `pytest.raises` schlägt an, der Test war damit rot,
+    bevor der Fehler im Hintergrundfaden festgehalten und bei `join` erneut geworfen
+    wurde."""
+    leftover = [_vocabulary_entry("x")]
+
+    def resolve_visible(block: Sequence[pipeline.VocabularyEntry]) -> pipeline.TriageResolution:
+        return pipeline.TriageResolution(
+            entries=_entries(1), known=0, resolved_known=0, skipped=0, remaining=leftover
+        )
+
+    def resolve_silent(block: Sequence[pipeline.VocabularyEntry]) -> pipeline.TriageResolution:
+        raise ValueError("Modellserver antwortet nicht mehr.")
+
+    answers = iter(["", "s", "j"])
+
+    with pytest.raises(ValueError, match="Modellserver antwortet nicht mehr\\."):
+        interaction.run_triage_blocks(
+            con=profile_con,
+            book=_BOOK,
+            chapter_number=1,
+            entries=[_vocabulary_entry("a")],
+            resolve_visible_block=resolve_visible,
+            resolve_silent_block=resolve_silent,
+            label="Wörter",
+            card_direction=CardDirection.EN_DE,
+            read_line=lambda _prompt: next(answers),
+            write_line=_no_op_write,
+        )
+
+
+def test_run_triage_blocks_uses_the_silent_resolver_only_for_blocks_after_the_first(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """technik.md §12, Festlegung 3: Nur der allererste Block trägt die Fortschrittszeile
+    (`resolve_visible_block`), jeder vorgeladene Folgeblock läuft still
+    (`resolve_silent_block`) — unabhängig davon, wie viele Blöcke folgen. Prüft zugleich,
+    dass jeder vorgeladene Block genau `resolution.remaining` des vorigen als Eingabe
+    bekommt (technik.md §12).
+
+    Verfälschungsprobe: Verwendet die Schleife für den zweiten oder dritten Block
+    versehentlich wieder `resolve_visible_block` (etwa weil beide Rückrufe vertauscht
+    wären), zählt `visible_calls` mehr als einmal, oder `silent_calls` weicht von
+    `[leftover_1, leftover_2]` ab — der Test war damit rot, bevor `resolve_silent_block`
+    für jeden Folgeblock stand."""
+    leftover_1 = [_vocabulary_entry("x")]
+    leftover_2 = [_vocabulary_entry("y")]
+    visible_calls: list[list[pipeline.VocabularyEntry]] = []
+    silent_calls: list[list[pipeline.VocabularyEntry]] = []
+
+    def resolve_visible(block: Sequence[pipeline.VocabularyEntry]) -> pipeline.TriageResolution:
+        visible_calls.append(list(block))
+        return pipeline.TriageResolution(
+            entries=_entries(1), known=0, resolved_known=0, skipped=0, remaining=leftover_1
+        )
+
+    def resolve_silent(block: Sequence[pipeline.VocabularyEntry]) -> pipeline.TriageResolution:
+        silent_calls.append(list(block))
+        if list(block) == leftover_1:
+            return pipeline.TriageResolution(
+                entries=_entries(1), known=0, resolved_known=0, skipped=0, remaining=leftover_2
+            )
+        return pipeline.TriageResolution(
+            entries=[], known=0, resolved_known=0, skipped=0, remaining=[]
+        )
+
+    answers = iter(["", "s", "j", "", "s", "j"])
+    entries = [_vocabulary_entry("a")]
+
+    interaction.run_triage_blocks(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        entries=entries,
+        resolve_visible_block=resolve_visible,
+        resolve_silent_block=resolve_silent,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(answers),
+        write_line=_no_op_write,
+    )
+
+    assert visible_calls == [entries]
+    assert silent_calls == [leftover_1, leftover_2]
+
+
+def test_run_triage_blocks_announces_when_the_prefetched_block_is_not_ready_yet(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """technik.md §12, Festlegung 3: Ist der vorgeladene Block bei der Fortsetzungsfrage
+    noch nicht fertig, sagt eine Zeile das, bevor auf ihn gewartet wird — sonst säße der
+    Nutzer vor einer stummen Eingabeaufforderung.
+
+    `resolve_silent` bleibt blockiert, bis genau diese Zeile geschrieben wird
+    (`release.set()` in `write_line`) — `is_done()` kann zu diesem Zeitpunkt deshalb nicht
+    wahr sein, ohne dass sich der Test auf einen Wettlauf um Zeit verlässt.
+
+    Verfälschungsprobe: Wartet die Schleife stattdessen sofort auf `prefetch.join()`, ohne
+    vorher zu prüfen und zu melden, hängt dieser Test, weil `release` nie gesetzt wird —
+    er war damit rot, bevor die Meldung vor dem Warten stand."""
+    leftover = [_vocabulary_entry("x")]
+    release = threading.Event()
+
+    def resolve_visible(block: Sequence[pipeline.VocabularyEntry]) -> pipeline.TriageResolution:
+        return pipeline.TriageResolution(
+            entries=_entries(1), known=0, resolved_known=0, skipped=0, remaining=leftover
+        )
+
+    def resolve_silent(block: Sequence[pipeline.VocabularyEntry]) -> pipeline.TriageResolution:
+        release.wait()
+        return pipeline.TriageResolution(
+            entries=[], known=0, resolved_known=0, skipped=0, remaining=[]
+        )
+
+    written: list[str] = []
+
+    def write_line(text: str) -> None:
+        written.append(text)
+        if "wird noch aufgelöst" in text:
+            release.set()
+
+    answers = iter(["", "s", "j"])
+
+    interaction.run_triage_blocks(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        entries=[_vocabulary_entry("a")],
+        resolve_visible_block=resolve_visible,
+        resolve_silent_block=resolve_silent,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(answers),
+        write_line=write_line,
+    )
+
+    assert any("wird noch aufgelöst" in line for line in written)

@@ -15,9 +15,15 @@ daraus nur noch Anzeige, Tastatureingabe und die daraus folgenden Schreibzugriff
 Profil (`libreverbum.profile.record_event`) samt Kartenerzeugung (`libreverbum.anki.
 new_card_guid`) — kein Modellaufruf mehr an dieser Stelle, die Bedeutung steht bereits fest.
 `run_triage_pass` ist damit **ein Block**. Die Blockschleife selbst — nach jedem
-vollständig durchgeklickten Block die Fortsetzungsfrage stellen und bei „ja" `resolve_block`
-erneut mit `resolution.remaining` aufrufen — ist `run_triage_blocks`, seit Bauschritt 2/4
-der blockweisen Triage (technik.md §12, „Blockweise Triage mit Vorladen — entschieden").
+vollständig durchgeklickten Block die Fortsetzungsfrage stellen und bei „ja" mit
+`resolution.remaining` weitermachen — ist `run_triage_blocks`, seit Bauschritt 2/4 der
+blockweisen Triage (technik.md §12, „Blockweise Triage mit Vorladen — entschieden"). Seit
+Bauschritt 3/4 entsteht der nächste Block dabei **im Hintergrund**, während der Nutzer den
+aktuellen durchentscheidet (technik.md §12, „Vorladen: der nächste Block entsteht, während
+der Nutzer entscheidet") — `run_triage_blocks` nimmt dafür zwei Rückrufe entgegen,
+`resolve_visible_block` (mit Fortschrittsanzeige, nur für den allerersten Block, den der
+Nutzer wirklich abwartet) und `resolve_silent_block` (ohne jede Ausgabe, für jeden
+vorgeladenen Folgeblock — siehe `_BlockPrefetch` unten).
 
 Warum die Auflösung nicht mehr hier liegt (Befund schwer 1, zweite T16-Durchsicht)
 ------------------------------------------------------------------------------------
@@ -89,12 +95,17 @@ die Kapitelzeile, die `profile.record_event` als Fremdschlüssel braucht, muss v
 angelegt sein — `ensure_chapter_row` unten übernimmt das, weil `profile.py` dafür bewusst
 keine eigene Schreibfunktion anbietet (Regel 14, siehe Bericht zu T16, „Beobachtungen zum
 Ablauf"). `resolution` ist das Ergebnis von `libreverbum.pipeline.resolve_triage_entries`
-für dieselbe Liste — `run_triage_blocks` unten ruft dafür `resolve_block` (in `cli.main`
-der Fortschritts-Helfer um `resolve_triage_entries`) **je Block** auf, mit derselben `con`
-und `WORD_BLOCK_SIZE`/`EXPRESSION_BLOCK_SIZE` als `limit`. `read_line`/`write_line` sind
-austauschbar (Vorgabe `input`/`cli.display.safe_print`) — Tests ersetzen beide, statt die
-echte Konsole zu bedienen (dokumentation.md §5: „Prüfe die Entscheidungen, die dabei
-fallen, nicht die Bildschirmausgabe Zeichen für Zeichen").
+für dieselbe Liste — `run_triage_blocks` unten ruft dafür `resolve_visible_block` (für den
+ersten Block) beziehungsweise `resolve_silent_block` (für jeden vorgeladenen Folgeblock;
+in `cli.main` die beiden Fortschritts-Helfer um `resolve_triage_entries`, mit
+`WORD_BLOCK_SIZE`/`EXPRESSION_BLOCK_SIZE` als `limit`) auf. Der Hauptfaden verwendet dafür
+weiterhin dieselbe `con` wie zum Schreiben der Triage-Entscheidungen; `resolve_silent_block`
+läuft dagegen im Hintergrundfaden und öffnet dafür **seine eigene** Profilverbindung
+(technik.md §12, Festlegung 1) — welche das ist, bleibt Sache des Rückrufs in `cli.main`,
+nicht dieses Moduls. `read_line`/`write_line` sind austauschbar (Vorgabe
+`input`/`cli.display.safe_print`) — Tests ersetzen beide, statt die echte Konsole zu
+bedienen (dokumentation.md §5: „Prüfe die Entscheidungen, die dabei fallen, nicht die
+Bildschirmausgabe Zeichen für Zeichen").
 
 Liefert
 -------
@@ -121,6 +132,7 @@ Durchsicht 35736a9).
 from __future__ import annotations
 
 import sqlite3
+import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -499,38 +511,122 @@ def _ask_continue(read_line: ReadLine, write_line: WriteLine, remaining_count: i
         write_line("Ungültige Eingabe — j oder n erwartet.")
 
 
+_ResolveBlock = Callable[[Sequence[pipeline.VocabularyEntry]], pipeline.TriageResolution]
+
+
+class _BlockPrefetch:
+    """Löst einen Block im Hintergrund auf (technik.md §12, „Vorladen: der nächste Block
+    entsteht, während der Nutzer entscheidet"), während der Hauptfaden den vorigen Block
+    noch durchentscheidet.
+
+    Ein einzelner `threading.Thread(daemon=True)` statt eines `ThreadPoolExecutor`
+    (Festlegung 4): Die Fäden eines Executors werden beim Interpreterende **abgewartet**
+    — ein Daemon-Faden dagegen nicht, und genau das braucht `run_triage_blocks` unten, um
+    bei „nein" oder `q` sofort zu enden, ohne auf einen noch laufenden Vorladeblock zu
+    warten, dessen Ergebnis niemand mehr ansieht.
+
+    **Ein Fehlschlag wird nicht verschluckt** (Festlegung 2, Regel 13): Wirft `resolve`,
+    hält `_run` die Ausnahme fest, statt sie zu protokollieren und weiterzulaufen — sie
+    erreicht den Nutzer über `join`, an der Stelle, an der tatsächlich auf das Ergebnis
+    gewartet wird, nicht im Hintergrund. Ein Vorladen, das bei einem Fehlschlag einfach
+    eine leere `TriageResolution` lieferte, sähe aus wie „Kapitel fertig" — der teuerste
+    stille Fehlschlag, den diese Stelle hergibt."""
+
+    def __init__(self, resolve: _ResolveBlock, entries: Sequence[pipeline.VocabularyEntry]) -> None:
+        self._resolve = resolve
+        self._entries = entries
+        self._result: pipeline.TriageResolution | None = None
+        self._error: Exception | None = None
+        self._done = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def _run(self) -> None:
+        try:
+            self._result = self._resolve(self._entries)
+        except Exception as error:  # im Hauptfaden erneut geworfen, siehe join unten
+            self._error = error
+        finally:
+            self._done.set()
+
+    def is_done(self) -> bool:
+        """Ohne zu warten — für die Meldung aus Festlegung 3, bevor `join` tatsächlich
+        blockiert."""
+        return self._done.is_set()
+
+    def join(self) -> pipeline.TriageResolution:
+        """Wartet auf den Hintergrundfaden und liefert sein Ergebnis — oder wirft die dort
+        aufgetretene Ausnahme erneut, im Hauptfaden, sichtbar für den Nutzer (Festlegung 2)."""
+        self._thread.join()
+        if self._error is not None:
+            raise self._error
+        assert self._result is not None  # `_run` setzt _error oder _result, nie keins von beiden
+        return self._result
+
+
 def run_triage_blocks(
     *,
     con: sqlite3.Connection,
     book: Book,
     chapter_number: int,
     entries: Sequence[pipeline.VocabularyEntry],
-    resolve_block: Callable[[Sequence[pipeline.VocabularyEntry]], pipeline.TriageResolution],
+    resolve_visible_block: _ResolveBlock,
+    resolve_silent_block: _ResolveBlock,
     label: str,
     card_direction: CardDirection,
     read_line: ReadLine,
     write_line: WriteLine,
 ) -> list[Card]:
     """Die Blockschleife (technik.md §12, „Blockweise Triage mit Vorladen — entschieden"):
-    löst einen Block auf (`resolve_block`), schickt ihn durch `run_triage_pass`, und macht
-    mit `resolution.remaining` weiter, bis nichts mehr aussteht, die Einzelabfrage mit `q`
+    löst einen Block auf, schickt ihn durch `run_triage_pass`, und macht mit
+    `resolution.remaining` weiter, bis nichts mehr aussteht, die Einzelabfrage mit `q`
     abgebrochen wurde, oder der Nutzer die Fortsetzungsfrage verneint.
 
-    `resolve_block` ist bewusst ein Rückruf statt eines direkten Aufrufs von `pipeline.
-    resolve_triage_entries`: In `cli.main` ist er der vorhandene Fortschritts-Helfer
-    (`_resolve_with_progress`), und ein künftiges Vorladen (Bauschritt 3/4, technik.md §12,
-    „Vorladen: der nächste Block entsteht, während der Nutzer entscheidet") setzt genau
-    hier einen Hintergrundfaden davor — beides bleibt dieser Funktion verborgen.
+    **Zwei Rückrufe statt einem** (Bauschritt 3/4, technik.md §12, „Vorladen: der nächste
+    Block entsteht, während der Nutzer entscheidet"), bewusst unterschiedlich benannt, damit
+    beim Lesen keine Verwechslung möglich ist:
+
+    - `resolve_visible_block` löst **nur den allerersten** Block auf — synchron, im
+      Hauptfaden, bevor irgendetwas angezeigt wird. In `cli.main` ist das
+      `_resolve_with_progress`, mit der sich fortschreibenden Statuszeile (Festlegung 3):
+      Der Nutzer wartet hier tatsächlich, es gibt nichts zu vertuschen.
+    - `resolve_silent_block` löst **jeden vorgeladenen Folgeblock** auf — im
+      Hintergrundfaden (`_BlockPrefetch`), angestoßen, sobald der aktuelle Block feststeht
+      und **bevor** `run_triage_pass` ihn anzeigt, nicht erst nach einem bejahten
+      `_ask_continue`. In `cli.main` ist das `_resolve_silently`, ohne jede Ausgabe
+      (Festlegung 3) und mit einer eigenen Profilverbindung (Festlegung 1) — beides bleibt
+      dieser Funktion verborgen, sie ruft nur den Rückruf.
+
+    **Die Reihenfolge der Fragen:** Zuerst die Fortsetzungsfrage, *dann* auf den
+    vorgeladenen Block warten — nicht umgekehrt, sonst wartete der Nutzer auf etwas, das er
+    vielleicht gar nicht mehr will (Festlegung 4). Ist der vorgeladene Block dabei noch
+    nicht fertig, sagt eine Zeile das, bevor `_BlockPrefetch.join` tatsächlich blockiert.
 
     Nach `q` (`triage_pass.aborted`) folgt **keine** Fortsetzungsfrage: Der Nutzer hat den
     Abbruch bereits erklärt, eine weitere Frage danach wäre die Frage, die er gerade
     beantwortet hat. Ist `resolution.remaining` schon nach dem ersten Block leer, wird
-    ebenfalls nicht gefragt — es gibt nichts, womit fortgesetzt werden könnte."""
+    ebenfalls nicht gefragt — es gibt nichts, womit fortgesetzt werden könnte. In beiden
+    Fällen (`q`, „nein") ist ein bereits angestoßener Vorladeblock zu diesem Zeitpunkt
+    möglicherweise noch nicht fertig — sein Ergebnis wird dann schlicht **nicht abgewartet**
+    und verworfen (Festlegung 4): Der Faden ist Daemon und hält das Programmende nicht auf."""
     cards: list[Card] = []
-    current: Sequence[pipeline.VocabularyEntry] = entries
+    resolution = resolve_visible_block(entries)
     block_number = 1
     while True:
-        resolution = resolve_block(current)
+        # Bauschritt 3/4: angestoßen, sobald der aktuelle Block feststeht — unmittelbar
+        # bevor run_triage_pass ihn anzeigt, nicht erst nach der Fortsetzungsfrage. Ohne
+        # Rest gibt es nichts vorzuladen, und die anschließende Prüfung auf ein leeres
+        # `current` unten würde ohnehin sofort beenden.
+        prefetch = (
+            _BlockPrefetch(resolve_silent_block, resolution.remaining)
+            if resolution.remaining
+            else None
+        )
+        if prefetch is not None:
+            prefetch.start()
+
         triage_pass = run_triage_pass(
             con=con,
             book=book,
@@ -554,4 +650,9 @@ def run_triage_blocks(
         if not _ask_continue(read_line, write_line, len(current)):
             write_line(f"{len(current)} {label} noch nicht geprüft.")
             return cards
+
+        assert prefetch is not None  # current ist nicht leer, siehe oben — also wurde vorgeladen
+        if not prefetch.is_done():
+            write_line("Der nächste Block wird noch aufgelöst — bitte einen Moment …")
+        resolution = prefetch.join()
         block_number += 1
