@@ -154,14 +154,19 @@ prüft: gegen den Commit, nicht gegen den Arbeitsbaum".
 
 Beide **niemals in derselben Datei**, und **keine Fremdschlüssel ins Wörterbuch** —
 WikDict-Werte nur als Momentaufnahme (`wikdict_*`). Begründung: technik.md §4.
-`PRAGMA user_version` ab der ersten Fassung. Tabellen heißen im Schema `book`,
-`chapter`, `lemma`, `sense`, `occurrence`, `event`, `card`.
+`PRAGMA user_version` ab der ersten Fassung, seit dem 31.08.2026 auf **2**. Tabellen heißen
+im Schema `book`, `chapter`, `lemma`, `sense`, `occurrence`, `event`, `card`, `learner` —
+acht seit Fassung 2 (technik.md §4, „Fassung 2").
 
 Zur Laufzeit liegen beide samt `config.toml` in `data/` neben dem Projekt, solange
 LibreVerbum aus dem Quellbaum läuft (seit 27.08.2026, vorher im Nutzerverzeichnis).
 **Der Kern bekommt jeden Pfad als Argument** und kennt keine Vorgabe — die setzt der
 Aufrufer. Begründung: technik.md §9.
-Begründung: technik.md §9.
+
+Keine Nutzerdatei, sondern ein **Programmbestandteil** im Paket ist dagegen
+`libreverbum/wordfreq_en_5000.txt`, die eingefrorene Grundwortschatzliste für die
+Vorbelegung des Profils. Sie steht als einzige Datei unter CC BY-SA 4.0 statt unter der
+MIT-Lizenz daneben — das Repositorium ist gemischt lizenziert. Begründung: technik.md §11.
 
 ## `tools/` — die Messskripte
 

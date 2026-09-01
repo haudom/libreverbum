@@ -135,7 +135,8 @@ zu verpassen.
 > ausnahmslos A1/A2-Wortschatz (`life`, `had`, `said`, `made`); erst nach einer Sammelaktion
 > erscheinen `portrait`, `tragedy`, `dreadful`, `lad`, `afraid`. Eine höhere Grenze
 > verlängerte nur diesen Kalibrierdurchlauf — was ihn abkürzt, ist ein Tastendruck und die
-> Vorbelegung des Grundwortschatzes („Bewusst offen" unten).
+> Vorbelegung des Grundwortschatzes, seit dem 01.09.2026 gebaut
+> ([technik.md](technik.md) §11).
 
 **In der Triage steht die gemeinte Bedeutung**, nicht bloß die Liste der möglichen. Sie wird
 dafür **vor** der Triage aufgelöst, und „kenne ich" bucht auf sie — Kenntnis wird pro
@@ -159,9 +160,13 @@ für die Uhr, während der Text die Wache meint.
 > (65,8 %), und **Bündeln** lohnt nicht ([technik.md](technik.md) §3, „Nachtrag 19.08.2026:
 > Bündeln lohnt nicht").
 
-*Später erweiterbar durch:* adaptiven Vokabeltest zur Erstschätzung, Import bestehender
-Anki-Decks, Angabe des Sprachniveaus (A1–C2). Die Datenstruktur muss diese Quellen aufnehmen
-können, ohne umgebaut zu werden.
+*Später erweiterbar durch:* adaptiven Vokabeltest zur Erstschätzung und Import bestehender
+Anki-Decks. Die **Angabe des Sprachniveaus** ist seit dem 01.09.2026 gebaut — A1 bis C1,
+C2 wird nicht angeboten („Bewusst offen" unten, [technik.md](technik.md) §11). Die
+Datenstruktur muss diese Quellen aufnehmen können, ohne umgebaut zu werden; für die
+Niveau-Angabe hat sie es getragen: Die Ereignisfolge selbst blieb unangetastet, es genügte
+eine neue Herkunft (`Origin.PRESET`) neben zwei nullbaren Spalten und einer achten Tabelle
+([technik.md](technik.md) §4, „Fassung 2").
 
 ### 5. Übersetzen — der Hybrid-Ansatz
 
@@ -238,6 +243,9 @@ Konzeptionell, unabhängig von der späteren Technik:
 - **Zurückgestellte Wörter** — übersprungen, werden erneut gefragt
 - **Eigene Korrekturen** an Übersetzungen
 - **Bücher und Kapitel**, die bereits verarbeitet wurden
+- **Das Sprachniveau** — die Selbsteinschätzung beim Anlegen, aus der die einmalige
+  Vorbelegung des Grundwortschatzes folgt (siehe „Bewusst offen" unten). Die einzige Angabe
+  über den Nutzer selbst, nicht über ein Wort oder ein Buch
 
 Das Profil ist **buchübergreifend** und der eigentliche langfristige Wert des Programms. Es muss
 exportierbar und sicherbar sein.
@@ -275,8 +283,10 @@ Kern, nicht darunter").
 - **Lesezeichen-Druck** und weitere Druckvarianten, dazu die **PDF-Ausgabe ohne den Umweg
   über den Browser**, mit der Druckseite aus Phase 1 als Quelle — siehe
   [technik.md](technik.md) §8c, „Eine direkte PDF-Ausgabe ist Phase 2"
-- Bootstrapping der Bekannt-Liste: adaptiver Vokabeltest, Import bestehender Anki-Decks,
-  Niveau-Angabe
+- Bootstrapping der Bekannt-Liste: adaptiver Vokabeltest und Import bestehender Anki-Decks.
+  Die **Niveau-Angabe** ist seit dem 01.09.2026 gebaut ([technik.md](technik.md) §11); was
+  von ihr hierher gehört, ist der adaptive Test — er schätzt denselben Wert, statt ihn zu
+  erfragen, und verfeinert damit eine Selbsteinschätzung
 
 ### Phase 3 — Rückkanal und weitere Quellen
 - **Anki-Rückkanal**: Karten, die dauerhaft falsch beantwortet werden, wandern im Profil zurück
@@ -309,20 +319,23 @@ Kern, nicht darunter").
 - ~~Ablage des Profils (Datenbankform)~~ — **entschieden am 11.08.2026**,
   siehe [technik.md](technik.md)
 
-- **Woher der Nutzer seinen Grundwortschatz bekommt** — aufgeworfen am 26.08.2026 durch
-  die Abnahme T17: Bei 941 Worteinträgen und 25 Plätzen zeigt die Triage ausschließlich
-  Kernwortschatz (`life`, `had`, `said`, `made`, `things`), während der Wortschatz, der
-  das Kapitel tatsächlich schwer macht (`listlessly`, `tawdry`, `lurid`, `courteously`),
-  sie in keinem Durchlauf erreicht. Das verletzt kein Abnahmekriterium und trotzdem den
-  Zweck aus dem Kontext oben. Vorgesehene Richtung: Beim **Anlegen des Profils** wird
-  gefragt, ob leer begonnen wird oder die häufigsten englischen Grundformen einmalig als
-  bekannt eingetragen werden — dieselbe Frage füllt zugleich die Lücke, die T16 offen
-  gelassen hat: ob ein noch nicht vorhandenes Profil bestätigt werden muss, statt wortlos
-  leer angelegt zu werden (`libreverbum.profile.open_profile`). Die Vorbelegung braucht eine eigene `Origin`, damit
-  unterscheidbar bleibt, was der Nutzer selbst entschieden hat. Datenquelle ist
-  voraussichtlich **kein** fremder Bestand: WikDicts `importance` liegt bereits vor
-  ([technik.md](technik.md) §2, „Häufigkeitsdaten — unkritisch"); ob es trägt, ist zu
-  messen, Rückfall wäre `wordfreq`
+- ~~**Woher der Nutzer seinen Grundwortschatz bekommt**~~ — **entschieden am 01.09.2026**,
+  siehe [technik.md](technik.md) §11. Beim Anlegen des Profils wird nach dem Sprachniveau
+  gefragt (A1 bis C1 oder ausdrücklich „keine Angabe"); die häufigsten N englischen
+  Grundformen gelten dann als bekannt, gebucht mit der eigenen Herkunft `Origin.PRESET`.
+  Datenquelle ist `wordfreq`, ausgeliefert als eingefrorene Liste im Paket — WikDicts
+  `importance` wurde gemessen und verworfen, weil es die Belegdichte in Wiktionary misst
+  und nicht die Texthäufigkeit. Die damals mitgenannte Lücke aus T16 war schon vorher
+  geschlossen: `cli.main._confirm_new_profile` fragt seit dem 21.08.2026 nach, bevor ein
+  Profil angelegt wird.
+
+  **Gelöst ist damit die erste Hälfte des T17-Befunds, nicht die zweite.** Der
+  Kernwortschatz besetzt die 25 Plätze nicht mehr — an `dorian_gray.epub` Nr. 10 gemessen
+  sind bei B1 481 der 940 Grundformen und 1.584 der 2.240 Vorkommen vorbelegt. Der
+  Wortschatz, der das Kapitel schwer macht (`listlessly`, `tawdry`, `lurid`,
+  `courteously`), erreicht die Triage trotzdem nicht: Drei davon kommen genau einmal vor,
+  wie 553 der 940 Einträge, und ein N, das bis zu ihnen reichte, belegte sie selbst vor.
+  Das ist ein Rangproblem, kein Filterproblem, und hängt an den beiden folgenden Punkten
 - **Nachrücken in der Triage** — aufgeworfen am 26.08.2026: Wird ein Wort als bekannt
   gebucht, rückt das nächsthäufigste Wort des Kapitels nach, statt den Platz verfallen zu
   lassen. Technisch heißt das, den Auflöser als Iterator zu führen, aus dem die Oberfläche
@@ -361,8 +374,8 @@ Kern, nicht darunter").
 **Die vier ursprünglichen Fragen sind entschieden**; die technischen Festlegungen samt
 Begründung und Messwerten stehen in [technik.md](technik.md). Die fünf Punkte darüber sind
 am 26.08.2026 aus der Abnahme T17, dem Gespräch darüber und der Auflösung der
-Nacharbeitsliste neu hinzugekommen und **nicht** entschieden — sie werden erst besprochen,
-dann gebaut.
+Nacharbeitsliste neu hinzugekommen. Der erste davon ist am 01.09.2026 entschieden und
+gebaut; die vier übrigen sind es **nicht** — sie werden erst besprochen, dann gebaut.
 
 ---
 

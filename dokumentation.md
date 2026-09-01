@@ -50,6 +50,7 @@ Prosa und gelten unverändert weiter:
 | `vorkommen` | `occurrence` |
 | `ereignis` | `event` |
 | `karte` | `card` |
+| `lernender` | `learner` |
 
 Achtung bei `sense`: Die eigene Tabelle ist die **Bedeutung als Gegenstand**, WikDicts
 `sense` nur ein **englischer Kurztext** — deshalb `wikdict_sense` für dessen Feld.
@@ -72,6 +73,7 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | Mehrwortausdruck, Wendung | `multiword_expression` / `mwe` |
 | Wortschatzextraktion | `extraction` |
 | Profil, Kenntnisstand | `profile`, `knowledge_state` |
+| Lernender (die Person, deren Profil geführt wird) | `learner` — so heißt die Tabelle mit dem Sprachniveau; **nicht** `profile`, das ist bereits Modul, Begriff und Dateiname |
 | bekannt / lernt / zurückgestellt / vergessen | `known` / `learning` / `deferred` / `forgotten` |
 | Herkunft und Zeitpunkt (einer Kenntnisangabe) | `origin`, `timestamp` |
 | Vorbelegung (Grundwortschatz als bekannt vorbelegen) | `preset` |
@@ -192,7 +194,7 @@ erklärt **diese eine Stelle** und wird mit ihr hinfällig.
 nicht, wie vollständig eine Datenstruktur angelegt wird. Ein Schema ist nur als Ganzes
 stimmig, und ein nachgereichtes Teilstück heißt Migration; es entsteht deshalb vollständig,
 sobald es überhaupt entsteht. Verhalten dagegen entsteht erst, wenn es gebraucht wird: alle
-sieben Tabellen anlegen, aber nur die Zugriffsfunktionen schreiben, die die Phase verlangt.
+acht Tabellen anlegen, aber nur die Zugriffsfunktionen schreiben, die die Phase verlangt.
 
 **Zu Regel 15: die Rohquelle entscheidet.** Für Lizenz-, Fassungs- und Pflegeangaben ist die
 **maschinenlesbare Rohquelle** verbindlich — das JSON eines Paketverzeichnisses, die

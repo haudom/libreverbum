@@ -107,9 +107,10 @@ class VocabularyStatus(StrEnum):
 # REGEL (dokumentation.md §4 Regel 5): PRAGMA user_version ab der ersten Fassung gesetzt,
 # bei jeder Schemaänderung zu erhöhen. Ohne die Zahl ist eine spätere Migration Ratearbeit.
 # Fassung 2 (Bauschritt 2/5 der Vorbelegung): event.book_id/chapter_number dürfen NULL
-# sein, ein Index auf event(sense_id) kam hinzu, dazu die Tabelle `profile` für das
-# Sprachniveau. Eine Profildatei der Fassung 1 wird deshalb nicht mehr geöffnet — siehe
-# open_profile, „Eine ältere Fassung wird nicht stillschweigend weiterverwendet".
+# sein, ein Index auf event(sense_id) kam hinzu, dazu die Tabelle `learner` für das
+# Sprachniveau (technik.md §4, „Fassung 2"). Eine Profildatei der Fassung 1 wird deshalb
+# nicht mehr geöffnet — siehe open_profile, „Eine ältere Fassung wird nicht
+# stillschweigend weiterverwendet".
 SCHEMA_VERSION = 2
 
 # REGEL (dokumentation.md §4 Regel 4, technik.md §4 „Getrennte Datei — nicht mit dem
@@ -254,7 +255,7 @@ def open_profile(path: Path) -> sqlite3.Connection:
 
     **Eine ältere Fassung wird nicht stillschweigend weiterverwendet.** Für den Übergang
     von Fassung 1 auf 2 (Bauschritt 2/5 der Vorbelegung: `event.book_id`/`chapter_number`
-    werden `NULL`-fähig, dazu die Tabelle `profile`) ist das ein lauter Abbruch, keine
+    werden `NULL`-fähig, dazu die Tabelle `learner`) ist das ein lauter Abbruch, keine
     Wanderung: Im Bestand existiert noch kein Profil mit Wert (`data/` gibt es im
     Arbeitsbaum nicht), und eine Migration ohne echten Altbestand wäre Vorratsarbeit
     (Regel 14). Träfe künftig doch ein Profil der Fassung 1 mit Wert ein, ist das hier zu
@@ -275,8 +276,9 @@ def open_profile(path: Path) -> sqlite3.Connection:
     Verzeichnis, die Profildatei selbst aber noch nicht, legt der Aufruf weiterhin
     wortlos eine neue, leere Profildatei an — das ist gewolltes Verhalten. Ob ein
     noch nicht vorhandenes Profil bestätigt werden muss, entscheidet der Aufrufer
-    (technik.md §9, der Kern kennt keine Vorgabe); offen ist die Frage weiterhin —
-    konzept.md, „Bewusst offen", „Woher der Nutzer seinen Grundwortschatz bekommt".
+    (technik.md §9, der Kern kennt keine Vorgabe); `cli.main._confirm_new_profile` fragt
+    seit dem 21.08.2026 nach und schließt beim Anlegen die Vorbelegung des
+    Grundwortschatzes an (technik.md §11).
     """
     if not path.parent.is_dir():
         raise ValueError(

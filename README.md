@@ -101,6 +101,12 @@ der Regelfall, nicht die Ausnahme. Also erst `model.url` und `model.name` eintra
 denselben Befehl erneut. Beim **zweiten Aufruf** kommt die Frage nach dem Wörterbuch,
 falls es noch fehlt, und danach die nach dem Profil, falls es noch keines gibt.
 
+Wird ein Profil neu angelegt, folgt eine dritte Frage: das **Sprachniveau** (A1 bis C1 oder
+ausdrücklich „keine Angabe"). Die häufigsten englischen Grundformen der gewählten Stufe
+gelten dann als bekannt und tauchen in keiner Triage mehr auf — bei B1 sind das rund 1.700
+Grundformen mit gut 8.000 Bedeutungen. Die Frage kommt einmalig, und die Vorbelegung lässt
+sich nicht zurücknehmen ([technik.md](technik.md) §11).
+
 Danach läuft der Durchgang:
 
 1. **Kapitel wählen** — die Liste kommt aus dem Inhaltsverzeichnis der Datei. Fehlt es,
@@ -205,7 +211,8 @@ genau daran ist die naheliegende Alternative gescheitert ([technik.md](technik.m
 
 **Das Repositorium ist damit gemischt lizenziert:** Code MIT, `wordfreq_en_5000.txt`
 CC BY-SA 4.0, weil sie bearbeitetes Material aus `wordfreq`s Häufigkeitsdaten ist.
-Namensnennungen: siehe [NOTICE](NOTICE).
+Namensnennungen: siehe [NOTICE](NOTICE). Warum diese Quelle und was sie kostet, steht in
+[technik.md](technik.md) §11.
 
 ## Dokumentation
 
@@ -251,8 +258,9 @@ mypy
 pytest
 ```
 
-Von den 317 Tests brauchen 22 das echte Wörterbuch, die echten EPUBs oder einen
-Modellserver; ohne sie werden sie übersprungen statt zu scheitern.
+Von den 431 Tests brauchen 34 das echte Wörterbuch, die echten EPUBs, einen Modellserver
+oder einen zweiten Interpreter mit `wordfreq`; ohne sie werden sie übersprungen statt zu
+scheitern — und jeder Lauf nennt am Ende, welche das waren.
 
 Das Projekt ist zuerst ein Werkzeug für den eigenen Gebrauch. Fehlerberichte und Fragen sind
 willkommen; wer Code beitragen will, liest vorher

@@ -23,6 +23,7 @@ am saubersten auf:
 | 8c | Druckausgabe | **entschieden** (21.08.2026) |
 | 9 | Ablage und Konfiguration zur Laufzeit | **entschieden** (12.08.2026) |
 | 10 | Lizenz des eigenen Codes | **entschieden** (26.08.2026) |
+| 11 | Vorbelegung des Grundwortschatzes | **entschieden** (31.08.2026) |
 
 Frage 5 stand anfangs nicht auf der Liste. Sie ist aus Frage 2 entstanden, deren Messung
 mit der Folgerung endete, nicht die Datenquelle sei der Engpass, sondern die
@@ -46,6 +47,12 @@ Aufteilung, die nebenbei entsteht, in jeder Sitzung neu entsteht — und sich ni
 Frage 10 ist die einzige, die nicht vor dem Bauen beantwortet werden musste, sondern vor
 dem **Veröffentlichen**. Sie ist mit dem Aufräumen des öffentlichen Repositoriums gefallen —
 siehe Abschnitt 10.
+
+Frage 11 stammt als einzige nicht aus der Konzeption, sondern aus der **Abnahme**: Die
+Vorbelegung des Grundwortschatzes stand seit dem 26.08.2026 als erster Punkt unter
+konzept.md, „Bewusst offen" und ist am 31.08.2026 entschieden worden. Sie hat eine eigene
+Datenquelle, eine eigene Lizenzlage und eine eigene Messreihe und ist deshalb kein Anhang
+zu Frage 2 — siehe Abschnitt 11.
 
 Frage 2 stand bewusst weit oben, weil sie das Konzept hätte kippen können: Ein freies,
 offline nutzbares EN→DE-Wörterbuch mit sauberer Lizenz **und** Bedeutungsangaben ist
@@ -255,7 +262,10 @@ hinzukommen, gilt daher:
 > Zusätzliche Wörterbuchquellen werden **getrennt gehalten und nacheinander abgefragt**,
 > niemals zu einer gemeinsamen Datenbank zusammengeführt.
 
-Für Phase 1 stellt sich die Frage nicht: Es bleibt bei einer einzigen Quelle.
+Für Phase 1 stellt sich die Frage nicht: Es bleibt bei einer einzigen Wörterbuchquelle. Die
+eingefrorene Grundwortschatzliste aus Abschnitt 11 ist keine zweite: Sie wird beim Anlegen
+des Profils **eingelesen**, nicht beim Nachschlagen abgefragt, und mit nichts
+zusammengeführt.
 
 ### Warum nicht mitgeliefert
 
@@ -337,16 +347,29 @@ den Buch-Schwierigkeitscheck in Phase 2 gebraucht. Zwei Punkte dazu:
 
 - WikDict liefert bereits `importance`-Werte pro Eintrag. Für die Sortierung in der
   Triage genügt das voraussichtlich schon
-- Falls doch externe Daten nötig werden: **`wordfreq`** (Code Apache 2.0, Daten
-  CC BY-SA 4.0). Einschränkung: Der Datenstand endet bei etwa 2021 und wird nicht
+- Für alles darüber hinaus: **`wordfreq`** (Code Apache 2.0, Daten CC BY-SA 4.0) — seit dem
+  31.08.2026 tatsächlich im Einsatz, als eingefrorene Datei statt als Abhängigkeit
+  (Abschnitt 11). Einschränkung: Der Datenstand endet bei etwa 2021 und wird nicht
   fortgeschrieben — der Autor hat das Projekt eingestellt, weil KI-erzeugte Texte das
   Web als Quelle verdorben haben. Für Buchvokabular ist dieser Stand eher ein Vorteil
 
+> **Nachtrag 31.08.2026 — externe Häufigkeitsdaten sind nötig geworden, und `importance`
+> trägt sie nicht.** Die Vorbelegung des Grundwortschatzes (Abschnitt 11) braucht eine
+> Rangfolge nach **Texthäufigkeit**. `importance` ist keine: Es misst, wie gut ein Begriff
+> in Wiktionary belegt ist — `the` steht auf Rang 1.125, die Ränge 1 bis 50 gehen an
+> `water`, `cat`, `dog`. An einem echten Kapitel gemessen wären damit 18 von 25 in der
+> Triage gezeigten Einträgen längst vorbelegt gewesen, mit `wordfreq` 4. Der erste
+> Aufzählungspunkt oben gilt unverändert für die **Sortierung** in der Triage; die
+> Vorbelegung ist eine andere Frage, und für sie ist `importance` gemessen und verworfen.
+
 ### Offene Punkte
 
-- **Genaue Version der CC-BY-SA-Lizenz** von WikDict/DBnary prüfen (3.0 oder 4.0).
-  Relevant nur, falls später doch eine zweite Quelle hinzukommt — auf die getrennte
-  Ablage oben hat es keinen Einfluss
+- **Genaue Version der CC-BY-SA-Lizenz** von WikDict/DBnary prüfen (3.0 oder 4.0) —
+  **seit dem 31.08.2026 fällig statt hypothetisch:** Mit `libreverbum/wordfreq_en_5000.txt`
+  steht eine zweite CC-BY-SA-Quelle im Bestand (4.0, Abschnitt 11), und anders als das
+  Wörterbuch wird sie **mitgeliefert**. Verschmolzen wird weiterhin nichts, die getrennte
+  Ablage oben bleibt also unberührt; offen ist, welche Fassung die Namensnennung von
+  WikDict verlangt und ob beide Quellen dieselbe meinen
 - Form der **Namensnennung** im Programm festlegen (Wiktionary, DBnary, WikDict)
 - Umgang mit **historischen Schreibweisen** (`to-night`, `arm-chair`) — Normalisierung
   beim Einlesen oder bewusst ignorieren
@@ -951,6 +974,9 @@ book ──< chapter ──< occurrence >── lemma ──< sense
                                                 │   zurückgestellt / vergessen
                                                 │   + Herkunft + Zeitpunkt
                          card ──────────────────┘   Anki-Kennung für den Rückkanal
+
+                         learner                    Sprachniveau des Nutzers,
+                                                    genau eine Zeile, ohne Bezug
 ```
 
 | Tabelle | Zweck |
@@ -961,17 +987,19 @@ book ──< chapter ──< occurrence >── lemma ──< sense
 | `occurrence` | Belegsatz und Häufigkeit je Kapitel — dasselbe Wort hat in Kapitel 2 einen anderen Belegsatz als in Kapitel 9 |
 | `book`, `chapter` | Was bereits verarbeitet wurde |
 | `card` | Exportierte Anki-Karten samt deren Kennung |
+| `learner` | Das Sprachniveau des Nutzers. Die einzige Angabe über ihn selbst — und die einzige Tabelle ohne Gegenstück in `entities` (siehe „Fassung 2" unten) |
 
 Die Namen sind englisch, die Prosa bleibt deutsch — Zuordnung und Begründung in
 [dokumentation.md](dokumentation.md), Abschnitt 1.
 
 #### Die Spalten, wie sie seit T8 stehen
 
-Festgehalten am 26.08.2026 nach der Abnahme; verbindlich ist `libreverbum/profile.py`,
-`_SCHEMA`, nicht diese Tabelle. Jede Tabelle trägt zusätzlich `id INTEGER PRIMARY KEY`.
-Die dritte Spalte nennt, **was eine Zeile identifiziert** — dort stecken die
-Entwurfsentscheidungen, nicht in den Datentypen (alle Spalten `TEXT` oder `INTEGER`, alle
-`NOT NULL` außer den drei `wikdict_`-Feldern).
+Festgehalten am 26.08.2026 nach der Abnahme, am 31.08.2026 um die Fassung 2 ergänzt;
+verbindlich ist `libreverbum/profile.py`, `_SCHEMA`, nicht diese Tabelle. Jede Tabelle trägt
+zusätzlich `id INTEGER PRIMARY KEY`. Die dritte Spalte nennt, **was eine Zeile
+identifiziert** — dort stecken die Entwurfsentscheidungen, nicht in den Datentypen (alle
+Spalten `TEXT` oder `INTEGER`, alle `NOT NULL` außer den drei `wikdict_`-Feldern und den
+seit Fassung 2 nullbaren `event.book_id`, `event.chapter_number` und `learner.cefr_level`).
 
 | Tabelle | weitere Spalten | eine Zeile ist eindeutig über |
 |---|---|---|
@@ -980,8 +1008,9 @@ Entwurfsentscheidungen, nicht in den Datentypen (alle Spalten `TEXT` oder `INTEG
 | `lemma` | `text`, `pos` | `UNIQUE (text, pos)` — dieselbe Schreibung unter zwei Wortarten sind **zwei** Zeilen (der `saw`-Fall, „Warum die Reihenfolge zwingend ist") |
 | `sense` | `lemma_id`, `wikdict_lexentry`, `wikdict_sense`, `wikdict_trans_list` | `UNIQUE INDEX sense_identity` über `lemma_id` und alle drei `wikdict_`-Felder, jedes durch `ifnull(…, '')` — ein gewöhnliches `UNIQUE` griffe nicht, weil SQLite jedes `NULL` von jedem anderen unterscheidet und `wikdict_sense` bei 36 % der Zeilen fehlt (Regel 1) |
 | `occurrence` | `book_id`, `chapter_number`, `lemma_id`, `word_form`, `example_sentence`, `frequency`, `proper_noun_frequency` | `UNIQUE (book_id, chapter_number, lemma_id)` — je Kapitel **eine** Zeile je Grundform, mit eigenem Belegsatz |
-| `event` | `sense_id`, `knowledge_state`, `origin`, `timestamp`, `book_id`, `chapter_number` | **keine** UNIQUE-Bedingung, und das ist die Entscheidung: Zeilen werden angehängt, nie geändert („Kernentscheidung: Ereignisfolge statt überschreibbarem Zustand" unten) |
+| `event` | `sense_id`, `knowledge_state`, `origin`, `timestamp`, `book_id`, `chapter_number` | **keine** UNIQUE-Bedingung, und das ist die Entscheidung: Zeilen werden angehängt, nie geändert („Kernentscheidung: Ereignisfolge statt überschreibbarem Zustand" unten). `book_id` und `chapter_number` dürfen seit Fassung 2 `NULL` sein, aber nur gemeinsam (`CHECK`, siehe „Fassung 2" unten) |
 | `card` | `sense_id`, `occurrence_id`, `card_direction`, `guid` | `UNIQUE (guid)` — die Anki-Kennung, an der der Rückkanal aus Phase 3 hängt („Jetzt billig, später teuer" unten) |
+| `learner` | `cefr_level` | `CHECK (id = 1)` — genau **eine** Zeile, beim Schemaaufbau angelegt (Fassung 2, siehe unten) |
 
 - **Die `wikdict_`-Momentaufnahme steht ausschließlich in `sense`**, in genau diesen drei
   Spalten, und ist reiner Zeileninhalt zum Zeitpunkt der Abfrage — kein `rowid`, kein
@@ -992,10 +1021,10 @@ Entwurfsentscheidungen, nicht in den Datentypen (alle Spalten `TEXT` oder `INTEG
 - Alle Fremdschlüssel zeigen innerhalb der Profildatei. `occurrence` und `event` verweisen
   zusätzlich als Paar auf `chapter(book_id, number)`; `open_profile` schaltet
   `PRAGMA foreign_keys = ON`
-- `PRAGMA user_version` steht auf `profile.SCHEMA_VERSION`, heute **1**. `open_profile`
-  prüft beim Öffnen zusätzlich, dass genau diese sieben Tabellen vorhanden sind —
-  `user_version = 0` ist bei SQLite auch der Wert jeder fremden Datei
-  („Schemaversion von Anfang an" unten)
+- `PRAGMA user_version` steht auf `profile.SCHEMA_VERSION`, seit dem 31.08.2026 **2**
+  („Fassung 2" unten). `open_profile` prüft beim Öffnen zusätzlich, dass genau diese acht
+  Tabellen vorhanden sind — `user_version = 0` ist bei SQLite auch der Wert jeder fremden
+  Datei („Schemaversion von Anfang an" unten)
 
 > **Achtung, zwei Dinge namens `sense`:** Die eigene Tabelle ist die **Bedeutung als
 > Gegenstand** — mit Verlauf, eigener Korrektur und Kartenbezug. WikDicts `sense` ist
@@ -1020,6 +1049,49 @@ dieselbe Klammer `lemma` mit `pos` gleich `PROPN`, ein Mehrwortausdruck dieselbe
 mit Leerzeichen im Text (`give up`) — beides ohne eigene Kennzeichnung. Ob ein Vorkommen
 als Eigenname zählt, entscheidet nicht `lemma`, sondern `occurrence` (Abschnitt 5, „Neuer
 Befund: der Eigennamenfilter muss pro Vorkommen greifen").
+
+### Fassung 2 (31.08.2026): was die Vorbelegung am Schema geändert hat
+
+`PRAGMA user_version` steht seit dem 31.08.2026 auf **2**. Die Vorbelegung des
+Grundwortschatzes (Abschnitt 11) hat drei Änderungen gebraucht; sie sind zusammen
+entstanden, weil ein Schema nur als Ganzes stimmig ist (dokumentation.md §4, „Zu Regel 14:
+Struktur ist nicht Funktion"):
+
+- **`event.book_id` und `event.chapter_number` dürfen `NULL` sein**, aber nur gemeinsam:
+  `CHECK ((book_id IS NULL) = (chapter_number IS NULL))`. Ein Vorbelegungs-Ereignis gehört
+  zu keinem Buch und keinem Kapitel. Der zusammengesetzte Fremdschlüssel auf
+  `chapter(book_id, number)` greift bei SQLite ohnehin nicht mehr, sobald eine seiner
+  Spalten `NULL` ist (die einzige unterstützte Art ist `MATCH SIMPLE`) — der `CHECK`
+  schließt deshalb den gemischten Fall aus, den weder Fremdschlüssel noch `NOT NULL` allein
+  ausschließen. Derselbe Fall trifft später den Anki-Rückkanal aus Phase 3
+- **Ein Index auf `event(sense_id)`** — mit gemessenem Anlass, wie Regel 14 ihn für einen
+  Index verlangt: Bei rund 18.600 Ereignissen kostet `profile.compare_chapter_vocabulary`
+  je Kapitel **2,1 s statt 0,4 s**, und der Abstand wächst mit dem Profil unbemerkt weiter.
+  Ohne Vorbelegung sammelte ein Profil je Kapitel einige Ereignisse an; mit ihr steht es vom
+  ersten Tag an im fünfstelligen Bereich
+- **Die achte Tabelle `learner`** mit der einzigen Spalte `cefr_level` (`NULL` heißt „keine
+  Angabe"). Das Sprachniveau ist eine Angabe über den **Nutzer**, nicht über ein Buch oder
+  ein Kapitel, und hat deshalb in `book` oder `chapter` keinen Platz. Bewusst **keine**
+  allgemeine Schlüssel-Wert-Tabelle `setting(key, value)`: Das wäre die Abstraktion über
+  einer einzigen Umsetzung, die Regel 14 untersagt. Und bewusst nicht `profile` — der Name
+  ist dreifach vergeben (das Modul `profile.py`, der Begriff „Profil" für den ganzen
+  Nutzerbestand, die Datei `profil.sqlite3`), `SELECT cefr_level FROM profile` läse sich
+  wörtlich als „aus der Profildatei", die es aber nicht ist
+
+`learner` ist zugleich die einzige Tabelle **ohne Gegenstück in `entities`**: Das
+Sprachniveau ist kein Gegenstand des Kernablaufs, sondern ein einzelner Wert, den
+`profile.get_cefr_level` und `set_cefr_level` lesen und schreiben. Die sieben Datenklassen
+bleiben sieben.
+
+**Eine Profildatei der Fassung 1 wird laut abgewiesen, nicht gewandert.** `open_profile`
+bricht mit einer deutschen Meldung ab (Regel 13), statt sie stillschweigend
+weiterzuverwenden. Der Grund ist Regel 14: Im Bestand existiert kein einziges Profil der
+Fassung 1 mit Wert — `data/` gibt es im Arbeitsbaum nicht, und außer der
+Entwicklungsmaschine gibt es keine Installation (Abschnitt 9, „Umgestellt am 27.08.2026").
+Eine Migration ohne Altbestand wäre Code, den niemand ausführt und den kein Test an einem
+echten Fall prüfen könnte. Träfe künftig doch ein Profil der Fassung 1 mit Wert ein, ist das
+dann zu entscheiden — der laute Abbruch hält diese Wahl offen, das stillschweigende
+Weiterlaufen nähme sie weg.
 
 ### Jetzt billig, später teuer: die Anki-Kennung
 
@@ -1049,6 +1121,11 @@ Zwei getrennte Dinge:
 SQLites `PRAGMA user_version` wird ab der ersten Fassung gesetzt und bei jeder
 Änderung erhöht. Ohne Versionsnummer ist eine spätere Migration Ratearbeit — und
 Migrationen wird es geben, weil Phase 2 und 3 neue Felder brauchen.
+
+Die erste Erhöhung ist am 31.08.2026 gefallen („Fassung 2" oben). Sie zeigt zugleich, wofür
+die Zahl sonst noch taugt: Eine ältere Fassung wird an ihr **erkannt und laut abgewiesen**,
+solange es keinen Altbestand zu wandern gibt. Ohne die Zahl wäre der Unterschied gar nicht
+bemerkbar gewesen — eine Profildatei der Fassung 1 trägt dieselben Tabellennamen.
 
 ### Offene Punkte
 
@@ -1406,6 +1483,20 @@ kompakten Wortlisten in `tools/` unlesbar macht.
 bricht Code um, aber keine Prosa. Die langen deutschen Docstrings aus dokumentation.md §3
 liefen sonst ungeprüft.
 
+### Übersprungene Tests werden in jedem Lauf genannt
+
+`addopts = ["-rs"]` in `pyproject.toml`, seit dem 01.09.2026: `pytest` nennt am Ende jedes
+Laufs jeden übersprungenen Test samt Grund.
+
+Ohne die Angabe sieht **„grün mit dreißig stillen Skips" aus wie „grün"**. Genau das ist der
+Fall, wenn `tools/en-de.sqlite3` oder die echten EPUBs fehlen: `pytest` überspringt dann 32
+Tests (`needs_dictionary`, `needs_epub`, `needs_calibre_split_epub`), ohne dass der Prüfende
+etwas davon sähe. Zwei Durchsichten hintereinander mussten das mit einem zweiten
+vollständigen Lauf ausräumen, bevor sie „grün" glauben durften. Als `addopts` steht die
+Liste in jedem Lauf da, ohne dass jemand daran denken muss — dieselbe Falle, die
+dokumentation.md §10, „Woran sie prüft: gegen den Commit, nicht gegen den Arbeitsbaum" als
+Anweisung an den Menschen beschreibt, hier als Anzeige im Werkzeug.
+
 ### Nachtrag 17.08.2026: `mypy --strict` trägt die spaCy-Typen
 
 Ob die strenge Typprüfung mit spaCy im Spiel noch trägt, stand hier als offener Punkt und
@@ -1457,6 +1548,14 @@ den Stand in Git geprüft.
   deutet den Fehlschlag leicht als „Anker falsch abgeschrieben" statt als
   Zeilenende-Unterschied. `* text=auto eol=lf` würde das beenden, berührt aber als einmalige
   Umstellung jede Datei und gehört deshalb entschieden, nicht nebenbei gemacht
+- **Ob `pytest` eine Zeitschranke bekommt.** Bei einer Suite, die über austauschbare
+  Konsolen befragt (`cli.main` bekommt `read_line` und `write_line` gereicht), ist der
+  Hänger die wahrscheinlichste Fehlerform — und die einzige, die überhaupt kein Ergebnis
+  liefert: kein Rot, kein Grün, nur ein Lauf, der nicht endet. Die konkrete Ursache ist
+  beseitigt (eine Testkonsole, die eine unbekannte Frage riet, statt zu werfen — Durchsicht
+  ee34796), ein Netz gibt es nicht. `pytest-timeout` wäre die naheliegende Antwort und damit
+  eine neue Abhängigkeit: vor der Aufnahme nach Regel 15 zu prüfen, und nach Regel 14 erst
+  mit einem zweiten Anlass zu bauen
 - `tools/` bleibt von der Typprüfung ausgenommen — Messskripte, reine Standardbibliothek.
   Ob das so bleibt, ist offen; berührt wird es erst, wenn ein Messskript in den Kern wandert
 - **Auslieferung** (Nuitka, PyInstaller) bleibt offen wie in Abschnitt 1; sie berührt das
@@ -2017,9 +2116,9 @@ umgekehrt.
 Zu den Programmbestandteilen zählt bisher genau eine Datei:
 
 - `libreverbum/wordfreq_en_5000.txt` — die eingefrorene Grundwortschatzliste für die
-  Vorbelegung des Profils (konzept.md, „Bewusst offen", erster Punkt). Sie steht unter CC
-  BY-SA 4.0 statt unter der MIT-Lizenz des übrigen Repositoriums; Herkunft und Auflagen im
-  `NOTICE`, Bildungsregeln im Kopf der Datei und in `tools/build_wordfreq_preset.py`
+  Vorbelegung des Profils (Abschnitt 11). Sie steht unter CC BY-SA 4.0 statt unter der
+  MIT-Lizenz des übrigen Repositoriums; Herkunft und Auflagen im `NOTICE`, Bildungsregeln im
+  Kopf der Datei und in `tools/build_wordfreq_preset.py`
 
 Die Trennung aus Abschnitt 4 bleibt auch hier unberührt: Die Liste wird mit keiner anderen
 Datenquelle verschmolzen, sondern beim Anlegen des Profils **eingelesen** — das Ergebnis
@@ -2169,6 +2268,271 @@ freien Quellen. Dafür braucht es keinen Weitergabezwang.
   und ist für die Einräumung von Rechten ausreichend. Sollte die Lizenz je **durchgesetzt**
   werden — gegen jemanden, der den Vermerk entfernt —, ist ein zurechenbarer Name die
   belastbarere Angabe. Zu entscheiden erst, wenn dieser Fall absehbar wird
+
+---
+
+## 11. Vorbelegung des Grundwortschatzes — entschieden
+
+**Beim Anlegen des Profils wählt der Nutzer sein Sprachniveau; die häufigsten N englischen
+Grundformen gelten dann als bekannt. Die Rangfolge stammt aus `wordfreq` 3.1.1, wird aber
+als eingefrorene Datei `libreverbum/wordfreq_en_5000.txt` ausgeliefert — `wordfreq` selbst
+ist keine Abhängigkeit des Projekts.**
+
+| | |
+|---|---|
+| Zuordnung Niveau → N | A1 = 500, A2 = 1.000, B1 = 2.000, B2 = 3.500, C1 = 5.000, dazu „keine Angabe" (es wird nichts vorbelegt). Feste Tabelle `pipeline.PRESET_WORD_COUNT`, keine Einstellung |
+| Quelle | `wordfreq` 3.1.1, Liste `large_en` (`wordlist="best"`), 60.000 Formen exportiert und über spaCy `en_core_web_md` auf Grundformen zurückgeführt — dieselbe Modellfassung wie in `extraction.py` |
+| Ausgeliefert | `libreverbum/wordfreq_en_5000.txt`: 5.000 Grundformen in Rangfolge, in jedem Lauf per SHA-256 gegen Veränderung gesichert |
+| Erzeugt von | `tools/build_wordfreq_preset.py` — das einzige Skript in `tools/`, das nicht misst, sondern erzeugt, und dafür zwei Umgebungen braucht |
+| Lizenz | **CC BY-SA 4.0**, nicht die MIT-Lizenz des übrigen Bestands — siehe „Lizenzlage" unten |
+| Gebucht als | `KnowledgeState.KNOWN` mit `Origin.PRESET`, ohne Buch und Kapitel (Abschnitt 4, „Fassung 2") |
+
+Ein Präfix beliebiger Länge dieser Datei ist eine gültige Auswahl der k häufigsten
+Grundformen; welche Länge ein Niveau bekommt, entscheidet allein `PRESET_WORD_COUNT`. Die
+Datei trägt selbst **keine** Wortart — welche `pos` eine vorbelegte Grundform bekommt,
+entscheidet das Wörterbuch beim Nachschlagen, nicht die Liste.
+
+**Gefragt wird einmal, beim Anlegen des Profils** (`cli.main._ask_cefr_level`), und eine
+Leereingabe ist dabei keine Antwort. Beide Antworten sind teuer und ungleich teuer: Eine
+gewählte Stufe trägt mit einem Tastendruck tausende ungesehene Behauptungen ins Profil,
+„keine Angabe" verzichtet ganz darauf und verlangt später einen Kalibrierdurchlauf von
+Hand (konzept.md, Schritt 4, Nachtrag 26.08.2026). „Keine Angabe" muss deshalb
+ausgeschrieben werden — anders als beim Wörterbuchbezug, wo Enter Zustimmung bedeutet
+(Abschnitt 2, „Nachtrag 27.08.2026"), und aus demselben Grund, aus dem die Leereingabe in
+der Triage eine Falle ist (Abschnitt 9, „Offene Punkte").
+
+Geschrieben wird in **einer** Transaktion (`profile.record_preset`) — ganz oder gar nicht.
+Das ist nicht bloß Sauberkeit: Gemessen an 18.644 Ereignissen kostet `record_event` in
+einer Schleife 441 s, weil jeder Aufruf für sich committet; dasselbe Sammelschreiben in
+einer Transaktion 0,2 s. Scheitert die Vorbelegung, entfernt
+`cli.main._apply_vocabulary_preset` die gerade erst angelegte Profildatei wieder — sonst
+bliebe ein leeres, aber existierendes Profil zurück, und weil der nächste Lauf allein die
+Dateiexistenz prüft, bliebe es für immer unvorbelegt, ohne dass etwas meldet.
+
+### Warum die Frage überhaupt aufkam
+
+Die Abnahme T17 hat sie am 26.08.2026 aufgeworfen und als ersten Punkt unter konzept.md,
+„Bewusst offen" hinterlassen: Bei 940 Worteinträgen und 25 Plätzen zeigt die Triage
+ausschließlich Kernwortschatz (`life`, `had`, `said`, `made`), während der Wortschatz, der
+das Kapitel tatsächlich schwer macht, sie in keinem Durchlauf erreicht. Das verletzt kein
+Abnahmekriterium und trotzdem den Zweck des Programms.
+
+> Ein leeres Profil ist kein neutraler Ausgangszustand. Es ist die Behauptung, der Nutzer
+> könne kein einziges englisches Wort — und der erste Durchlauf je Buch geht dafür als
+> Kalibrierdurchlauf drauf (konzept.md, Schritt 4, Nachtrag 26.08.2026).
+
+### `wordfreq` statt WikDicts `importance` — gemessen
+
+`importance` lag bereits vor (Abschnitt 2, „Häufigkeitsdaten — unkritisch") und hätte weder
+eine neue Quelle noch eine neue Lizenzfrage gekostet. Beide Ranglisten sind deshalb am
+31.08.2026 an demselben Kapitel gegeneinander gemessen worden: `tools/dorian_gray.epub`
+Nr. 10, das Kapitel aus T17, mit 940 Wort- und 118 Wendungseinträgen und 2.240 Vorkommen.
+
+Das entscheidende Maß ist nicht die Abdeckung, sondern die Triage — wie viele der 25
+gezeigten Einträge gehören zu den 2.000 häufigsten englischen Grundformen, sind also
+mutmaßlich längst bekannt und hätten den Platz nicht verbrauchen dürfen?
+
+| bei N = 2.000 | zu häufig unter den 25 gezeigten | davon ohne Bedeutung |
+|---|---|---|
+| `importance` | **18 von 25** | 3 |
+| `wordfreq` | **4 von 25** | 6 |
+
+Und diese vier sind restlos Wörterbuchlücken — `no`, `much`, `right`, `ago` —, kein
+Ranglistenfehler.
+
+**`importance` misst keine Texthäufigkeit.** Es misst, wie gut ein Begriff in Wiktionary
+belegt ist: `the` steht auf Rang 1.125, `seem` auf 5.807, `least` auf 66.423, während die
+Ränge 1 bis 50 an `water`, `cat`, `dog`, `donkey` und `cinnamon` gehen. Für eine
+Wörterbuchoberfläche ist das ein sinnvolles Maß; für einen Grundwortschatz ist es das
+falsche.
+
+Die Abdeckung sagt dasselbe leiser: Bei N = 2.000 deckt `wordfreq` 51,2 % der Grundformen
+und 70,7 % der Vorkommen des Kapitels, `importance` 47,4 % und 63,0 % — und `wordfreq`
+schreibt dafür 21 % **weniger** Bedeutungen ins Profil.
+
+Der Preis von `wordfreq` steht auf der anderen Seite: 8,0 % seiner 2.000 besten Grundformen
+haben gar keine Wörterbuchzeile, 12,8 % keine unter einer Inhaltswortart; bei `importance`
+sind es 0 % beziehungsweise 4,8 % — kein Wunder, es stammt aus derselben Datei. Das ist der
+erwartbare Preis einer projektfremden Rangliste und wird in Kauf genommen: Was das
+Wörterbuch nicht kennt, wird nicht vorbelegt, sondern übergangen.
+
+### Was ein Niveau tatsächlich ins Profil trägt
+
+Nachgemessen am 01.09.2026 mit dem fertigen Code (`pipeline.write_vocabulary_preset`) gegen
+`tools/en-de.sqlite3`:
+
+| Niveau | N | Grundformen mit Wörterbucheintrag | (Grundform, Wortart)-Paare | Bedeutungen | Laufzeit |
+|---|---|---|---|---|---|
+| A1 | 500 | 422 | 730 | 2.469 | 0,13 s |
+| A2 | 1.000 | 857 | 1.393 | 4.642 | 0,19 s |
+| B1 | 2.000 | 1.743 | 2.662 | 8.044 | 0,32 s |
+| B2 | 3.500 | 2.952 | 4.279 | 11.924 | 0,47 s |
+| C1 | 5.000 | 4.117 | 5.720 | 15.114 | 0,62 s |
+
+Die B1-Zeile steht als Zusicherung in `tests/test_pipeline.py`
+(`test_write_vocabulary_preset_against_the_real_dictionary`, `needs_dictionary`); die
+übrigen stehen hier, weil die Messdatenbanken Wegwerfstände sind und dieses Dokument der
+Ort ist, an dem ein Messstand die Sitzung überlebt.
+
+Die drei mittleren Spalten bedeuten Verschiedenes und werden leicht verwechselt: Eine
+Grundform kann mehrere Wortarten tragen (`watch` als Substantiv und als Verb sind zwei
+Paare), und jedes Paar mehrere Bedeutungen (`watch` als Substantiv: *Uhr*, *Wache*).
+Gebucht wird **jede** Bedeutung eines gefundenen Paares — Kenntnis wird pro Bedeutung
+geführt (Abschnitt 4, „Kernentscheidung: Kenntnis pro Bedeutung, nicht pro Wort"), und eine
+Auswahl unter ihnen könnte nur das Modell treffen, dem hier der Belegsatz fehlt.
+
+**Was das Wörterbuch nicht kennt, wird nicht vorbelegt.** Beide Nachschlagewege liefern für
+eine Grundform ohne Fund eine leere Liste, nie einen `uncertain`-Platzhalter: Kenntnis über
+eine nicht vorhandene Bedeutung zu buchen, hieße genau das zu behaupten, wogegen Regel 10
+den Platzhalter überhaupt eingeführt hat.
+
+### Wirkung an einem echten Kapiteldurchlauf
+
+`tools/dorian_gray.epub` Nr. 10, Niveau B1, nachgemessen am 01.09.2026:
+
+| | leeres Profil | nach der Vorbelegung |
+|---|---|---|
+| Grundformen des Kapitels als bekannt erkannt | 0 von 940 | **481 von 940** |
+| deren Vorkommen | 0 von 2.240 | **1.584 von 2.240** |
+| Einträge als „neue Bedeutung eines bekannten Wortes" | 0 | **0** |
+
+Die letzte Zeile ist die wichtigere. Weil die Vorbelegung **alle** Bedeutungen einer
+gefundenen Grundform bucht, erzeugt sie den `bank`-Fall aus konzept.md §5 nicht als
+Nebenwirkung. Hätte sie nur die bestbewertete Bedeutung je Grundform gebucht, erschienen
+die übrigen Bedeutungen dieser 481 Grundformen in der Triage als „neue Bedeutung eines
+bekannten Wortes" — Fragen zu einer Unterscheidung, die der Nutzer nie getroffen hat.
+
+### Die Zuordnung Niveau → N ist geliehen, nicht gemessen
+
+A1 = 500 bis C1 = 5.000 ist eine Faustregel aus der Sprachlehrforschung für den rezeptiven
+Grundwortschatz je GER-Stufe — **keine Auszählung dieses Projekts**. Sie ist dort zudem in
+**Wortfamilien** angegeben, während unsere Liste Grundformen aus einem Web- und
+Untertitelkorpus sind; beides zählt nicht dasselbe. Belastbar ist an diesen Zahlen die
+Größenordnung, nicht die Zahl, und so sind sie zu lesen.
+
+Sie steht als feste Tabelle im Code und nicht in `config.toml`: Ein Schalter ohne zweiten
+Anwendungsfall wäre Vorratsarbeit (Regel 14), und wer die Zuordnung ändern will, ändert
+eine Zeile. Ob sie zum tatsächlichen Kenntnisstand passt, beantwortet erst der adaptive
+Vokabeltest aus Phase 2 — siehe „Offene Punkte".
+
+### Warum C2 nicht angeboten wird
+
+Nicht, weil ein C2-Lernender wenig vorzubelegen hätte; er hätte am meisten davon. Zwei
+andere Gründe:
+
+1. **Die eingefrorene Liste trägt 5.000 Grundformen.** Oberhalb von C1 ist aus ihr nichts
+   mehr auszugeben
+2. **Der Anteil ohne Wörterbucheintrag wächst mit N.** Von den 25 in der Triage gezeigten
+   Einträgen waren 2 ohne Wörterbucheintrag bei A1, 6 bei B1 und 9 bei C1; ein
+   C2-Kontingent träfe auf einen noch größeren ungedeckten Rest
+
+### Was die Vorbelegung nicht löst
+
+Sie löst die **erste** Hälfte des T17-Befunds: Der Kernwortschatz besetzt die 25 Plätze
+nicht mehr. Die zweite Hälfte löst sie nicht. Die vier Wörter, an denen T17 den Mangel
+festmachte — `listlessly`, `tawdry`, `lurid`, `courteously` —, erreichen die Triage durch
+**keine** Vorbelegung: Drei davon kommen im Kapitel genau einmal vor, und 553 der 940
+Einträge haben Häufigkeit 1; die Sortierung nach Häufigkeit kann zwischen ihnen nicht
+unterscheiden. Ein N, das groß genug wäre, um bis zu ihnen zu reichen, belegte sie selbst
+vor (`tawdry` steht auf `importance`-Rang 6.193).
+
+> **Das ist ein Rangproblem, kein Filterproblem.** Was den schweren Wortschatz nach vorn
+> bringt, hängt an den beiden anderen offenen Punkten in konzept.md — „Nachrücken in der
+> Triage" und „Fortsetzungsfrage nach der Wortobergrenze" —, nicht an einem größeren N.
+
+### Eine Zahl mit Geschichte: 8.044, nicht 8.045
+
+Die Messung vom 31.08.2026 nannte für B1 8.045 Bedeutungen, der fertige Code liefert 8.044.
+Die Differenz ist genau ein Eintrag: `go to`, Rang 410 der Liste und damit in jedem
+Kontingent enthalten — deshalb ist die Abweichung bei jedem Niveau dieselbe.
+
+Das Messskript schickte damals **jeden** Listeneintrag über den Einzelwortweg, auch die
+neun Mehrworteinträge. Dieser Weg kennt die Schwelle `score ≥ 50` nicht („Messung:
+Mehrwortausdrücke"). `go to` hat im Wörterbuch genau eine Zeile mit `lexentry`, und die
+trägt `score = 0.0`; der Wendungsweg wirft sie an der Schwelle weg — zu Recht, denn ein
+echter Kapiteldurchlauf findet `go to` ebenfalls nur über `contiguous_candidates` und
+verwirft sie dort genauso. Gebucht wäre sie eine Profilzeile gewesen, die **kein
+Kapiteldurchlauf je einlöst**.
+
+**8.044 ist richtig, 8.045 war der Messfehler.** Festgehalten, weil die 8.045 aus dem
+Bauauftrag stammte: Wer nachrechnet und beide Zahlen nebeneinander sieht, hält sonst den
+Code für falsch statt die Messung.
+
+### Lizenzlage: das Repositorium ist gemischt lizenziert
+
+`wordfreq`s Code steht unter Apache-2.0, seine **Daten unter CC BY-SA 4.0** — geprüft am
+31.08.2026 am Quellpaket `wordfreq-3.1.1.tar.gz` und nicht an einer abgerufenen Seite
+(Regel 15, „die Rohquelle entscheidet"). Eine gesondert benannte `NOTICE.md` liefert das
+Paket entgegen verbreiteter Annahme **nicht**; die Angaben stehen im Abschnitt „License"
+seiner `README.md`, der dort diese Funktion erfüllt.
+
+Die abgeleitete Liste ist **bearbeitetes Material** und steht deshalb selbst unter
+CC BY-SA 4.0:
+
+| Bestandteil | Lizenz |
+|---|---|
+| aller Code | MIT (Abschnitt 10) |
+| `libreverbum/wordfreq_en_5000.txt` | CC BY-SA 4.0 |
+
+Die Namensnennung ist erfüllt: Das `NOTICE` gibt die Angaben aus `wordfreq`s README wörtlich
+wieder, einschließlich Robyn Speer namentlich und der Zusatzauflage für die
+SUBTLEX-Bestandteile samt ihren fünf Zitaten. `NOTICE` steht dafür in `license-files` von
+`pyproject.toml` und wird mit ausgeliefert; `LICENSE` und README nennen die Ausnahme
+ebenfalls, damit sie nicht allein in einer Datei steht, die niemand öffnet.
+
+> **Die Liste bleibt vom Wörterbuch getrennt** (Abschnitt 2, „Lizenzfalle: nicht
+> verschmelzen"). Sie wird beim Anlegen des Profils **eingelesen**; was daraus entsteht,
+> sind Profilzeilen — keine Fremdschlüssel, keine gemeinsame Datenbank (Abschnitt 9, „Die
+> Regel gilt für Nutzerdaten, nicht für Programmbestandteile").
+
+Mit ihr stehen jetzt **zwei** CC-BY-SA-Quellen im Bestand, und anders als das Wörterbuch
+wird diese mitgeliefert. Der offene Punkt aus Abschnitt 2 — welche Fassung der
+CC-BY-SA-Lizenz WikDict/DBnary genau meint — ist damit von hypothetisch auf fällig
+gewechselt.
+
+### Zwei Festlegungen zur Bildung der Liste
+
+Beim Erzeugen sind zwei Entscheidungen nebenbei gefallen, die die Rangfolge bestimmen. Sie
+stehen im Kopf der Datei und in `tools/build_wordfreq_preset.py`, gehören aber hierher,
+weil eine neu erzeugte Liste sie erneut treffen muss:
+
+- **Nichtalphabetische Formen verbrauchen keinen Platz von N.** Sie treffen die
+  `is_alpha`-Bedingung des Kerns nie und wären tote Plätze. Über den ganzen Export sind es
+  2.637 von 60.000 Formen
+- **Der Rang einer gefalteten Grundform ist der Rang ihrer häufigsten Oberflächenform**,
+  nicht die Summe über alle Formen. Die Summe wäre die genauere Rechnung, setzt aber eine
+  vollständige Faltung voraus; bei einer unvollständigen verschöbe sie jeden Rang darunter,
+  und zwar unbemerkt
+
+Für N = 5.000 verbraucht die Liste damit 6.927 alphabetische Formen aus den Rängen 1 bis
+7.036. Neun Einträge zerfallen bei der Lemmatisierung in mehrere Token und werden dadurch
+zu Mehrworteinträgen (`go to`, `can not`, `do not` …). Tote Plätze sind auch sie nicht: Der
+Kern bildet auf dem Wendungsweg nach derselben Vorschrift Grundformen aus mehreren Token.
+
+### Offene Punkte
+
+- **Die Zuordnung Niveau → N ist geliehen und in diesem Projekt nicht gemessen.** Ob sie
+  zum tatsächlichen Kenntnisstand eines Nutzers passt, beantwortet erst der adaptive
+  Vokabeltest aus Phase 2 (konzept.md, „Phasenplan"), der denselben Wert schätzt, statt ihn
+  zu erfragen. Bis dahin ist die Vorbelegung so gut wie die Selbsteinschätzung, auf der sie
+  beruht
+- **Eine Vorbelegung lässt sich nicht zurücknehmen.** `Origin.PRESET` macht sie für immer
+  erkennbar, aber `KnowledgeState` kennt keinen Wert für „die frühere Aussage wird
+  zurückgenommen". `FORGOTTEN` dafür zu nehmen wäre der teuerste Fehler an dieser Stelle: Es
+  zerstörte die Unterscheidung „nie gekonnt" gegen „wieder vergessen", auf der der
+  Anki-Rückkanal aus Phase 3 aufbaut (Abschnitt 4, „Kernentscheidung: Ereignisfolge statt
+  überschreibbarem Zustand"). Ein eigener Wert kostet einen Enum-Eintrag und keine
+  Migration; zu entscheiden ist er, wenn der Fall eintritt, nicht vorher. Heute bleibt als
+  Rückweg allein, `profil.sqlite3` von Hand zu löschen — die Kommandozeile sagt beim
+  Vorbelegen ausdrücklich, dass sie einmalig ist
+- **Die Vorbelegung deckt von einem Mehrwortausdruck nur die `pos = ""`-Fassung ab.** Ein
+  Kapiteldurchlauf erzeugt Wendungen auf zwei Wegen, und
+  `extraction.extract_particle_verb_candidates` vergibt `pos = "VERB"`; für ein echtes
+  Partikelverb wie `give up` entstünde beides, und die `VERB`-Fassung träfe die Vorbelegung
+  nicht. Heute greift das nicht — keiner der neun Mehrworteinträge der eingefrorenen Liste
+  entsteht auf dem Partikelweg (an 28 echten Kapiteln geprüft, es sind Kontraktionen und
+  Präpositionalfügungen), und die Liste ist per SHA-256 eingefroren. Eine neu erzeugte
+  Liste mit einem echten Partikelverb wäre hier nachzuziehen
 
 ---
 
