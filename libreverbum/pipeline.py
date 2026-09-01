@@ -742,19 +742,34 @@ def _load_wordfreq_lemmas(count: int) -> list[str]:
 @dataclass(frozen=True)
 class PresetResult:
     """Ergebnis von `write_vocabulary_preset` (Bauschritt 4/5 der Vorbelegung,
-    31.08.2026): zwei Zählungen, die zusammen sagen, was tatsächlich gebucht wurde, statt
-    nur „fertig" zu melden (Auftragstext) — beide auf `0`, wenn `cefr_level` „keine Angabe"
-    war.
+    31.08.2026): Zählungen, die zusammen sagen, was tatsächlich gebucht wurde, statt
+    nur „fertig" zu melden (Auftragstext) — alle vier auf `0`, wenn `cefr_level` „keine
+    Angabe" war.
 
     `lemma_pos_pairs`: wie viele (Grundform, Wortart)-Paare der vorbelegten Liste
     überhaupt einen Wörterbucheintrag hatten (`dictionary.pos_variants`, „Alle (Grundform,
     Wortart)-Paare …"; ein Mehrwortausdruck zählt als ein Paar, seine Wortart ist immer
     leer). `senses`: wie viele Bedeutungen daraus insgesamt gebucht wurden — mindestens so
     viele wie Paare, meist mehr, weil ein Paar mehrere Bedeutungen tragen kann (`watch` als
-    Substantiv: „Uhr", „Wache")."""
+    Substantiv: „Uhr", „Wache").
+
+    `covered_lemmas`: wie viele der `total_lemmas` vorbelegten Grundformen **überhaupt**
+    einen Wörterbucheintrag hatten — unabhängig davon, wie viele (Grundform, Wortart)-Paare
+    eine einzelne Grundform beisteuert (`watch` zählt hier einmal, nicht zweimal wie in
+    `lemma_pos_pairs`). `total_lemmas`: `len(lemma_texts)`, also die Länge des angefragten
+    Kontingents (`PRESET_WORD_COUNT[cefr_level]`, sofern die Liste so viele Zeilen trägt).
+
+    (Befund leicht c, Durchsicht ee34796): „rund 500 Grundformen" in der Kommandozeilenfrage
+    versprach mehr, als am Ende gebucht wird — gegen `tools/en-de.sqlite3` gemessen haben
+    von den 500 A1-Grundformen 78 (15,6 %) gar keinen Wörterbucheintrag, bei C1 sind es 883
+    von 5.000 (17,7 %). `covered_lemmas`/`total_lemmas` machen diese Lücke in der
+    Abschlussmeldung sichtbar, statt sie hinter Paar- und Bedeutungszahlen zu verstecken,
+    die größer als das Kontingent aussehen."""
 
     lemma_pos_pairs: int
     senses: int
+    covered_lemmas: int
+    total_lemmas: int
 
 
 def write_vocabulary_preset(
@@ -826,9 +841,9 @@ def write_vocabulary_preset(
     `preset`-Ereignis. Dass es beim einen Aufruf bleibt, stellt der Aufrufer sicher.
 
     Schreibt über `profile.record_preset` in einer einzigen Transaktion (ganz oder gar
-    nicht) und liefert `PresetResult` mit beiden Zählungen."""
+    nicht) und liefert `PresetResult` mit allen vier Zählungen."""
     if cefr_level is None:
-        return PresetResult(lemma_pos_pairs=0, senses=0)
+        return PresetResult(lemma_pos_pairs=0, senses=0, covered_lemmas=0, total_lemmas=0)
 
     # (Befund b, Durchsicht d8d5954): Die billige Prüfung vor die teure Arbeit — dasselbe
     # Muster wie in `run_chapter` für die Wörterbuchdatei (Befund 3, Review T15). Ohne sie
@@ -853,12 +868,19 @@ def write_vocabulary_preset(
 
     senses: list[Sense] = []
     lemma_pos_pairs = 0
+    covered_lemmas = 0
     for variants in single_word_variants:
+        # (Befund leicht c, Durchsicht ee34796): eine Grundform zählt hier höchstens
+        # einmal, auch wenn sie mehrere Wortarten trägt (watch NOUN + watch VERB) —
+        # anders als lemma_pos_pairs unten, das genau diese Wortartvielfalt zählen soll.
+        if variants:
+            covered_lemmas += 1
         for _lemma, group in variants:
             lemma_pos_pairs += 1
             senses.extend(group)
     for matches in expression_matches:
         if matches:
+            covered_lemmas += 1
             lemma_pos_pairs += 1
         senses.extend(matches)
 
@@ -879,4 +901,9 @@ def write_vocabulary_preset(
         profile.record_preset(con, events, cefr_level)
     finally:
         con.close()
-    return PresetResult(lemma_pos_pairs=lemma_pos_pairs, senses=len(events))
+    return PresetResult(
+        lemma_pos_pairs=lemma_pos_pairs,
+        senses=len(events),
+        covered_lemmas=covered_lemmas,
+        total_lemmas=len(lemma_texts),
+    )

@@ -9,6 +9,7 @@ Weg über spaCy, damit sie schnell bleiben.
 
 from __future__ import annotations
 
+import enum
 import sqlite3
 import zipfile
 from pathlib import Path
@@ -125,6 +126,46 @@ def _write_config(
     )
 
 
+def _read_common_or_triage(
+    prompt: str, pending: list[str], *, on_triage: Callable[[list[str]], str]
+) -> str:
+    """Gemeinsamer Kern der drei Testkonsolen unten (Befund mittel 2, Durchsicht
+    ee34796): Erkennt die vier Fragen, die `cli/` heute je Konsole tatsächlich stellt, an
+    ihrem Prompt-Wortlaut — die drei generischen (`Neu anlegen`, `Sprachniveau`,
+    `Sammelaktion`) hier direkt, die Einzelabfrage der Triage (`[k]enne ich  [l]ernen
+    [s]kip  [q]uit`, `cli/interaction.py`) über `on_triage`, dessen Antwort je Konsole
+    verschieden ist.
+
+    Vor dieser Behebung lieferte der Rückfallzweig jeder Konsole ungeprüft die
+    Triage-Antwort — eine vergessene fünfte Frage (etwa `Kapitel wählen`) bekam damit
+    stillschweigend `"l"`/`"k"`/`"s"` statt einer erkennbaren Antwort, und
+    `_ask_cefr_level` fragte 200.000-mal erneut, bis ein Prüfer von Hand einen Zähler
+    einbaute — ein Hänger, der nicht sagt, was fehlt. Eine unbekannte Frage wirft jetzt
+    `AssertionError` mit ihrem eigenen Wortlaut: Ein vollständiger Testlauf wird dann rot
+    statt endlos zu warten.
+
+    Verfälschungsprobe: Fehlte der `raise` am Ende (Rückfall auf `on_triage` wie zuvor),
+    hinge eine Konsole ohne `Sprachniveau`-Zweig wieder endlos an `_ask_cefr_level` —
+    genau das hat der Test unten (`test_a_console_without_a_branch_…_raises_instead_of_
+    hanging`) vor der Behebung nachgewiesen (200.000 Wiederholungen, dann Abbruch von
+    Hand statt eines roten Tests)."""
+    if "Neu anlegen" in prompt:
+        pending.clear()
+        return "j"
+    if "Sprachniveau" in prompt:
+        # Bauschritt 4/5 der Vorbelegung (31.08.2026): diese Konsolen prüfen die Triage,
+        # nicht die Niveaufrage — „keine Angabe" hält das Profil leer, wie vor deren
+        # Einführung, und lässt die übrige Prüfvorrichtung unverändert.
+        pending.clear()
+        return "keine angabe"
+    if "Sammelaktion" in prompt:
+        pending.clear()
+        return ""
+    if "[k]enne ich" in prompt:
+        return on_triage(pending)
+    raise AssertionError(f"unerwartete Frage: {prompt!r}")
+
+
 class _ScriptedConsole:
     """Testkonsole für einen vollständigen Lauf: beantwortet die Sammelaktions- und
     Profil-Bestätigungsfrage generisch und entscheidet bei jeder Einzelfrage anhand der
@@ -143,22 +184,13 @@ class _ScriptedConsole:
         self._pending.append(text)
 
     def read(self, prompt: str) -> str:
-        if "Neu anlegen" in prompt:
-            self._pending.clear()
-            return "j"
-        if "Sprachniveau" in prompt:
-            # Bauschritt 4/5 der Vorbelegung (31.08.2026): diese Konsolen prüfen die
-            # Triage, nicht die Niveaufrage — „keine Angabe" hält das Profil leer, wie vor
-            # deren Einführung, und lässt die übrige Prüfvorrichtung unverändert.
-            self._pending.clear()
-            return "keine angabe"
-        if "Sammelaktion" in prompt:
-            self._pending.clear()
-            return ""
-        first_line = self._pending[0] if self._pending else ""
-        self._pending.clear()
-        word = first_line.split(" (", 1)[0]
-        return "l" if word in self._learn_words else "s"
+        def _on_triage(pending: list[str]) -> str:
+            first_line = pending[0] if pending else ""
+            pending.clear()
+            word = first_line.split(" (", 1)[0]
+            return "l" if word in self._learn_words else "s"
+
+        return _read_common_or_triage(prompt, self._pending, on_triage=_on_triage)
 
 
 class _MarkOneWordKnownConsole:
@@ -176,22 +208,13 @@ class _MarkOneWordKnownConsole:
         self._pending.append(text)
 
     def read(self, prompt: str) -> str:
-        if "Neu anlegen" in prompt:
-            self._pending.clear()
-            return "j"
-        if "Sprachniveau" in prompt:
-            # Bauschritt 4/5 der Vorbelegung (31.08.2026): diese Konsolen prüfen die
-            # Triage, nicht die Niveaufrage — „keine Angabe" hält das Profil leer, wie vor
-            # deren Einführung, und lässt die übrige Prüfvorrichtung unverändert.
-            self._pending.clear()
-            return "keine angabe"
-        if "Sammelaktion" in prompt:
-            self._pending.clear()
-            return ""
-        first_line = self._pending[0] if self._pending else ""
-        self._pending.clear()
-        word = first_line.split(" (", 1)[0]
-        return "k" if word == self._known_word else "s"
+        def _on_triage(pending: list[str]) -> str:
+            first_line = pending[0] if pending else ""
+            pending.clear()
+            word = first_line.split(" (", 1)[0]
+            return "k" if word == self._known_word else "s"
+
+        return _read_common_or_triage(prompt, self._pending, on_triage=_on_triage)
 
 
 class _RejectWordConsole:
@@ -214,20 +237,27 @@ class _RejectWordConsole:
         self._pending.append(text)
 
     def read(self, prompt: str) -> str:
-        if "Neu anlegen" in prompt:
-            self._pending.clear()
-            return "j"
-        if "Sprachniveau" in prompt:
-            # Bauschritt 4/5 der Vorbelegung (31.08.2026): diese Konsolen prüfen die
-            # Triage, nicht die Niveaufrage — „keine Angabe" hält das Profil leer, wie vor
-            # deren Einführung, und lässt die übrige Prüfvorrichtung unverändert.
-            self._pending.clear()
-            return "keine angabe"
-        if "Sammelaktion" in prompt:
-            self._pending.clear()
-            return ""
-        self._pending.clear()
-        return "s"
+        def _on_triage(pending: list[str]) -> str:
+            pending.clear()
+            return "s"
+
+        return _read_common_or_triage(prompt, self._pending, on_triage=_on_triage)
+
+
+def test_a_console_without_a_branch_for_an_unknown_prompt_raises_instead_of_hanging() -> None:
+    """Befund mittel 2 (Durchsicht ee34796): Eine Frage, die keine der drei Konsolen
+    kennt, wirft `AssertionError` mit dem Wortlaut der Frage, statt eine geratene Antwort
+    zu liefern. Vor dieser Behebung lieferte der Rückfallzweig ungeprüft die
+    Triage-Antwort — eine vergessene fünfte Frage bekam damit still `"l"`/`"k"`/`"s"`
+    statt einer erkennbaren Antwort; an `_ask_cefr_level` ohne den `Sprachniveau`-Zweig
+    fragte das 200.000-mal erneut, bis ein Prüfer von Hand einen Zähler einbaute, statt
+    dass ein Testlauf rot wurde.
+
+    Verfälschungsprobe: Ersetzt man den `raise` am Ende von `_read_common_or_triage`
+    durch `return on_triage(pending)` (der Stand vor dieser Behebung), liefert der Aufruf
+    unten `"s"` statt einer Ausnahme — dieser Test war daran rot, siehe Bericht."""
+    with pytest.raises(AssertionError, match="Kapitel wählen"):
+        _read_common_or_triage("Kapitel wählen: ", [], on_triage=lambda _pending: "s")
 
 
 def test_acceptance_6_a_second_run_does_not_ask_about_words_marked_known(
@@ -587,6 +617,47 @@ def test_ask_cefr_level_accepts_each_level_case_insensitively() -> None:
         assert _ask_cefr_level_with_single_answer(expected.value.upper()) == expected
 
 
+def test_ask_cefr_level_prompt_and_error_message_are_built_from_cefr_level(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Befund leicht b (Durchsicht ee34796): Sowohl die Stufenliste im Prompt als auch in
+    der Fehlermeldung bauen sich aus `CefrLevel` auf, statt von Hand gepflegt zu sein —
+    käme `C2` hinzu oder fiele eine Stufe weg, zeigte eine von Hand geschriebene
+    Aufzählung sonst still eine falsche Auswahl, und kein Test bemerkte es.
+
+    Geprüft mit einer testweise verkürzten Aufzählung: Ein hartkodiertes
+    „A1/A2/B1/B2/C1"/„A1, A2, B1, B2, C1" (die frühere Fassung, die zufällig mit der
+    echten Aufzählung übereinstimmt und diesen Test sonst nicht von einer echten
+    Ableitung unterscheiden könnte) bestünde diesen Test nicht — er war daran rot, siehe
+    Bericht."""
+
+    class _ShortLevel(enum.Enum):
+        A1 = "a1"
+        B1 = "b1"
+
+    monkeypatch.setattr(cli_main, "CefrLevel", _ShortLevel)
+    monkeypatch.setattr(pipeline, "PRESET_WORD_COUNT", {_ShortLevel.A1: 10, _ShortLevel.B1: 20})
+    prompts: list[str] = []
+    written: list[str] = []
+    answers = iter(["falsch", "a1"])
+
+    def _read(prompt: str) -> str:
+        prompts.append(prompt)
+        return next(answers)
+
+    level = cli_main._ask_cefr_level(_read, written.append)
+
+    # level ist zur Laufzeit ein _ShortLevel-Mitglied, statisch bleibt die Signatur bei
+    # `CefrLevel | None` — über .value verglichen, damit mypy hier keinen unerreichbaren
+    # Identitätsvergleich zwischen zwei unverwandten Aufzählungen meldet.
+    assert level is not None
+    assert level.value == "a1"
+    assert prompts == ["Sprachniveau [A1/B1] oder 'keine Angabe': "] * 2
+    assert any(
+        line == "Ungültige Eingabe - A1, B1 oder 'keine Angabe' erwartet." for line in written
+    )
+
+
 def test_apply_vocabulary_preset_with_no_answer_writes_and_reports_nothing(
     tmp_path: Path, mini_dictionary_db: Path
 ) -> None:
@@ -616,7 +687,14 @@ def test_apply_vocabulary_preset_calls_write_vocabulary_preset_with_the_chosen_l
 ) -> None:
     """Eine gewählte Stufe ruft `pipeline.write_vocabulary_preset` mit genau dieser Stufe
     auf — eine Attrappe an Stelle des echten Nachschlagens hält den Test unabhängig vom
-    Wörterbuchinhalt."""
+    Wörterbuchinhalt.
+
+    (Befund mittel 4, Durchsicht ee34796): Die frühere Zusicherung
+    (`any("3" in line and "4" in line for line in written)`) prüfte nur, dass irgendwo
+    eine 3 und eine 4 auftauchen — vertauscht man `result.lemma_pos_pairs` und
+    `result.senses` in der Meldung, bleibt sie unbemerkt grün. Geprüft wird deshalb der
+    zusammenhängende Wortlaut mit Einheit, dazu die neuen Felder aus `PresetResult`
+    (Befund leicht c) und der Hinweis auf die Einmaligkeit (Befund leicht d)."""
     calls: list[CefrLevel | None] = []
 
     def _stub(
@@ -627,7 +705,7 @@ def test_apply_vocabulary_preset_calls_write_vocabulary_preset_with_the_chosen_l
         timestamp: object,
     ) -> pipeline.PresetResult:
         calls.append(cefr_level)
-        return pipeline.PresetResult(lemma_pos_pairs=3, senses=4)
+        return pipeline.PresetResult(lemma_pos_pairs=3, senses=4, covered_lemmas=2, total_lemmas=5)
 
     monkeypatch.setattr("cli.main.pipeline.write_vocabulary_preset", _stub)
     written: list[str] = []
@@ -641,7 +719,78 @@ def test_apply_vocabulary_preset_calls_write_vocabulary_preset_with_the_chosen_l
     )
 
     assert calls == [CefrLevel.B2]
-    assert any("3" in line and "4" in line for line in written)
+    assert any(
+        "3 (Grundform, Wortart)-Paare" in line and "4 Bedeutungen" in line for line in written
+    )
+    assert any("2 von 5 Grundformen" in line for line in written)
+    # (Befund leicht d, Durchsicht ee34796): Nicht nur auf „einmalig" prüfen — das Wort
+    # steht schon in der Einleitung von `_ask_cefr_level` (Zeile „… einmalig
+    # vorbelegen:"), eine schwächere Zusicherung wäre also selbst dann grün, wenn der
+    # eigentliche Hinweis am Ende der Meldung fehlte.
+    assert "Die Vorbelegung ist einmalig und lässt sich nicht zurücknehmen." in written
+
+
+def test_apply_vocabulary_preset_removes_a_newly_created_profile_file_when_the_preset_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Befund mittel 1 (Durchsicht ee34796): `pipeline.write_vocabulary_preset` legt die
+    Profildatei über `profile.open_profile` **vor** dem eigentlichen Schreiben an —
+    `profile.record_preset` ist nur für die Ereignisse atomar, nicht für die Datei.
+    Scheitert der Aufruf danach, blieb bislang eine leere, aber existierende Profildatei
+    zurück, und `_run` fragt beim nächsten Lauf nicht mehr nach, weil es allein die
+    Dateiexistenz prüft (`profile_is_new = not cfg.profile_path.is_file()`). Die Attrappe
+    hier bildet genau dieses Verhalten nach: Sie legt die Datei an, bevor sie fehlschlägt.
+
+    Verfälschungsprobe: Ohne die Bereinigung (kein `try`/`except` um den Aufruf in
+    `_apply_vocabulary_preset`) bliebe die Attrappen-Datei nach dem Fehlschlag bestehen —
+    dieser Test war daran rot, siehe Bericht."""
+    profile_path = tmp_path / "profil.sqlite3"
+
+    def _failing_but_creates_the_file(
+        *, profile_path: Path, **_kwargs: object
+    ) -> pipeline.PresetResult:
+        profile_path.write_bytes(b"")
+        raise ValueError("Profil ließ sich nicht schreiben (Attrappe für diesen Test).")
+
+    monkeypatch.setattr("cli.main.pipeline.write_vocabulary_preset", _failing_but_creates_the_file)
+    answers = iter(["a1"])
+
+    with pytest.raises(ValueError, match="Profil ließ sich nicht schreiben"):
+        cli_main._apply_vocabulary_preset(
+            dictionary_path=tmp_path / "en-de.sqlite3",
+            profile_path=profile_path,
+            read_line=lambda _prompt: next(answers),
+            write_line=lambda _text: None,
+        )
+
+    assert not profile_path.exists()
+
+
+def test_apply_vocabulary_preset_keeps_a_pre_existing_profile_file_when_the_preset_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ergänzung zum vorigen Test: Existierte die Profildatei schon **vor** diesem
+    Aufruf, räumt ein Fehlschlag sie nicht weg — gelöscht wird nur, was dieser Aufruf
+    selbst angelegt hat (Befund mittel 1, Durchsicht ee34796, „Sei beim Löschen
+    vorsichtig")."""
+    profile_path = tmp_path / "profil.sqlite3"
+    profile_path.write_bytes(b"vorhandener Inhalt")
+
+    def _failing(**_kwargs: object) -> pipeline.PresetResult:
+        raise ValueError("Profil ließ sich nicht schreiben (Attrappe für diesen Test).")
+
+    monkeypatch.setattr("cli.main.pipeline.write_vocabulary_preset", _failing)
+    answers = iter(["a1"])
+
+    with pytest.raises(ValueError, match="Profil ließ sich nicht schreiben"):
+        cli_main._apply_vocabulary_preset(
+            dictionary_path=tmp_path / "en-de.sqlite3",
+            profile_path=profile_path,
+            read_line=lambda _prompt: next(answers),
+            write_line=lambda _text: None,
+        )
+
+    assert profile_path.read_bytes() == b"vorhandener Inhalt"
 
 
 def test_main_does_not_ask_for_a_cefr_level_when_the_profile_already_exists(
@@ -674,7 +823,17 @@ def test_main_returns_a_nonzero_exit_code_when_the_preset_fails(
 ) -> None:
     """Regel 13: Scheitert die Vorbelegung, bricht der Lauf sichtbar ab, statt den Fehler
     nur zu protokollieren und weiterzulaufen — kein `except` in `_apply_vocabulary_preset`
-    fängt ihn ab, er läuft bis zu `main`s eigenem Fang durch."""
+    fängt ihn ab und schluckt ihn, er läuft bis zu `main`s eigenem Fang durch.
+
+    (Befund mittel 3, Durchsicht ee34796): Die beiden früheren Zusicherungen
+    (`exit_code != 0`, `"Fehler" in line`) waren erfüllt, gleichgültig ob die Vorbelegung
+    überhaupt aufgerufen wurde oder ob ihr Fehlschlag stillschweigend geschluckt wurde —
+    der Lauf endet ohnehin an der nicht existierenden EPUB-Datei
+    (`tmp_path / "irrelevant.epub"`). Weder `if profile_is_new:` durch `if False:` ersetzt
+    (Vorbelegung nie aufgerufen) noch `write_vocabulary_preset` in ein schluckendes
+    `try/except Exception: pass` gehüllt hätte diesen Test damals rot werden lassen. Die
+    Attrappe zählt ihre Aufrufe jetzt selbst mit, und geprüft wird ihr eigener Wortlaut,
+    nicht nur das Wort „Fehler"."""
     data_dir = tmp_path / "data"
     _write_config(
         data_dir,
@@ -682,8 +841,12 @@ def test_main_returns_a_nonzero_exit_code_when_the_preset_fails(
         model_name="",
         dictionary_path=mini_dictionary_db,
     )
+    calls: list[CefrLevel | None] = []
 
-    def _failing_preset(**_kwargs: object) -> pipeline.PresetResult:
+    def _failing_preset(
+        *, cefr_level: CefrLevel | None, **_kwargs: object
+    ) -> pipeline.PresetResult:
+        calls.append(cefr_level)
         raise ValueError("Profil ließ sich nicht schreiben (Attrappe für diesen Test).")
 
     monkeypatch.setattr("cli.main.pipeline.write_vocabulary_preset", _failing_preset)
@@ -697,7 +860,80 @@ def test_main_returns_a_nonzero_exit_code_when_the_preset_fails(
     )
 
     assert exit_code != 0
-    assert any("Fehler" in line for line in written)
+    assert calls == [CefrLevel.A1]
+    assert any(
+        "Profil ließ sich nicht schreiben (Attrappe für diesen Test)." in line for line in written
+    )
+
+
+def test_main_calls_write_vocabulary_preset_with_the_answered_level_on_a_new_profile(
+    tmp_path: Path, mini_dictionary_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Gegenstück zu `test_main_does_not_ask_for_a_cefr_level_when_the_profile_already_exists`,
+    das bislang nur die Nein-Hälfte festnagelte (Befund mittel 3, Durchsicht ee34796,
+    dritter Teil): Bei einem **neuen** Profil ruft `main` `pipeline.write_vocabulary_preset`
+    tatsächlich mit der geantworteten Stufe auf.
+
+    Verfälschungsprobe: Ersetzt man `if profile_is_new:` in `cli/main.py` durch
+    `if False:`, bleibt `calls` leer — dieser Test war daran rot, siehe Bericht."""
+    data_dir = tmp_path / "data"
+    _write_config(
+        data_dir,
+        model_url="http://localhost:11434/v1",
+        model_name="",
+        dictionary_path=mini_dictionary_db,
+    )
+    calls: list[CefrLevel | None] = []
+
+    def _stub(
+        *,
+        dictionary_path: Path,
+        profile_path: Path,
+        cefr_level: CefrLevel | None,
+        timestamp: object,
+    ) -> pipeline.PresetResult:
+        calls.append(cefr_level)
+        return pipeline.PresetResult(lemma_pos_pairs=0, senses=0, covered_lemmas=0, total_lemmas=0)
+
+    monkeypatch.setattr("cli.main.pipeline.write_vocabulary_preset", _stub)
+    answers = iter(["j", "c1"])
+
+    exit_code = main(
+        [str(tmp_path / "fehlt.epub"), "--data-dir", str(data_dir)],
+        read_line=lambda _prompt: next(answers),
+        write_line=lambda _text: None,
+    )
+
+    assert exit_code == 1
+    assert calls == [CefrLevel.C1]
+
+
+def test_main_reports_eof_in_german_instead_of_a_raw_traceback(
+    tmp_path: Path, mini_dictionary_db: Path
+) -> None:
+    """Befund leicht a (Durchsicht ee34796): Eine abgeschnittene Eingabe (Pipe-Ende,
+    umgeleitetes `/dev/null`) lässt `read_line` `EOFError` werfen — für jede der fünf
+    Rückfragen aus `cli/`, hier an der ersten geprüft (`_confirm_new_profile`). Vor dieser
+    Behebung lief das bis zu einem nackten, achtzeiligen englischen Traceback durch: Regel
+    13 (sichtbarer Abbruch) war erfüllt, die Sprachregel (dokumentation.md §1) nicht."""
+    data_dir = tmp_path / "data"
+    _write_config(
+        data_dir,
+        model_url="http://localhost:11434/v1",
+        model_name="",
+        dictionary_path=mini_dictionary_db,
+    )
+    written: list[str] = []
+
+    def _eof(_prompt: str) -> str:
+        raise EOFError
+
+    exit_code = main(
+        ["irrelevant.epub", "--data-dir", str(data_dir)], read_line=_eof, write_line=written.append
+    )
+
+    assert exit_code == 1
+    assert written[-1] == "Abgebrochen — keine Eingabe mehr."
 
 
 def test_full_run_learns_a_word_and_an_expression_and_exports_them(

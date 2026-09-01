@@ -131,21 +131,43 @@ def _ask_cefr_level(read_line: ReadLine, write_line: WriteLine) -> CefrLevel | N
     eine Antwort, die ausdrücklich eingegeben werden muss, keine Vorgabe für Enter — beide
     Antworten sind teuer und ungleich teuer: Eine gewählte Stufe trägt mit einem
     Tastendruck tausende ungesehene Behauptungen ins Profil, „keine Angabe" verzichtet
-    ganz darauf und verlangt später einen Kalibrierdurchlauf von Hand."""
+    ganz darauf und verlangt später einen Kalibrierdurchlauf von Hand.
+
+    (Befund leicht b, Durchsicht ee34796): Die Stufenliste im Prompt baut sich aus
+    `CefrLevel` auf, statt Hand gepflegt zu sein — käme `C2` hinzu oder fiele eine Stufe
+    weg, zeigte eine von Hand geschriebene Aufzählung sonst still eine falsche Auswahl, und
+    kein Test bemerkte es. Bei den Zahlen ist die Lage seit `PRESET_WORD_COUNT` schon
+    sauber (`test_preset_word_count_covers_every_cefr_level`); hier zieht dieselbe
+    Vorrichtung für die Stufennamen nach."""
+    level_names = [level.value.upper() for level in CefrLevel]
     write_line("Beim Anlegen lässt sich der englische Grundwortschatz einmalig vorbelegen:")
     write_line("Die häufigsten Grundformen des gewählten Niveaus gelten dann als bekannt.")
     for level in CefrLevel:
         word_count = _format_count(pipeline.PRESET_WORD_COUNT[level])
         write_line(f"  {level.value.upper()} - rund {word_count} Grundformen")
     write_line("  keine Angabe - nichts wird vorbelegt, das Profil beginnt leer")
+    # (Befund leicht c, Durchsicht ee34796): Nicht jede der „rund N" Grundformen hat
+    # tatsächlich einen Wörterbucheintrag (bei A1 rund 16 %, bei C1 rund 18 %, gemessen
+    # gegen tools/en-de.sqlite3) — die Abschlussmeldung in `_apply_vocabulary_preset` nennt
+    # die tatsächliche Deckung, dieser Hinweis kündigt sie schon hier vorsichtig an.
+    write_line(
+        "Nicht jede Grundform hat einen Wörterbucheintrag - die Abschlussmeldung nennt "
+        "die tatsächliche Deckung."
+    )
     while True:
-        answer = read_line("Sprachniveau [A1/A2/B1/B2/C1] oder 'keine Angabe': ").strip().lower()
+        answer = (
+            read_line(f"Sprachniveau [{'/'.join(level_names)}] oder 'keine Angabe': ")
+            .strip()
+            .lower()
+        )
         if answer in ("keine angabe", "keine"):
             return None
         try:
             return CefrLevel(answer)
         except ValueError:
-            write_line("Ungültige Eingabe - A1, A2, B1, B2, C1 oder 'keine Angabe' erwartet.")
+            write_line(
+                f"Ungültige Eingabe - {', '.join(level_names)} oder 'keine Angabe' erwartet."
+            )
 
 
 def _apply_vocabulary_preset(
@@ -155,26 +177,58 @@ def _apply_vocabulary_preset(
     — nur beim Anlegen eines neuen Profils aufzurufen, nie bei einem vorhandenen (der
     Aufrufer in `_run` entscheidet das, nicht diese Funktion).
 
-    Kein `except` um `pipeline.write_vocabulary_preset` (Regel 13): Scheitert die
-    Vorbelegung, bricht der Lauf ab und `main` meldet den Fehler — dank der Atomarität aus
-    `profile.record_preset` steht das Profil dann entweder ganz vorbelegt da oder gar
-    nicht, nie halb.
+    `pipeline.write_vocabulary_preset` bricht bei einem Fehlschlag sichtbar ab (Regel 13),
+    und die Ausnahme läuft **unverändert** bis zu `main`s eigenem Fang durch — das `except`
+    unten protokolliert nichts und läuft nicht weiter, es räumt nur eine Nebenwirkung auf,
+    bevor es weiterreicht (siehe nächster Absatz).
+
+    (Befund mittel 1, Durchsicht ee34796): `profile.record_preset` ist nur für die
+    **Ereignisse** atomar — `pipeline.write_vocabulary_preset` ruft davor aber bereits
+    `profile.open_profile` auf, das eine fehlende Profildatei anlegt und das volle Schema
+    schreibt, **bevor** `record_preset` überhaupt beginnt. Scheitert `record_preset`
+    danach, blieb bislang eine leere, aber existierende Profildatei zurück (65.536 Byte,
+    `user_version = 2`, kein Ereignis) — und `_run` prüft beim nächsten Lauf allein die
+    Dateiexistenz (`profile_is_new = not cfg.profile_path.is_file()`), fragt also nie
+    wieder, das Profil bleibt für immer unvorbelegt. Diese Funktion merkt sich deshalb, ob
+    die Datei **vor** dem Aufruf schon da war; scheitert der Aufruf und war sie es nicht,
+    entfernt sie die gerade erst entstandene Datei wieder, bevor die Ausnahme
+    weiterläuft — der nächste Lauf sieht dann wieder eine fehlende Datei und fragt erneut.
+    Existierte die Datei schon vorher (dieser Fall tritt über den Aufrufer in `_run` heute
+    nie ein, siehe oben), bleibt sie unangetastet: Gelöscht wird nur, was dieser Aufruf
+    selbst angelegt hat.
 
     Bei „keine Angabe" bleibt es bei der Frage selbst — `write_vocabulary_preset` öffnet
     die Profildatei dann nicht einmal, also gibt es nichts zu melden."""
     cefr_level = _ask_cefr_level(read_line, write_line)
-    result = pipeline.write_vocabulary_preset(
-        dictionary_path=dictionary_path,
-        profile_path=profile_path,
-        cefr_level=cefr_level,
-        timestamp=datetime.now(UTC),
-    )
+    profile_existed_before = profile_path.is_file()
+    try:
+        result = pipeline.write_vocabulary_preset(
+            dictionary_path=dictionary_path,
+            profile_path=profile_path,
+            cefr_level=cefr_level,
+            timestamp=datetime.now(UTC),
+        )
+    except Exception:
+        if not profile_existed_before and profile_path.is_file():
+            profile_path.unlink()
+        raise
     if cefr_level is not None:
+        # (Befund leicht c, Durchsicht ee34796): Paare und Bedeutungen sind Zahlen, die
+        # größer als das Kontingent aussehen — die Deckung (wie viele der angefragten
+        # Grundformen überhaupt einen Wörterbucheintrag hatten) stand bisher nirgends.
         write_line(
             f"Vorbelegung Niveau {cefr_level.value.upper()}: "
+            f"{_format_count(result.covered_lemmas)} von {_format_count(result.total_lemmas)} "
+            f"Grundformen hatten einen Wörterbucheintrag, "
             f"{_format_count(result.lemma_pos_pairs)} (Grundform, Wortart)-Paare, "
             f"{_format_count(result.senses)} Bedeutungen als bekannt gebucht."
         )
+        # (Befund leicht d, Durchsicht ee34796): Kein Rückweg — ein zweiter Aufruf hängt an
+        # (technik.md, Docstring `write_vocabulary_preset`, „Für den einmaligen Aufruf …
+        # gedacht"), einzige Korrektur heute ist `profil.sqlite3` von Hand zu löschen.
+        # Bewusst offen (siehe Auftragstext); dieser Hinweis macht die Einmaligkeit
+        # wenigstens sichtbar.
+        write_line("Die Vorbelegung ist einmalig und lässt sich nicht zurücknehmen.")
 
 
 def _confirm_dictionary_fetch(
@@ -479,6 +533,17 @@ def main(
     args = _parse_args(argv)
     try:
         return _run(args, read_line=read_line, write_line=write_line)
+    except EOFError:
+        # (Befund leicht a, Durchsicht ee34796): Eine abgeschnittene Eingabe (Pipe-Ende,
+        # umgeleitetes /dev/null) lässt `input()` — und damit jedes `read_line` der fünf
+        # Rückfragen in `cli/` — `EOFError` werfen. Vor dieser Behebung lief das bis zum
+        # nackten, englischen Traceback durch: Regel 13 (sichtbarer Abbruch) war erfüllt,
+        # die Sprachregel (dokumentation.md §1) nicht. Ein Fang neben dem für
+        # `ValueError`/`FileNotFoundError`, statt ihn dort einzureihen: EOF ist kein
+        # Kernfehlschlag mit eigener deutscher Meldung, sondern eine Eigenschaft der
+        # Konsole selbst, also eine eigene, generische Meldung.
+        write_line("Abgebrochen — keine Eingabe mehr.")
+        return 1
     except (ValueError, FileNotFoundError) as error:
         # REGEL (dokumentation.md §4 Regel 13, „Kein except, das nur protokolliert und
         # weiterläuft"): Dieser Fang meldet und **beendet** den Lauf (exit-Code 1), er

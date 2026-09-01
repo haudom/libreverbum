@@ -1547,6 +1547,11 @@ def test_write_vocabulary_preset_books_every_dictionary_sense_not_only_the_best_
 
     assert result.lemma_pos_pairs == 5
     assert result.senses == 6
+    # (Befund leicht c, Durchsicht ee34796): drei Grundformen mit Treffer (watch, red,
+    # street) von den 500 angefragten A1-Grundformen — unabhängig davon, dass watch und
+    # red je zwei Wortarten und damit zwei lemma_pos_pairs beisteuern.
+    assert result.covered_lemmas == 3
+    assert result.total_lemmas == 500
 
     con = profile.open_profile(profile_path)
     watch_noun_translations = {
@@ -1649,6 +1654,10 @@ def test_write_vocabulary_preset_does_not_book_a_lemma_without_a_dictionary_entr
 
     assert result.lemma_pos_pairs == 0
     assert result.senses == 0
+    # (Befund leicht c, Durchsicht ee34796): angefragt wurden trotzdem alle 500
+    # A1-Grundformen — covered_lemmas bleibt 0, total_lemmas nicht.
+    assert result.covered_lemmas == 0
+    assert result.total_lemmas == 500
     reader = profile.open_profile(profile_path)
     assert reader.execute("SELECT count(*) FROM event").fetchone()[0] == 0
     assert reader.execute("SELECT count(*) FROM sense").fetchone()[0] == 0
@@ -1672,6 +1681,8 @@ def test_write_vocabulary_preset_with_no_answer_writes_nothing(
 
     assert result.lemma_pos_pairs == 0
     assert result.senses == 0
+    assert result.covered_lemmas == 0
+    assert result.total_lemmas == 0
     assert not profile_path.exists()
 
 
@@ -1751,3 +1762,8 @@ def test_write_vocabulary_preset_against_the_real_dictionary(
 
     assert result.lemma_pos_pairs == 2662
     assert result.senses == 8044
+    # (Befund leicht c, Durchsicht ee34796): 1.743 der 2.000 B1-Grundformen (87,2 %) haben
+    # einen Wörterbucheintrag, 257 (12,8 %) nicht — gemessen gegen tools/en-de.sqlite3,
+    # dieselbe Vorrichtung wie oben für lemma_pos_pairs/senses.
+    assert result.covered_lemmas == 1743
+    assert result.total_lemmas == 2000
