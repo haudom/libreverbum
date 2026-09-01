@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -37,7 +38,7 @@ from cli import config, export, interaction, model
 from cli.display import finish_progress_line, safe_print, safe_print_progress
 from cli.interaction import ReadLine, WriteLine
 from libreverbum import dictionary, epub, extraction, pipeline, profile
-from libreverbum.entities import CardDirection
+from libreverbum.entities import CardDirection, CefrLevel
 
 if TYPE_CHECKING:
     import sqlite3
@@ -108,6 +109,72 @@ def _confirm_new_profile(profile_path: Path, read_line: ReadLine, write_line: Wr
     write_line(f"Unter {profile_path} liegt noch kein Profil.")
     answer = read_line("Neu anlegen? [j/N] ").strip().lower()
     return answer in ("j", "ja")
+
+
+def _format_count(count: int) -> str:
+    """Deutsches Tausendertrennzeichen (`8.044`), wie `_format_word_count` unten — eigene,
+    kleinere Funktion, weil hier nie ein unbekannter Wert vorkommt (anders als beim
+    Wortumfang je Kapitel, der `None` kennt)."""
+    return f"{count:,}".replace(",", ".")
+
+
+def _ask_cefr_level(read_line: ReadLine, write_line: WriteLine) -> CefrLevel | None:
+    """Fragt beim Anlegen eines neuen Profils nach dem Sprachniveau für die einmalige
+    Vorbelegung des Grundwortschatzes (konzept.md, „Bewusst offen", „Woher der Nutzer
+    seinen Grundwortschatz bekommt", Bauschritt 4/5, 31.08.2026).
+
+    Leere oder ungültige Eingabe fragt erneut, statt stillschweigend eine Stufe zu wählen
+    oder die Vorbelegung zu überspringen — Vorbild ist `cli.interaction._ask_action`.
+    Genau das darf hier nicht passieren, was technik.md §9, „Offene Punkte" für den
+    Triage-Prompt beschreibt: Eine Leereingabe, die als Antwort durchgeht, hat dort schon
+    zwei Abnahmeläufe gekostet, bevor die Ursache feststand. „Keine Angabe" ist deshalb
+    eine Antwort, die ausdrücklich eingegeben werden muss, keine Vorgabe für Enter — beide
+    Antworten sind teuer und ungleich teuer: Eine gewählte Stufe trägt mit einem
+    Tastendruck tausende ungesehene Behauptungen ins Profil, „keine Angabe" verzichtet
+    ganz darauf und verlangt später einen Kalibrierdurchlauf von Hand."""
+    write_line("Beim Anlegen lässt sich der englische Grundwortschatz einmalig vorbelegen:")
+    write_line("Die häufigsten Grundformen des gewählten Niveaus gelten dann als bekannt.")
+    for level in CefrLevel:
+        word_count = _format_count(pipeline.PRESET_WORD_COUNT[level])
+        write_line(f"  {level.value.upper()} - rund {word_count} Grundformen")
+    write_line("  keine Angabe - nichts wird vorbelegt, das Profil beginnt leer")
+    while True:
+        answer = read_line("Sprachniveau [A1/A2/B1/B2/C1] oder 'keine Angabe': ").strip().lower()
+        if answer in ("keine angabe", "keine"):
+            return None
+        try:
+            return CefrLevel(answer)
+        except ValueError:
+            write_line("Ungültige Eingabe - A1, A2, B1, B2, C1 oder 'keine Angabe' erwartet.")
+
+
+def _apply_vocabulary_preset(
+    *, dictionary_path: Path, profile_path: Path, read_line: ReadLine, write_line: WriteLine
+) -> None:
+    """Fragt das Sprachniveau ab und schreibt die Vorbelegung (Bauschritt 4/5, 31.08.2026)
+    — nur beim Anlegen eines neuen Profils aufzurufen, nie bei einem vorhandenen (der
+    Aufrufer in `_run` entscheidet das, nicht diese Funktion).
+
+    Kein `except` um `pipeline.write_vocabulary_preset` (Regel 13): Scheitert die
+    Vorbelegung, bricht der Lauf ab und `main` meldet den Fehler — dank der Atomarität aus
+    `profile.record_preset` steht das Profil dann entweder ganz vorbelegt da oder gar
+    nicht, nie halb.
+
+    Bei „keine Angabe" bleibt es bei der Frage selbst — `write_vocabulary_preset` öffnet
+    die Profildatei dann nicht einmal, also gibt es nichts zu melden."""
+    cefr_level = _ask_cefr_level(read_line, write_line)
+    result = pipeline.write_vocabulary_preset(
+        dictionary_path=dictionary_path,
+        profile_path=profile_path,
+        cefr_level=cefr_level,
+        timestamp=datetime.now(UTC),
+    )
+    if cefr_level is not None:
+        write_line(
+            f"Vorbelegung Niveau {cefr_level.value.upper()}: "
+            f"{_format_count(result.lemma_pos_pairs)} (Grundform, Wortart)-Paare, "
+            f"{_format_count(result.senses)} Bedeutungen als bekannt gebucht."
+        )
 
 
 def _confirm_dictionary_fetch(
@@ -284,9 +351,20 @@ def _run(args: argparse.Namespace, *, read_line: ReadLine, write_line: WriteLine
         # 44 s statt 1,1 s (technik.md §3, „Nachtrag 17.08.2026") — lautlos.
         dictionary.ensure_index(cfg.dictionary_path)
 
+    # Vor der Bestätigung festgehalten: Danach steht mit `_confirm_new_profile`s eigenem
+    # `True` nicht mehr auseinander, ob die Datei schon da war oder gerade erst bestätigt
+    # wurde — die Niveaufrage gehört aber nur zum zweiten Fall (Bauschritt 4/5, 31.08.2026).
+    profile_is_new = not cfg.profile_path.is_file()
     if not _confirm_new_profile(cfg.profile_path, read_line, write_line):
         write_line("Abgebrochen — kein Profil angelegt.")
         return 1
+    if profile_is_new:
+        _apply_vocabulary_preset(
+            dictionary_path=cfg.dictionary_path,
+            profile_path=cfg.profile_path,
+            read_line=read_line,
+            write_line=write_line,
+        )
 
     structure = epub.read_structure(args.epub_path)
     if structure.notice:

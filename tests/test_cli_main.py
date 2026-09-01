@@ -18,15 +18,13 @@ import pytest
 
 from cli import main as cli_main
 from cli.main import _build_parser, main
-from libreverbum import dictionary, epub
-from libreverbum.entities import Book
+from libreverbum import dictionary, epub, pipeline, profile
+from libreverbum.entities import Book, CefrLevel
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
     from conftest import ModelServerDouble
-
-    from libreverbum import pipeline
 
 # ------------------------------------------------------------------------- Mini-EPUB
 #
@@ -148,6 +146,12 @@ class _ScriptedConsole:
         if "Neu anlegen" in prompt:
             self._pending.clear()
             return "j"
+        if "Sprachniveau" in prompt:
+            # Bauschritt 4/5 der Vorbelegung (31.08.2026): diese Konsolen prüfen die
+            # Triage, nicht die Niveaufrage — „keine Angabe" hält das Profil leer, wie vor
+            # deren Einführung, und lässt die übrige Prüfvorrichtung unverändert.
+            self._pending.clear()
+            return "keine angabe"
         if "Sammelaktion" in prompt:
             self._pending.clear()
             return ""
@@ -175,6 +179,12 @@ class _MarkOneWordKnownConsole:
         if "Neu anlegen" in prompt:
             self._pending.clear()
             return "j"
+        if "Sprachniveau" in prompt:
+            # Bauschritt 4/5 der Vorbelegung (31.08.2026): diese Konsolen prüfen die
+            # Triage, nicht die Niveaufrage — „keine Angabe" hält das Profil leer, wie vor
+            # deren Einführung, und lässt die übrige Prüfvorrichtung unverändert.
+            self._pending.clear()
+            return "keine angabe"
         if "Sammelaktion" in prompt:
             self._pending.clear()
             return ""
@@ -207,6 +217,12 @@ class _RejectWordConsole:
         if "Neu anlegen" in prompt:
             self._pending.clear()
             return "j"
+        if "Sprachniveau" in prompt:
+            # Bauschritt 4/5 der Vorbelegung (31.08.2026): diese Konsolen prüfen die
+            # Triage, nicht die Niveaufrage — „keine Angabe" hält das Profil leer, wie vor
+            # deren Einführung, und lässt die übrige Prüfvorrichtung unverändert.
+            self._pending.clear()
+            return "keine angabe"
         if "Sammelaktion" in prompt:
             self._pending.clear()
             return ""
@@ -463,6 +479,225 @@ def test_main_declines_to_create_a_profile_without_confirmation(
 
     assert exit_code == 1
     assert not (data_dir / "profil.sqlite3").is_file()
+
+
+# ------------------------------- Niveaufrage bei der Vorbelegung (Bauschritt 4/5, 31.08.2026)
+#
+# `_ask_cefr_level` fragt beim Anlegen eines neuen Profils nach dem Sprachniveau für die
+# einmalige Vorbelegung des Grundwortschatzes (konzept.md, „Bewusst offen", „Woher der
+# Nutzer seinen Grundwortschatz bekommt"). Die ersten beiden Tests unten nageln die
+# Hauptanforderung des Auftrags fest: Weder eine leere noch eine ungültige Eingabe wählt
+# stillschweigend eine Stufe oder überspringt die Frage — genau das hat den Triage-Prompt
+# schon zwei Abnahmeläufe gekostet (technik.md §9, „Offene Punkte"). `_confirm_new_profile`
+# bekommt hier außerdem den eigenen Test, den es bislang nur beiläufig hatte.
+
+
+def test_confirm_new_profile_returns_true_without_asking_for_an_existing_file(
+    tmp_path: Path,
+) -> None:
+    """Bei einer vorhandenen Profildatei liefert `_confirm_new_profile` `True`, ohne
+    `read_line` überhaupt aufzurufen — `_no_read` ließe den Test scheitern, würde doch
+    gefragt."""
+    profile_path = tmp_path / "profil.sqlite3"
+    profile_path.write_bytes(b"")
+
+    assert cli_main._confirm_new_profile(profile_path, _no_read, lambda _text: None) is True
+
+
+def test_confirm_new_profile_declines_on_empty_or_other_input(tmp_path: Path) -> None:
+    """Vorgabe bei bloßem Enter ist Ablehnung, nicht Zustimmung (Docstring von
+    `_confirm_new_profile`) — hier direkt geprüft, nicht nur beiläufig über einen vollen
+    Lauf wie in `test_main_declines_to_create_a_profile_without_confirmation`."""
+    profile_path = tmp_path / "profil.sqlite3"
+
+    assert (
+        cli_main._confirm_new_profile(profile_path, lambda _prompt: "", lambda _text: None) is False
+    )
+    assert (
+        cli_main._confirm_new_profile(profile_path, lambda _prompt: "nein", lambda _text: None)
+        is False
+    )
+
+
+def test_confirm_new_profile_confirms_on_j_or_ja(tmp_path: Path) -> None:
+    profile_path = tmp_path / "profil.sqlite3"
+
+    assert (
+        cli_main._confirm_new_profile(profile_path, lambda _prompt: "j", lambda _text: None) is True
+    )
+    assert (
+        cli_main._confirm_new_profile(profile_path, lambda _prompt: "ja", lambda _text: None)
+        is True
+    )
+
+
+def test_ask_cefr_level_asks_again_on_empty_input_instead_of_choosing_a_level() -> None:
+    """Die Hauptanforderung des Auftrags: Eine Leereingabe wählt keine Stufe, sondern
+    fragt erneut — genau die Falle, an der der Triage-Prompt (technik.md §9, „Offene
+    Punkte") schon zwei Abnahmeläufe verloren hat, darf hier nicht entstehen.
+
+    Verfälschungsprobe: Verhielte sich eine Leereingabe wie „keine Angabe" (`answer in
+    ("", "keine angabe", "keine")` statt nur der beiden Wortformen), läse der zweite
+    Eintrag des Antwortiterators nie — der Test bliebe grün, weil `next(answers)` gar
+    nicht ein zweites Mal aufgerufen würde und `level` trotzdem `None` wäre. Erst die
+    zusätzliche Zusicherung auf die Meldung „Ungültige Eingabe" macht die Probe scharf;
+    ohne sie wäre der Test bei dieser Verfälschung fälschlich grün geblieben."""
+    written: list[str] = []
+    answers = iter(["", "keine angabe"])
+
+    level = cli_main._ask_cefr_level(lambda _prompt: next(answers), written.append)
+
+    assert level is None
+    assert any("Ungültige Eingabe" in line for line in written)
+
+
+def test_ask_cefr_level_asks_again_on_invalid_input_instead_of_skipping_the_question() -> None:
+    """Eine vertippte Antwort (»B7«, »x«, »8L«) wählt weder eine Stufe noch überspringt
+    sie die Frage — sie fragt erneut, wie `cli.interaction._ask_action` es bei der Triage
+    vormacht. Drei Fehlversuche, dann eine gültige Stufe."""
+    written: list[str] = []
+    answers = iter(["B7", "x", "8L", "b1"])
+
+    level = cli_main._ask_cefr_level(lambda _prompt: next(answers), written.append)
+
+    assert level == CefrLevel.B1
+    assert sum(1 for line in written if "Ungültige Eingabe" in line) == 3
+
+
+def test_ask_cefr_level_explicit_no_answer_returns_none() -> None:
+    """„Keine Angabe" muss ausdrücklich eingegeben werden — hier direkt geprüft, nicht
+    nur über den vollen Lauf."""
+    answers = iter(["keine Angabe"])
+
+    level = cli_main._ask_cefr_level(lambda _prompt: next(answers), lambda _text: None)
+
+    assert level is None
+
+
+def _ask_cefr_level_with_single_answer(answer: str) -> CefrLevel | None:
+    """Eigene Funktion statt eines Lambdas in der Schleife unten (Ruff B023): `answers`
+    wäre sonst eine Schleifenvariable, die der Lambda-Ausdruck nicht bindet — hier ist
+    sie in jedem Aufruf eine frische, lokale Variable."""
+    answers = iter([answer])
+    return cli_main._ask_cefr_level(lambda _prompt: next(answers), lambda _text: None)
+
+
+def test_ask_cefr_level_accepts_each_level_case_insensitively() -> None:
+    for expected in CefrLevel:
+        assert _ask_cefr_level_with_single_answer(expected.value.upper()) == expected
+
+
+def test_apply_vocabulary_preset_with_no_answer_writes_and_reports_nothing(
+    tmp_path: Path, mini_dictionary_db: Path
+) -> None:
+    """„Keine Angabe" schreibt keine Ereignisse und setzt kein Niveau (Auftragstext) — mit
+    dem echten `pipeline.write_vocabulary_preset` über `_apply_vocabulary_preset`, der
+    Verkettung aus Frage und Schreiben. `write_vocabulary_preset` öffnet die Profildatei
+    bei „keine Angabe" nicht einmal (`tests/test_pipeline.py`,
+    `test_write_vocabulary_preset_with_no_answer_writes_nothing`) — dieselbe Zusicherung
+    hier über den Aufruf aus `cli.main`."""
+    profile_path = tmp_path / "profil.sqlite3"
+    written: list[str] = []
+    answers = iter(["keine angabe"])
+
+    cli_main._apply_vocabulary_preset(
+        dictionary_path=mini_dictionary_db,
+        profile_path=profile_path,
+        read_line=lambda _prompt: next(answers),
+        write_line=written.append,
+    )
+
+    assert not profile_path.exists()
+    assert not any("gebucht" in line for line in written)
+
+
+def test_apply_vocabulary_preset_calls_write_vocabulary_preset_with_the_chosen_level(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Eine gewählte Stufe ruft `pipeline.write_vocabulary_preset` mit genau dieser Stufe
+    auf — eine Attrappe an Stelle des echten Nachschlagens hält den Test unabhängig vom
+    Wörterbuchinhalt."""
+    calls: list[CefrLevel | None] = []
+
+    def _stub(
+        *,
+        dictionary_path: Path,
+        profile_path: Path,
+        cefr_level: CefrLevel | None,
+        timestamp: object,
+    ) -> pipeline.PresetResult:
+        calls.append(cefr_level)
+        return pipeline.PresetResult(lemma_pos_pairs=3, senses=4)
+
+    monkeypatch.setattr("cli.main.pipeline.write_vocabulary_preset", _stub)
+    written: list[str] = []
+    answers = iter(["b2"])
+
+    cli_main._apply_vocabulary_preset(
+        dictionary_path=tmp_path / "en-de.sqlite3",
+        profile_path=tmp_path / "profil.sqlite3",
+        read_line=lambda _prompt: next(answers),
+        write_line=written.append,
+    )
+
+    assert calls == [CefrLevel.B2]
+    assert any("3" in line and "4" in line for line in written)
+
+
+def test_main_does_not_ask_for_a_cefr_level_when_the_profile_already_exists(
+    tmp_path: Path, mini_dictionary_db: Path
+) -> None:
+    """Bei einem vorhandenen Profil wird die Niveaufrage nicht gestellt — anders als beim
+    Anlegen. `_no_read` lässt den Lauf an der ersten Frage scheitern; da Wörterbuch und
+    Profil schon bereitstehen, bricht der Lauf stattdessen erst an der (absichtlich
+    ungültigen) EPUB-Datei ab, ohne dass `read_line` je aufgerufen wurde."""
+    data_dir = tmp_path / "data"
+    _write_config(
+        data_dir,
+        model_url="http://localhost:11434/v1",
+        model_name="",
+        dictionary_path=mini_dictionary_db,
+    )
+    profile.open_profile(data_dir / "profil.sqlite3").close()
+
+    exit_code = main(
+        [str(tmp_path / "fehlt.epub"), "--data-dir", str(data_dir)],
+        read_line=_no_read,
+        write_line=lambda _text: None,
+    )
+
+    assert exit_code == 1
+
+
+def test_main_returns_a_nonzero_exit_code_when_the_preset_fails(
+    tmp_path: Path, mini_dictionary_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regel 13: Scheitert die Vorbelegung, bricht der Lauf sichtbar ab, statt den Fehler
+    nur zu protokollieren und weiterzulaufen — kein `except` in `_apply_vocabulary_preset`
+    fängt ihn ab, er läuft bis zu `main`s eigenem Fang durch."""
+    data_dir = tmp_path / "data"
+    _write_config(
+        data_dir,
+        model_url="http://localhost:11434/v1",
+        model_name="",
+        dictionary_path=mini_dictionary_db,
+    )
+
+    def _failing_preset(**_kwargs: object) -> pipeline.PresetResult:
+        raise ValueError("Profil ließ sich nicht schreiben (Attrappe für diesen Test).")
+
+    monkeypatch.setattr("cli.main.pipeline.write_vocabulary_preset", _failing_preset)
+    written: list[str] = []
+    answers = iter(["j", "a1"])
+
+    exit_code = main(
+        [str(tmp_path / "irrelevant.epub"), "--data-dir", str(data_dir)],
+        read_line=lambda _prompt: next(answers),
+        write_line=written.append,
+    )
+
+    assert exit_code != 0
+    assert any("Fehler" in line for line in written)
 
 
 def test_full_run_learns_a_word_and_an_expression_and_exports_them(
