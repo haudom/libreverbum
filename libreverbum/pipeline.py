@@ -81,8 +81,9 @@ Zwei Gründe:
    bis 206 Aufrufe, weil ein als `KNOWN` aufgelöster Eintrag zwar einen Aufruf kostet, aber
    keinen Platz von `limit` belegt). Ein künftiger Aufrufer, der nur die Auswahllisten
    braucht (etwa ein Messwerkzeug), bekommt sie weiterhin ohne Modellserver
-2. `resolve_triage_entries` bekommt `limit` **je Decksel** (`cli.interaction.WORD_LIMIT` für
-   `entries`, `EXPRESSION_LIMIT` für `expressions`, „Festlegung: getrennte Decksel",
+2. `resolve_triage_entries` bekommt `limit` **je Decksel** (`cli.interaction.
+   WORD_BLOCK_SIZE` für `entries`, `EXPRESSION_BLOCK_SIZE` für `expressions`, „Festlegung:
+   getrennte Decksel",
    `cli/interaction.py`) — zwei verschiedene Aufrufe mit zwei verschiedenen Obergrenzen. In
    `run_chapter` selbst gäbe es dafür keinen natürlichen Ort, ohne dass das Modul plötzlich
    von `cli`-Konstanten wüsste
@@ -675,8 +676,8 @@ def resolve_triage_entries(
     if limit < 1:
         # REGEL (dokumentation.md §4 Regel 13, Befund 8, Durchsicht d4f10fc): Bei `limit
         # <= 0` bräche die Schleife unten sofort ab und lieferte `remaining == entries`
-        # zurück — heute unerreichbar, weil `WORD_LIMIT` und `EXPRESSION_LIMIT` feste
-        # Konstanten sind, aber ab Bauschritt 2 der blockweisen Triage eine stille
+        # zurück — heute unerreichbar, weil `WORD_BLOCK_SIZE` und `EXPRESSION_BLOCK_SIZE`
+        # feste Konstanten sind, aber ab Bauschritt 2 der blockweisen Triage eine stille
         # Endlosschleife: Die Blockschleife läuft, solange `remaining` nicht leer ist, und
         # `remaining` schrumpft bei diesem `limit` nie. Sichtbarer Abbruch statt stillem
         # Stillstand, wie bei der `order`-Prüfung oben.

@@ -116,8 +116,8 @@ sofort ein `Event` ins Profil; ein Abbruch mitten in der Liste verliert damit nu
 nicht gestellten Entscheidungen dieses Blocks, keine bereits getroffenen.
 
 `run_triage_blocks` liefert die `Card`-Objekte **aller** durchlaufenen Blöcke als eine
-flache Liste. Sie ruft `resolve_block` erneut mit `resolution.remaining` auf, bis entweder
-nichts mehr aussteht, die Einzelabfrage mit `q` abgebrochen wurde (dann **ohne**
+flache Liste. Sie ruft `resolve_silent_block` erneut mit `resolution.remaining` auf, bis
+entweder nichts mehr aussteht, die Einzelabfrage mit `q` abgebrochen wurde (dann **ohne**
 Fortsetzungsfrage) oder der Nutzer die Fortsetzungsfrage verneint — Vorgabe bei Enter ist
 „nein", dieselbe Handhabung wie bei der Sammelaktion (Regel 13).
 
@@ -175,10 +175,19 @@ class TriagePass:
     `aborted` — wahr, wenn die Einzelabfrage (`_individual_phase`) mit `q` abgebrochen
     wurde. `run_triage_blocks` unten braucht diese Unterscheidung, um nach einem Abbruch
     die Fortsetzungsfrage zu **unterlassen** — ein `list[Card]` allein sagt nicht, ob der
-    Block vollständig durchgeklickt oder vorzeitig verlassen wurde."""
+    Block vollständig durchgeklickt oder vorzeitig verlassen wurde.
+
+    `unasked` (Befund 1/9, Durchsicht 1cfb1e4): wie viele der in **diesem** Block bereits
+    angezeigten Einträge nach einem Abbruch mit `q` nicht mehr entschieden wurden — 0,
+    wenn der Block vollständig durchgeklickt oder gar nicht abgebrochen wurde.
+    `run_triage_blocks` braucht diese Zahl, weil `resolution.remaining` allein nur den
+    Rest für den *nächsten* Block zählt: Bricht der Nutzer mitten im laufenden Block ab,
+    bleiben dessen eigene, noch nicht gestellte Einträge sonst ungezählt (Befund 9) — im
+    Auftragsbeispiel „1310 Wörter noch nicht geprüft" statt tatsächlich 1334."""
 
     cards: list[Card]
     aborted: bool
+    unasked: int = 0
 
 
 def ensure_chapter_row(
@@ -336,7 +345,7 @@ def _individual_phase(
     card_direction: CardDirection,
     read_line: ReadLine,
     write_line: WriteLine,
-) -> tuple[list[Card], bool]:
+) -> tuple[list[Card], bool, int]:
     """Fragt `to_ask` einzeln ab, in der übergebenen (nach Häufigkeit sortierten)
     Reihenfolge. `q` bricht die restliche Liste ab (Abnahmekriterium 7: „man kann
     jederzeit abbrechen, ohne das Wichtigste zu verpassen") — bereits getroffene
@@ -349,14 +358,18 @@ def _individual_phase(
     buchen und verkarten alle dieselbe eine Bedeutung, statt „kenne ich"/„überspringen" auf
     einer geratenen ersten und nur „will ich lernen" auf der vom Modell gewählten.
 
-    Liefert die Karten und, als zweites Element, ob mit `q` abgebrochen wurde (Bauschritt
+    Liefert die Karten, als zweites Element, ob mit `q` abgebrochen wurde (Bauschritt
     2/4, blockweise Triage) — `run_triage_blocks` braucht das, um nach einem Abbruch die
-    Fortsetzungsfrage zu unterlassen. `remaining` hieß dieser Parameter bis Befund 5,
-    Durchsicht d4f10fc — derselbe Name wie `TriageResolution.remaining` (dokumentation.md
-    §2), aber eine andere Bedeutung: dort der Rest nach der Blockgrenze, hier der Rest
-    innerhalb des laufenden Blocks nach der Sammelaktion."""
+    Fortsetzungsfrage zu unterlassen — und, als drittes Element, wie viele Einträge von
+    `to_ask` dabei **nicht mehr entschieden** wurden (0, wenn nicht abgebrochen wurde;
+    Befund 1/9, Durchsicht 1cfb1e4): der Eintrag, bei dem `q` fiel, zählt mit, weil auch er
+    kein `Event` erhalten hat und beim nächsten Durchlauf erneut gestellt wird. `remaining`
+    hieß der `to_ask`-Parameter bis Befund 5, Durchsicht d4f10fc — derselbe Name wie
+    `TriageResolution.remaining` (dokumentation.md §2), aber eine andere Bedeutung: dort
+    der Rest nach der Blockgrenze, hier der Rest innerhalb des laufenden Blocks nach der
+    Sammelaktion."""
     cards: list[Card] = []
-    for occurrence in to_ask:
+    for index, occurrence in enumerate(to_ask):
         entry = entries_by_occurrence[occurrence]
         for line in _entry_lines(entry):
             write_line(line)
@@ -379,7 +392,10 @@ def _individual_phase(
 
         if action == "quit":
             write_line("Abgebrochen.")
-            return cards, True
+            # (Befund 9, Durchsicht 1cfb1e4): `to_ask[index]` (der gerade angezeigte
+            # Eintrag) zählt zu den nicht entschiedenen mit — er hat kein `Event`
+            # bekommen, genau wie jeder folgende.
+            return cards, True, len(to_ask) - index
         if action == "known":
             _record(con, entry.sense, KnowledgeState.KNOWN, Origin.TRIAGE, book, chapter_number)
         elif action == "learn":
@@ -395,7 +411,7 @@ def _individual_phase(
             _record(con, entry.sense, KnowledgeState.LEARNING, Origin.TRIAGE, book, chapter_number)
         else:  # "skip"
             _record(con, entry.sense, KnowledgeState.DEFERRED, Origin.TRIAGE, book, chapter_number)
-    return cards, False
+    return cards, False, 0
 
 
 def run_triage_pass(
@@ -475,7 +491,7 @@ def run_triage_pass(
         write_line=write_line,
     )
     to_ask = [occurrence for occurrence in ordered if occurrence not in bulk_marked]
-    cards, aborted = _individual_phase(
+    cards, aborted, unasked = _individual_phase(
         con=con,
         book=book,
         chapter_number=chapter_number,
@@ -485,7 +501,7 @@ def run_triage_pass(
         read_line=read_line,
         write_line=write_line,
     )
-    return TriagePass(cards=cards, aborted=aborted)
+    return TriagePass(cards=cards, aborted=aborted, unasked=unasked)
 
 
 def _ask_continue(read_line: ReadLine, write_line: WriteLine, remaining_count: int) -> bool:
@@ -513,6 +529,16 @@ def _ask_continue(read_line: ReadLine, write_line: WriteLine, remaining_count: i
 
 _ResolveBlock = Callable[[Sequence[pipeline.VocabularyEntry]], pipeline.TriageResolution]
 
+# (Befund 4, Durchsicht 1cfb1e4): Der vorgeladene Rückruf bekommt zusätzlich das
+# Abbruchsignal, das `_BlockPrefetch.cancel` unten setzt — der Weg, auf dem
+# `cli.main._resolve_silently` erfährt, dass sein Ergebnis niemand mehr ansieht, ohne dass
+# dieses Modul den Rückruf selbst kennen muss oder `cli.main` diese Klasse. `threading.
+# Event` ist dafür bewusst die Standardbibliothek, kein eigener Typ aus einem der beiden
+# Module.
+_ResolveSilentBlock = Callable[
+    [Sequence[pipeline.VocabularyEntry], threading.Event], pipeline.TriageResolution
+]
+
 
 class _BlockPrefetch:
     """Löst einen Block im Hintergrund auf (technik.md §12, „Vorladen: der nächste Block
@@ -530,22 +556,46 @@ class _BlockPrefetch:
     erreicht den Nutzer über `join`, an der Stelle, an der tatsächlich auf das Ergebnis
     gewartet wird, nicht im Hintergrund. Ein Vorladen, das bei einem Fehlschlag einfach
     eine leere `TriageResolution` lieferte, sähe aus wie „Kapitel fertig" — der teuerste
-    stille Fehlschlag, den diese Stelle hergibt."""
+    stille Fehlschlag, den diese Stelle hergibt.
 
-    def __init__(self, resolve: _ResolveBlock, entries: Sequence[pipeline.VocabularyEntry]) -> None:
+    **Abbestellen statt nur Nichtwarten** (Befund 4, Durchsicht 1cfb1e4): Vor dieser
+    Behebung lief ein bereits gestarteter Vorladeblock nach „nein" oder `q` im Hintergrund
+    einfach weiter und verbrauchte dabei genau die Modellaufrufe, die technik.md §12,
+    Festlegung 4 als Grund für das Nichtwarten selbst nennt (gemessen: ein erster
+    Wendungsblock brauchte dadurch 7,39 s statt 3,85 s, weil sich Wendungs- und verworfene
+    Wortanfragen 1:1 auf demselben Modellserver abwechselten). `cancel()` setzt dafür ein
+    eigenes Ereignis, das der Rückruf selbst nach jedem aufgelösten Eintrag prüft
+    (`cli.main._resolve_silently`) — der Abbruch greift damit spätestens nach einem
+    weiteren, bereits laufenden Modellaufruf, nicht erst am Ende des ganzen Blocks."""
+
+    def __init__(
+        self, resolve: _ResolveSilentBlock, entries: Sequence[pipeline.VocabularyEntry]
+    ) -> None:
         self._resolve = resolve
         self._entries = entries
         self._result: pipeline.TriageResolution | None = None
         self._error: Exception | None = None
         self._done = threading.Event()
+        self._cancelled = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
 
     def start(self) -> None:
         self._thread.start()
 
+    def cancel(self) -> None:
+        """(Befund 4, Durchsicht 1cfb1e4): Bestellt den Vorladeblock ab — zu rufen, sobald
+        feststeht, dass sein Ergebnis niemand mehr ansieht (nach `q` oder nach „nein" in
+        `run_triage_blocks` unten). Setzt nur das Ereignis, wartet nicht auf den Faden:
+        Der bleibt Daemon und hört spätestens beim nächsten von `pipeline.
+        resolve_triage_entries` aufgelösten Eintrag auf, weil sein `on_progress`-Rückruf
+        genau dieses Ereignis prüft. Ein abgebrochener Vorladeblock ist kein Fehlschlag —
+        `_run` unten hält seine Ausnahme zwar wie jede andere fest, aber `join` wird für
+        ihn nie wieder aufgerufen, sie erreicht also nie den Nutzer."""
+        self._cancelled.set()
+
     def _run(self) -> None:
         try:
-            self._result = self._resolve(self._entries)
+            self._result = self._resolve(self._entries, self._cancelled)
         except Exception as error:  # im Hauptfaden erneut geworfen, siehe join unten
             self._error = error
         finally:
@@ -558,8 +608,18 @@ class _BlockPrefetch:
 
     def join(self) -> pipeline.TriageResolution:
         """Wartet auf den Hintergrundfaden und liefert sein Ergebnis — oder wirft die dort
-        aufgetretene Ausnahme erneut, im Hauptfaden, sichtbar für den Nutzer (Festlegung 2)."""
-        self._thread.join()
+        aufgetretene Ausnahme erneut, im Hauptfaden, sichtbar für den Nutzer (Festlegung 2).
+
+        (Befund 5, Durchsicht 1cfb1e4): Wartet in kurzen Abschnitten statt an einem Stück
+        — ein einzelner `Thread.join()` ohne Frist ließ ein `KeyboardInterrupt` (Strg-C)
+        erst nach dem *vollen* verbleibenden Block ankommen (gemessen: 15,0 s statt 1,5 s
+        bei einem Kontrolllauf mit `time.sleep(15)`), weil CPython ein anstehendes Signal
+        erst verarbeitet, wenn ein blockierender Aufruf zum Python-Bytecode zurückkehrt.
+        Bei einem nicht mehr antwortenden Modellserver wären das bis zu 25 × 120 s
+        Zeitüberschreitung — knapp 50 Minuten, in denen nur „Der nächste Block wird noch
+        aufgelöst …" stand und nur ein Abschießen des Prozesses half."""
+        while self._thread.is_alive():
+            self._thread.join(timeout=0.1)
         if self._error is not None:
             raise self._error
         assert self._result is not None  # `_run` setzt _error oder _result, nie keins von beiden
@@ -573,7 +633,7 @@ def run_triage_blocks(
     chapter_number: int,
     entries: Sequence[pipeline.VocabularyEntry],
     resolve_visible_block: _ResolveBlock,
-    resolve_silent_block: _ResolveBlock,
+    resolve_silent_block: _ResolveSilentBlock,
     label: str,
     card_direction: CardDirection,
     read_line: ReadLine,
@@ -606,11 +666,20 @@ def run_triage_blocks(
 
     Nach `q` (`triage_pass.aborted`) folgt **keine** Fortsetzungsfrage: Der Nutzer hat den
     Abbruch bereits erklärt, eine weitere Frage danach wäre die Frage, die er gerade
-    beantwortet hat. Ist `resolution.remaining` schon nach dem ersten Block leer, wird
-    ebenfalls nicht gefragt — es gibt nichts, womit fortgesetzt werden könnte. In beiden
+    beantwortet hat. Diese Prüfung steht deshalb **vor** der auf ein leeres
+    `resolution.remaining` (Befund 1, Durchsicht 1cfb1e4): Bricht der Nutzer im *letzten*
+    Block ab, ist `resolution.remaining` dort ebenfalls leer — die vertauschte Reihenfolge
+    meldete in genau diesem Fall fälschlich „Alle … durchgesehen", obwohl der laufende
+    Block selbst nicht vollständig durchgeklickt war (bis zu `triage_pass.unasked` Einträge
+    blieben ungesehen). Ist `resolution.remaining` dagegen **nicht** wegen eines Abbruchs,
+    sondern schon nach einem vollständig durchgeklickten ersten Block leer, wird ebenfalls
+    nicht gefragt — es gibt nichts, womit fortgesetzt werden könnte. In beiden verlassenden
     Fällen (`q`, „nein") ist ein bereits angestoßener Vorladeblock zu diesem Zeitpunkt
-    möglicherweise noch nicht fertig — sein Ergebnis wird dann schlicht **nicht abgewartet**
-    und verworfen (Festlegung 4): Der Faden ist Daemon und hält das Programmende nicht auf."""
+    möglicherweise noch nicht fertig — er wird dann nicht nur **nicht abgewartet**, sondern
+    über `_BlockPrefetch.cancel` auch **abbestellt** (Festlegung 4, Befund 4, Durchsicht
+    1cfb1e4): Der Faden ist Daemon und hält das Programmende nicht auf, läuft ohne die
+    Abbestellung aber weiter und verbraucht dabei Modellaufrufe, deren Ergebnis niemand
+    mehr ansieht."""
     cards: list[Card] = []
     resolution = resolve_visible_block(entries)
     block_number = 1
@@ -641,14 +710,26 @@ def run_triage_blocks(
         cards.extend(triage_pass.cards)
         current = resolution.remaining
 
+        if triage_pass.aborted:
+            # (Befund 1, Durchsicht 1cfb1e4): Diese Prüfung muss vor der auf ein leeres
+            # `current` stehen — sonst meldet ein Abbruch im letzten Block fälschlich
+            # „Alle … durchgesehen", weil `resolution.remaining` dort ebenfalls leer ist.
+            # (Befund 9, Durchsicht 1cfb1e4): Die gemeldete Zahl zählt zusätzlich
+            # `triage_pass.unasked` — die im laufenden Block selbst noch nicht
+            # entschiedenen Einträge, die `len(current)` allein nicht sieht.
+            write_line(f"{len(current) + triage_pass.unasked} {label} noch nicht geprüft.")
+            if prefetch is not None:
+                prefetch.cancel()
+            return cards
         if not current:
             write_line(f"Alle {label} für dieses Kapitel durchgesehen.")
             return cards
-        if triage_pass.aborted:
-            write_line(f"{len(current)} {label} noch nicht geprüft.")
-            return cards
         if not _ask_continue(read_line, write_line, len(current)):
             write_line(f"{len(current)} {label} noch nicht geprüft.")
+            assert (
+                prefetch is not None
+            )  # current ist nicht leer, siehe oben — also wurde vorgeladen
+            prefetch.cancel()
             return cards
 
         assert prefetch is not None  # current ist nicht leer, siehe oben — also wurde vorgeladen

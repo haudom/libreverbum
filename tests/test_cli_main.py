@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import enum
 import sqlite3
+import threading
 import zipfile
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -1240,3 +1241,157 @@ def test_help_text_survives_a_restricted_console_codepage() -> None:
     help_text = _build_parser().format_help()
 
     help_text.encode("cp850", errors="strict")
+
+
+def test_prefetch_resolves_the_background_block_with_a_connection_of_its_own(
+    tmp_path: Path, book_epub: Path, mini_dictionary_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Befund mittel 2 (Durchsicht 1cfb1e4, technik.md §12 Festlegung 1): Der stille
+    Rückruf für den vorgeladenen Block (`cli.main._resolve_silently`) öffnet im
+    Hintergrundfaden **seine eigene** Profilverbindung, statt die des Hauptfadens
+    weiterzuverwenden. Eine geteilte Verbindung wäre im echten Betrieb kein
+    Geschwindigkeitsproblem, sondern der in `sqlite3.ProgrammingError` sichtbare Fehler
+    "SQLite objects created in a thread can only be used in that same thread" — der
+    Hauptfaden schreibt zur selben Zeit über seine eigene Verbindung.
+
+    `pipeline.resolve_triage_entries` wird hier durch eine Attrappe ersetzt, die für
+    jeden Aufruf Faden- und Verbindungs-Identität aufzeichnet: Sie liefert beim ersten
+    Aufruf (voller Wortschatz) genau **einen** Eintrag als `remaining`, beim zweiten
+    (dieser eine Eintrag) eine leere `TriageResolution` — die Blockschleife entsteht damit
+    unabhängig von `interaction.WORD_BLOCK_SIZE` zuverlässig zweimal: einmal im Hauptfaden
+    (`resolve_visible_block`), einmal im Hintergrundfaden (`resolve_silent_block`).
+
+    Verfälschungsprobe: Ersetzt man in `cli.main._run` beide `resolve_silent_block`-
+    Argumente durch `_resolve_with_progress(con=con, ...)` (der naheliegende Fehlgriff,
+    den Befund 2 der Durchsicht 1cfb1e4 beschreibt), bekommt die Attrappe im
+    Hintergrundfaden dieselbe Verbindung wie der Hauptfaden — die Zusicherung auf
+    `background_connections & main_thread_connections` schlägt dann an. Dieser Test war
+    daran rot, siehe Bericht."""
+    data_dir = tmp_path / "data"
+    _write_config(
+        data_dir,
+        model_url="http://localhost:11434/v1",
+        model_name="test-model",
+        dictionary_path=mini_dictionary_db,
+    )
+
+    calls: list[tuple[int, int, int]] = []  # (thread_id, con_id, len(entries))
+
+    def _fake_resolve_triage_entries(
+        *,
+        con: sqlite3.Connection,
+        entries: Sequence[pipeline.VocabularyEntry],
+        limit: int,
+        url: str,
+        get_model_name: Callable[[], str],
+        order: str,
+        on_progress: Callable[[int, int, int, int], None] | None = None,
+    ) -> pipeline.TriageResolution:
+        calls.append((threading.get_ident(), id(con), len(entries)))
+        remaining = list(entries[:1]) if len(entries) > 1 else []
+        return pipeline.TriageResolution(
+            entries=[], known=0, resolved_known=0, skipped=0, remaining=remaining
+        )
+
+    monkeypatch.setattr("cli.main.pipeline.resolve_triage_entries", _fake_resolve_triage_entries)
+
+    def _read_line(prompt: str) -> str:
+        if "Neu anlegen" in prompt:
+            return "j"
+        if "Sprachniveau" in prompt:
+            return "keine angabe"
+        if "weitermachen?" in prompt:
+            return "j"
+        raise AssertionError(f"unerwartete Frage im Prefetch-Test: {prompt!r}")
+
+    written: list[str] = []
+
+    exit_code = main(
+        [str(book_epub), "--chapter", "1", "--data-dir", str(data_dir)],
+        read_line=_read_line,
+        write_line=written.append,
+    )
+
+    assert exit_code == 0, "\n".join(written)
+    assert calls, "Testvoraussetzung verletzt: resolve_triage_entries wurde nie aufgerufen."
+    first_entries_len = calls[0][2]
+    assert first_entries_len > 1, (
+        "Testvoraussetzung verletzt: das Testkapitel braucht mehr als einen Worteintrag, "
+        f"damit überhaupt ein Vorladeblock entsteht (war {first_entries_len})."
+    )
+
+    main_thread_id = threading.get_ident()
+    main_thread_connections = {
+        con_id for thread_id, con_id, _ in calls if thread_id == main_thread_id
+    }
+    background_connections = {
+        con_id for thread_id, con_id, _ in calls if thread_id != main_thread_id
+    }
+    assert background_connections, (
+        "Testvoraussetzung verletzt: kein Vorladeblock lief im Hintergrundfaden."
+    )
+    assert not (background_connections & main_thread_connections), (
+        "Der Hintergrundfaden hat dieselbe Profilverbindung wie der Hauptfaden benutzt "
+        "(technik.md §12, Festlegung 1) - sqlite3-Objekte gehören dem Faden, der sie "
+        "erzeugt hat, nicht der Datei."
+    )
+
+
+def test_resolve_silently_stops_within_one_more_progress_call_after_cancellation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Befund 4 (Durchsicht 1cfb1e4, technik.md §12 Festlegung 4): `_resolve_silently`
+    bricht ab, sobald das übergebene `cancelled`-Ereignis gesetzt ist — spätestens nach
+    einem weiteren, bereits laufenden Modellaufruf, nicht erst am Ende des ganzen Blocks.
+    `pipeline.resolve_triage_entries` wird hier durch eine Attrappe ersetzt, die bei jedem
+    simulierten Eintrag `on_progress` aufruft und mitzählt, wie oft das geschieht — das
+    Ereignis wird nach dem ersten Aufruf gesetzt (simuliert: der Nutzer hat inzwischen mit
+    `q` abgebrochen), ein zweiter Aufruf ist damit der letzte, den die Attrappe noch
+    machen darf.
+
+    Verfälschungsprobe: Übergibt `_resolve_silently` kein `on_progress` (der Stand vor
+    dieser Behebung), prüft die Attrappe das Ereignis nie und läuft ungehindert bis zum
+    Ende durch — `progress_calls` erreichte dann alle zehn simulierten Einträge statt nur
+    zwei, und `pytest.raises(cli_main._PrefetchCancelled)` schlüge nie an. Dieser Test war
+    daran rot, siehe Bericht."""
+    cancelled = threading.Event()
+    progress_calls: list[int] = []
+
+    def _fake_resolve_triage_entries(
+        *,
+        con: sqlite3.Connection,
+        entries: Sequence[pipeline.VocabularyEntry],
+        limit: int,
+        url: str,
+        get_model_name: Callable[[], str],
+        order: str,
+        on_progress: Callable[[int, int, int, int], None] | None = None,
+    ) -> pipeline.TriageResolution:
+        assert on_progress is not None, "Befund 4 verlangt einen on_progress-Rückruf."
+        for index in range(10):
+            progress_calls.append(index + 1)
+            on_progress(index + 1, 10, index + 1, limit)
+            if index == 0:
+                cancelled.set()  # simuliert: der Nutzer hat inzwischen abgebrochen
+        return pipeline.TriageResolution(
+            entries=[], known=0, resolved_known=0, skipped=0, remaining=[]
+        )
+
+    monkeypatch.setattr("cli.main.pipeline.resolve_triage_entries", _fake_resolve_triage_entries)
+    monkeypatch.setattr("cli.main.profile.open_profile", lambda _path: sqlite3.connect(":memory:"))
+
+    with pytest.raises(cli_main._PrefetchCancelled):
+        cli_main._resolve_silently(
+            profile_path=tmp_path / "profil.sqlite3",
+            entries=[],
+            limit=5,
+            url="http://127.0.0.1:0/v1",
+            get_model_name=lambda: "test-model",
+            order="new_words_first",
+            cancelled=cancelled,
+        )
+
+    assert progress_calls == [1, 2], (
+        "Der Abbruch muss nach spätestens einem weiteren Fortschrittsaufruf greifen, "
+        f"tatsächlich liefen {len(progress_calls)}."
+    )

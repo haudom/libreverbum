@@ -31,6 +31,7 @@ Liefert
 from __future__ import annotations
 
 import argparse
+import threading
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -371,6 +372,17 @@ def _resolve_with_progress(
     return resolution
 
 
+class _PrefetchCancelled(Exception):
+    """(Befund 4, Durchsicht 1cfb1e4): Signalisiert `_resolve_silently` selbst den
+    eigenen Abbruch — geworfen aus `_stop_if_cancelled` unten, sobald das übergebene
+    `cancelled`-Ereignis gesetzt ist. Erreicht `cli.interaction._BlockPrefetch._run`, das
+    jede Ausnahme gleich behandelt und festhält; weil ein abbestellter Vorladeblock nie
+    abgewartet wird (`_BlockPrefetch.join` läuft für ihn nicht mehr), erreicht diese
+    Ausnahme nie den Nutzer. Kein Fehlschlag im Sinn von Regel 13 (dokumentation.md §4) —
+    nur der reguläre Weg, einen Hintergrundlauf zu beenden, dessen Ergebnis niemand mehr
+    ansieht."""
+
+
 def _resolve_silently(
     *,
     profile_path: Path,
@@ -379,12 +391,13 @@ def _resolve_silently(
     url: str,
     get_model_name: Callable[[], str],
     order: str,
+    cancelled: threading.Event,
 ) -> pipeline.TriageResolution:
     """Löst einen **vorgeladenen** Block auf (technik.md §12, „Vorladen: der nächste Block
     entsteht, während der Nutzer entscheidet") — der Rückruf, den `interaction.
     run_triage_blocks` als `resolve_silent_block` im Hintergrundfaden aufruft, während der
-    Hauptfaden den aktuellen Block noch durchentscheidet. Zwei Unterschiede zu
-    `_resolve_with_progress` oben, beide aus den bindenden Festlegungen in technik.md §12:
+    Hauptfaden den aktuellen Block noch durchentscheidet. Drei Unterschiede zu
+    `_resolve_with_progress` oben, aus den bindenden Festlegungen in technik.md §12:
 
     - **Eigene Profilverbindung** (Festlegung 1): `libreverbum.profile.open_profile` öffnet
       mit `sqlite3.connect(path)`, **ohne** `check_same_thread=False` — eine Verbindung
@@ -395,18 +408,38 @@ def _resolve_silently(
       "SQLite objects created in a thread can only be used in that same thread". Geöffnet
       und wieder geschlossen wird deshalb **hier**, im Hintergrundfaden — `run_triage_blocks`
       bekommt nichts davon zu sehen, nur das fertige Ergebnis oder die durchgereichte
-      Ausnahme (`cli.interaction._BlockPrefetch.join`).
-    - **Kein Fortschritt** (Festlegung 3): `on_progress` bleibt `None`. Die sich
-      fortschreibende Statuszeile aus `_resolve_with_progress` (`safe_print_progress`, per
-      Wagenrücklauf) schriebe aus diesem Faden mitten in die Triage-Anzeige, über der der
-      Nutzer gerade entscheidet — sie gehört allein dem ersten Block, den der Nutzer
-      tatsächlich abwartet.
+      Ausnahme (`cli.interaction._BlockPrefetch.join`). Geprüft in
+      `tests/test_cli_main.py`, `test_prefetch_resolves_the_background_block_with_a_
+      connection_of_its_own` (Befund 2, Durchsicht 1cfb1e4) — direkt an der Verbindung,
+      die im Hintergrundfaden tatsächlich benutzt wird, nicht nur daran, dass diese
+      Funktion existiert und `profile.open_profile` aufruft.
+    - **Kein Fortschritt** (Festlegung 3): Die sich fortschreibende Statuszeile aus
+      `_resolve_with_progress` (`safe_print_progress`, per Wagenrücklauf) schriebe aus
+      diesem Faden mitten in die Triage-Anzeige, über der der Nutzer gerade entscheidet —
+      sie gehört allein dem ersten Block, den der Nutzer tatsächlich abwartet.
+      `on_progress` unten dient deshalb einzig der Abbestellung, nicht der Anzeige.
+    - **Abbestellbar** (Befund 4, Durchsicht 1cfb1e4, Festlegung 4): `on_progress`
+      (`_stop_if_cancelled`) läuft nach **jedem** von `pipeline.resolve_triage_entries`
+      aufgelösten Eintrag und wirft `_PrefetchCancelled`, sobald `cancelled` gesetzt ist —
+      `cli.interaction._BlockPrefetch.cancel` setzt es, sobald feststeht, dass niemand das
+      Ergebnis mehr ansieht (nach `q` oder nach „nein"). Ohne diese Prüfung lief ein bereits
+      gestarteter Vorladeblock einfach weiter und verbrauchte dabei Modellaufrufe für ein
+      Ergebnis, das verworfen wird (gemessen: ein erster Wendungsblock brauchte dadurch
+      7,39 s statt 3,85 s). Weder `_resolve_silently` noch `pipeline.resolve_triage_entries`
+      müssen dafür wissen, was `_BlockPrefetch` ist — nur, dass ihnen ein `threading.Event`
+      übergeben wird.
 
     Ein Fehlschlag (etwa der Modellserver, der mitten im Vorladen wegbricht) läuft
     unverändert durch (Regel 13, dokumentation.md §4 — kein `except`, das nur protokolliert
     und weiterläuft): `_BlockPrefetch` hält ihn im Hintergrundfaden fest und wirft ihn im
-    Hauptfaden erneut, sobald `run_triage_blocks` auf den Block wartet (Festlegung 2)."""
+    Hauptfaden erneut, sobald `run_triage_blocks` auf den Block wartet (Festlegung 2). Eine
+    Abbestellung ist davon ausdrücklich **kein** Fall (siehe `_PrefetchCancelled` oben)."""
     con = profile.open_profile(profile_path)
+
+    def _stop_if_cancelled(_examined: int, _total: int, _kept: int, _limit: int) -> None:
+        if cancelled.is_set():
+            raise _PrefetchCancelled()
+
     try:
         return pipeline.resolve_triage_entries(
             con=con,
@@ -415,6 +448,7 @@ def _resolve_silently(
             url=url,
             get_model_name=get_model_name,
             order=order,
+            on_progress=_stop_if_cancelled,
         )
     finally:
         con.close()
@@ -527,13 +561,14 @@ def _run(args: argparse.Namespace, *, read_line: ReadLine, write_line: WriteLine
                 get_model_name=get_model_name,
                 order=cfg.triage_order,
             ),
-            resolve_silent_block=lambda block: _resolve_silently(
+            resolve_silent_block=lambda block, cancelled: _resolve_silently(
                 profile_path=cfg.profile_path,
                 entries=block,
                 limit=interaction.WORD_BLOCK_SIZE,
                 url=cfg.model_url,
                 get_model_name=get_model_name,
                 order=cfg.triage_order,
+                cancelled=cancelled,
             ),
             label="Wörter",
             card_direction=card_direction,
@@ -554,13 +589,14 @@ def _run(args: argparse.Namespace, *, read_line: ReadLine, write_line: WriteLine
                 get_model_name=get_model_name,
                 order=cfg.triage_order,
             ),
-            resolve_silent_block=lambda block: _resolve_silently(
+            resolve_silent_block=lambda block, cancelled: _resolve_silently(
                 profile_path=cfg.profile_path,
                 entries=block,
                 limit=interaction.EXPRESSION_BLOCK_SIZE,
                 url=cfg.model_url,
                 get_model_name=get_model_name,
                 order=cfg.triage_order,
+                cancelled=cancelled,
             ),
             label="Wendungen",
             card_direction=card_direction,

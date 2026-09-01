@@ -4,10 +4,17 @@ Aufgabe
 -------
 Schritt 4 des Kernablaufs (konzept.md §4), soweit er reine Rechnung ist (technik.md §7,
 Modulkarte, „triage liegt größtenteils nicht im Kern"): den Kapitelwortschatz nach
-Häufigkeit ordnen, was über der Wortobergrenze liegt zurückstellen, und die Sammelaktion
-„ab hier kenne ich alles" mit allen in der Anzeige davorstehenden Wörtern zugleich
-einlösen. Die einzelne Entscheidung je Wort trifft der Nutzer und liegt außerhalb dieses
-Moduls.
+Häufigkeit ordnen und die Sammelaktion „ab hier kenne ich alles" mit allen in der Anzeige
+davorstehenden Wörtern zugleich einlösen. Die einzelne Entscheidung je Wort trifft der
+Nutzer und liegt außerhalb dieses Moduls.
+
+(Befund 8, Durchsicht 1cfb1e4): Eine Wortobergrenze pro Kapitel gibt es seit dem
+01.09.2026 nicht mehr (technik.md §12, konzept.md §4, „Nachtrag 01.09.2026 — aus der
+Obergrenze ist eine Blockgröße geworden") — an ihre Stelle ist die Blockgröße aus
+`cli.interaction` (`WORD_BLOCK_SIZE`, `EXPRESSION_BLOCK_SIZE`) getreten, die den
+Kapitelwortschatz portioniert statt ihn zu kürzen. `defer_beyond_word_limit` unten
+rechnet die abgeschaffte Obergrenze weiterhin korrekt aus, hat aber außerhalb ihrer
+eigenen Tests keinen Aufrufer mehr — siehe ihren eigenen Docstring.
 
 Voraussetzungen
 ---------------
@@ -99,6 +106,13 @@ def defer_beyond_word_limit(occurrences: Iterable[Occurrence], word_limit: int) 
     volle Kapitelliste vor der Sammelaktion — wird bereits Gebuchtes mitgezählt, verbraucht
     es ein Kontingent der Obergrenze mit; das zu vermeiden ist Sache von `pipeline` (T15),
     nicht dieser Funktion.
+
+    (Befund 8, Durchsicht 1cfb1e4): Die Obergrenze, die diese Funktion berechnet, ist seit
+    dem 01.09.2026 kein Teil des Ablaufs mehr — `cli.interaction`s Blockgröße portioniert
+    den Kapitelwortschatz, statt ihn an dieser Stelle zu kürzen. Diese Funktion hat deshalb
+    außerhalb von `tests/test_triage.py` heute keinen Aufrufer mehr; ob sie ganz entfällt
+    oder für einen künftigen Anwendungsfall (etwa ein Messwerkzeug in `tools/`) bleibt, ist
+    hier nicht entschieden (Regel 14) und im Bericht zu dieser Durchsicht offen gemeldet.
     """
     # REGEL (dokumentation.md §4 Regel 13, „Kein except, das nur protokolliert…"): Eine
     # negative Obergrenze ist ein widersprüchliches Argument und damit ein sichtbarer

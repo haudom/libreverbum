@@ -228,7 +228,7 @@ def book_proper_noun_ratios(chapters: Sequence[Chapter], nlp: Language) -> dict[
 # gewesen; „taken" (11 Vorkommen) ebenso mit „…having taken part in…" statt „teilgenommen".
 # Beide Wendungen stehen als eigener Kandidat in `expressions` (`extract_particle_verb_
 # candidates`, `extract_contiguous_candidates`), erreichen aber wegen ihrer geringen
-# Häufigkeit den Wendungsdeckel nie (`cli/interaction.py`, `EXPRESSION_LIMIT`) — das
+# Häufigkeit den Wendungsdeckel nie (`cli/interaction.py`, `EXPRESSION_BLOCK_SIZE`) — das
 # Einzelwort bleibt der einzige Ort, an dem der Nutzer sie überhaupt zu sehen bekommt, und
 # zeigt dabei die falsche Bedeutung.
 #
