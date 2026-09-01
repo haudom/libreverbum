@@ -6,9 +6,10 @@ Verkettet, was `cli.config`, `libreverbum.epub`, `libreverbum.extraction`,
 `libreverbum.pipeline`, `cli.interaction` und `cli.export` je für sich liefern, zu einem
 Aufruf von der Kommandozeile: Wörterbuch beziehen oder indizieren
 (`libreverbum.dictionary`), EPUB wählen, Kapitel wählen, `pipeline.run_chapter`,
-je Decksel `pipeline.resolve_triage_entries` (Bedeutung vor der Triage auflösen, Befund
-schwer 1, zweite T16-Durchsicht), Triage über die Tastatur (Wörter, dann Wendungen),
-Export nach Anki und als Druckseite.
+je Decksel eine blockweise Triage über `interaction.run_triage_blocks` (Bedeutung vor der
+Triage auflösen über `pipeline.resolve_triage_entries`, Befund schwer 1, zweite
+T16-Durchsicht; Blockschleife samt Fortsetzungsfrage seit Bauschritt 2/4, technik.md §12),
+Triage über die Tastatur (Wörter, dann Wendungen), Export nach Anki und als Druckseite.
 
 Regel 9 (dokumentation.md §4), strukturelle Hälfte: Dieses Kommandozeilenprogramm hat
 keine Ereignisschleife und keinen Oberflächen-Thread, den ein NLP- oder Modellaufruf
@@ -452,42 +453,44 @@ def _run(args: argparse.Namespace, *, read_line: ReadLine, write_line: WriteLine
         )
 
         # (Befund schwer 1, zweite T16-Durchsicht): Die Bedeutung wird vor der Triage
-        # aufgelöst (`pipeline.resolve_triage_entries`, je Decksel einmal) — Wörter und
-        # Wendungen bleiben dabei getrennte Durchläufe mit eigener Obergrenze (`cli.
-        # interaction`, „Festlegung: getrennte Decksel").
+        # aufgelöst (`pipeline.resolve_triage_entries`, je Block einmal) — Wörter und
+        # Wendungen bleiben dabei getrennte Blockschleifen mit eigener Blockgröße (`cli.
+        # interaction`, „Festlegung: getrennte Decksel"). `run_triage_blocks` (Bauschritt
+        # 2/4, blockweise Triage) macht aus jedem `resolve_triage_entries`-Aufruf über
+        # `resolution.remaining` so lange den nächsten Block, bis der Nutzer aufhört.
         write_line("== Wörter ==")
-        word_resolution = _resolve_with_progress(
-            con=con,
-            entries=result.entries,
-            limit=interaction.WORD_LIMIT,
-            url=cfg.model_url,
-            get_model_name=get_model_name,
-            order=cfg.triage_order,
-        )
-        word_cards = interaction.run_triage_pass(
+        word_cards = interaction.run_triage_blocks(
             con=con,
             book=result.chapter.book,
             chapter_number=result.chapter.number,
-            resolution=word_resolution,
+            entries=result.entries,
+            resolve_block=lambda block: _resolve_with_progress(
+                con=con,
+                entries=block,
+                limit=interaction.WORD_BLOCK_SIZE,
+                url=cfg.model_url,
+                get_model_name=get_model_name,
+                order=cfg.triage_order,
+            ),
             label="Wörter",
             card_direction=card_direction,
             read_line=read_line,
             write_line=write_line,
         )
         write_line("== Wendungen ==")
-        expression_resolution = _resolve_with_progress(
-            con=con,
-            entries=result.expressions,
-            limit=interaction.EXPRESSION_LIMIT,
-            url=cfg.model_url,
-            get_model_name=get_model_name,
-            order=cfg.triage_order,
-        )
-        expression_cards = interaction.run_triage_pass(
+        expression_cards = interaction.run_triage_blocks(
             con=con,
             book=result.chapter.book,
             chapter_number=result.chapter.number,
-            resolution=expression_resolution,
+            entries=result.expressions,
+            resolve_block=lambda block: _resolve_with_progress(
+                con=con,
+                entries=block,
+                limit=interaction.EXPRESSION_BLOCK_SIZE,
+                url=cfg.model_url,
+                get_model_name=get_model_name,
+                order=cfg.triage_order,
+            ),
             label="Wendungen",
             card_direction=card_direction,
             read_line=read_line,

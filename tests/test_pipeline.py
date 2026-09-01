@@ -1135,7 +1135,7 @@ def test_resolve_triage_entries_skips_and_never_lets_a_no_match_reach_the_profil
             card_direction=CardDirection.EN_DE,
             read_line=_no_question_expected,
             write_line=lambda _line: None,
-        )
+        ).cards
         assert cards == []
 
         placeholder_rows = con.execute(
