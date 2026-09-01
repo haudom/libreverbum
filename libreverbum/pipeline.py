@@ -432,7 +432,26 @@ class TriageResolution:
     Abschnitt „Der Kern liefert den Rest mit, statt ihn wegzuwerfen") — die Funktion selbst
     führt dafür weder Zustand noch Iterator, derselbe Aufruf mit weniger Einträgen genügt.
     Die Reihenfolge innerhalb `remaining` ist unerheblich, ein Folgeaufruf sortiert selbst
-    neu (Schritt 2); die Vollständigkeit ist es nicht."""
+    neu (Schritt 2); die Vollständigkeit ist es nicht. Was daraus **nicht** folgt (Befund 2,
+    Durchsicht d4f10fc): dass die Häufigkeitsordnung über die Folge der Blöcke hinweg
+    erhalten bliebe — sie gilt nur innerhalb eines Aufrufs, der Folgeaufruf beginnt bei
+    `order = "new_words_first"` systematisch neu an der Spitze der teilweise bekannten,
+    sobald die sicheren Treffer aufgebraucht sind (Einzelheiten und Messwerte im
+    `resolve_triage_entries`-Docstring oben, Absatz „Anzeigereihenfolge").
+
+    `remaining` enthält außerdem **nie** die Einträge aus `skipped` und `resolved_known`
+    (Befund 3, Durchsicht d4f10fc) — beide sind in diesem Aufruf bereits durch das Modell
+    gegangen (Schritte 3 und 4) und endgültig erledigt: ein `skipped`-Eintrag, weil das
+    Modell „keine passt" gewählt hat und es nichts gibt, worauf eine Triage-Entscheidung
+    gebucht werden könnte; ein `resolved_known`-Eintrag, weil seine aufgelöste Bedeutung
+    bereits `KNOWN` war. Unter der alten Wortobergrenze war das gleichgültig — es gab
+    keinen Folgeblock, dem es hätte auffallen können; unter der blockweisen Triage ist es
+    eine Festlegung. Die Falle für einen künftigen Bearbeiter: Wer `skipped`-Einträge in
+    `remaining` zurückschriebe, baute eine stille Endlosschleife — dieselben Einträge
+    würden in jedem Folgeblock erneut vorgelegt, erneut vom Modell übersprungen, und
+    `remaining` schrumpfte nie mehr auf leer. Ein `skipped`-Eintrag käme beim erneuten
+    Vorlegen ohnehin zur selben Antwort und kostete nur einen weiteren, vergeblichen
+    Modellaufruf."""
 
     entries: list[ResolvedEntry]
     known: int
@@ -611,7 +630,19 @@ def resolve_triage_entries(
     werden am Ende erneut nach `triage.sort_by_frequency` sortiert, unabhängig davon, in
     welcher Reihenfolge sie beim Auflösen verarbeitet wurden — sonst schlüge die
     Auswahlstrategie aus Schritt 2 in die Triage durch, in der weiterhin die häufigsten
-    Wörter zuerst stehen sollen (konzept.md §4).
+    Wörter zuerst stehen sollen (konzept.md §4). Das gilt **innerhalb** eines Aufrufs,
+    nicht über die Folge der Blöcke hinweg (Befund 2, Durchsicht d4f10fc; technik.md §12).
+    Ein Folgeaufruf sortiert `remaining` erneut komplett neu und weiß nichts von der
+    Häufigkeit des letzten Eintrags im vorigen Block — unter `order = "new_words_first"`
+    ist der Sprung sogar systematisch: Sind die sicheren Treffer aus Schritt 2 aufgebraucht,
+    springt der nächste Block an die Spitze der teilweise bekannten, unabhängig davon, wie
+    niedrig die Häufigkeit des letzten sicheren Treffers war. Gemessen (`sherlock.epub`
+    Kapitel 2, 1410 Worteinträge, 963 sichere / 447 teilweise bekannte, `limit = 25`): Block
+    38 endet bei Häufigkeit 1, Block 39 beginnt bei 41 („have"), Block 40 bei 16 („more").
+    Unter `order = "frequency"` tritt das in 57 gemessenen Blöcken kein einziges Mal auf,
+    weil dort beide Gruppen von vornherein in einer gemeinsamen Häufigkeitsreihenfolge
+    laufen. Hingenommen, nicht übersehen — die Auswahlstrategie aus Schritt 2 wird dadurch
+    nicht geändert.
 
     `known + resolved_known + skipped + len(resolution.remaining) + len(resolution.entries)`
     ergibt wieder `len(entries)` — die Zahl der hier übergebenen Einträge, unabhängig davon,
@@ -641,6 +672,15 @@ def resolve_triage_entries(
         # unabhängig von der Kommandozeile aufrufbar bleibt (etwa aus einem Testwerkzeug).
         erlaubt = " oder ".join(f'"{wert}"' for wert in _VALID_TRIAGE_ORDERS)
         raise ValueError(f'order = "{order}" ist unzulässig — erlaubt sind {erlaubt}.')
+    if limit < 1:
+        # REGEL (dokumentation.md §4 Regel 13, Befund 8, Durchsicht d4f10fc): Bei `limit
+        # <= 0` bräche die Schleife unten sofort ab und lieferte `remaining == entries`
+        # zurück — heute unerreichbar, weil `WORD_LIMIT` und `EXPRESSION_LIMIT` feste
+        # Konstanten sind, aber ab Bauschritt 2 der blockweisen Triage eine stille
+        # Endlosschleife: Die Blockschleife läuft, solange `remaining` nicht leer ist, und
+        # `remaining` schrumpft bei diesem `limit` nie. Sichtbarer Abbruch statt stillem
+        # Stillstand, wie bei der `order`-Prüfung oben.
+        raise ValueError(f"limit = {limit} ist unzulässig — limit muss mindestens 1 sein.")
 
     known_entries = [entry for entry in entries if _all_candidates_known(entry)]
     # (Bauschritt 1/4, Blockweise Triage, 01.09.2026): eigener Name statt `remaining`, um

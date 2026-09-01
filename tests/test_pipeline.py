@@ -1513,6 +1513,37 @@ def test_resolve_triage_entries_rejects_an_unknown_order_value(profile_path: Pat
         con.close()
 
 
+@pytest.mark.parametrize("limit", [0, -1])
+def test_resolve_triage_entries_rejects_a_non_positive_limit(
+    profile_path: Path, limit: int
+) -> None:
+    """Befund 8, Durchsicht d4f10fc: `limit <= 0` bricht sichtbar ab und nennt den
+    unzulässigen Wert (Regel 13, dokumentation.md §4), statt die Schleife sofort mit
+    `remaining == entries` zu verlassen — ab Bauschritt 2 der blockweisen Triage sonst
+    eine stille Endlosschleife, weil `remaining` bei einem solchen `limit` nie schrumpft."""
+    entry = pipeline.VocabularyEntry(
+        occurrence=_triage_occurrence("whatever", "NOUN", frequency=1),
+        candidates=[_triage_sense("whatever", "NOUN", "Irgendwas")],
+        status={},
+    )
+
+    def _never_needed() -> str:
+        raise AssertionError("Modellserver wurde trotz ungültigem limit angefragt.")
+
+    con = profile.open_profile(profile_path)
+    try:
+        with pytest.raises(ValueError, match=str(limit)):
+            pipeline.resolve_triage_entries(
+                con=con,
+                entries=[entry],
+                limit=limit,
+                url="http://unerreichbar.invalid",
+                get_model_name=_never_needed,
+            )
+    finally:
+        con.close()
+
+
 def test_resolve_triage_entries_reports_ascending_progress_through_the_callback(
     profile_path: Path, model_server_double: ModelServerDouble
 ) -> None:
