@@ -1,4 +1,4 @@
-"""Triage — Häufigkeitssortierung, Wortobergrenze, Sammelaktion (bauplan.md T10).
+"""Triage — Häufigkeitssortierung und Sammelaktion (bauplan.md T10).
 
 Aufgabe
 -------
@@ -22,10 +22,8 @@ Erwartet den bereits extrahierten Kapitelwortschatz als `Occurrence`-Liste (`ext
 T3) — vor dem Nachschlagen und vor der Übersetzung, die im Kernablauf erst danach folgen
 (konzept.md, „Der Kernablauf"). Alle übergebenen Vorkommen gehören zu **einem** Kapitel;
 `defer_beyond_word_limit` weist eine Liste mit mehreren Kapiteln zurück (Regel 13), weil
-die Obergrenze aus konzept.md §4 „pro Kapitel" gilt. Ob `defer_beyond_word_limit` schon
-die um `bulk_mark` bereinigte Liste bekommt oder die volle, entscheidet erst `pipeline`
-(T15) — bekommt sie die volle, verbraucht ein bereits als bekannt gebuchtes Wort ein
-Kontingent der Obergrenze mit.
+die Obergrenze, die sie berechnet, „pro Kapitel" galt — siehe den Absatz zu Befund 8 oben,
+warum sie heute keinen Aufrufer mehr hat.
 
 Liefert
 -------

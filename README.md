@@ -114,12 +114,14 @@ Danach läuft der Durchgang:
 2. **Wortschatz** — Beugungsformen werden zusammengefasst, Eigennamen fliegen raus, bereits
    bekannte Wörter ebenso
 3. **Bedeutungen** — Wörterbuch schlägt vor, Modell wählt aus, mit Fortschrittsanzeige
-4. **Triage** — zuerst die vollständige, nach Häufigkeit sortierte Liste mit der Frage „bis
-   zu welcher Nummer kennst du alles?"; ein Tastendruck erledigt damit den ganzen vorderen
-   Teil. Erst für den Rest kommt die Einzelabfrage, je Wort mit Belegsatz aus dem Buch und
-   Bedeutung: `[k]enne ich`, `[l]ernen`, `[s]kip`, `[q]uit`
-5. **Export** — höchstens 25 Wörter und 11 Wendungen je Block; wer mehr will, geht nach
-   der Fortsetzungsfrage in den nächsten Block ([technik.md](technik.md) §12)
+4. **Triage**, in Blöcken zu 25 Wörtern und 11 Wendungen — je Block zuerst die
+   vollständige, nach Häufigkeit sortierte Liste mit der Frage „bis zu welcher Nummer
+   kennst du alles?"; ein Tastendruck erledigt damit den ganzen vorderen Teil. Erst für den
+   Rest kommt die Einzelabfrage, je Wort mit Belegsatz aus dem Buch und Bedeutung:
+   `[k]enne ich`, `[l]ernen`, `[s]kip`, `[q]uit`. Am Blockende die Fortsetzungsfrage — wer
+   weitermacht, bekommt den nächsten Block ohne Wartezeit, weil er währenddessen schon
+   aufgelöst wurde. Eine Obergrenze gibt es nicht ([technik.md](technik.md) §12)
+5. **Export** — Anki-Deck und Druckseite aus dem, was „lernen" bekommen hat
 
 Nützliche Argumente: `--chapter 3` überspringt die Auswahl, `--card-direction de_en`
 dreht die Karten um (dann bleiben Wörter ohne Wörterbucheintrag außen vor — ihre
