@@ -505,6 +505,21 @@ Dauerhaft verloren geht dabei nichts: Das Profil führt Kenntnis je Bedeutung (A
 die zweite Bedeutung erscheint im nächsten Kapitel als „neue Bedeutung eines bekannten
 Wortes" (Abnahmekriterium 6).
 
+### Nachtrag 01.09.2026: der Modellserver bedient ein Gespräch zur Zeit
+
+Festgehalten, weil es in keinem der drei Dokumente stand und eine ganze Messreihe trägt:
+llama-server, LM Studio und Ollama arbeiten eingehende Anfragen **nacheinander** ab, nicht
+nebenläufig. Solange nur der Kapiteldurchlauf fragte, war das gleichgültig — seit dem
+Vorladen (Abschnitt 12) fragen zwei Fäden zugleich, und dann ist es die tragende
+Eigenschaft: Ein Vorladeblock, den niemand mehr ansieht, verlangsamt den Durchlauf, auf den
+der Nutzer wartet, weil beide dieselbe Warteschlange belegen.
+
+**Wer das nachmisst, braucht eine Attrappe, die ebenso serialisiert.** Eine
+`ThreadingHTTPServer`-Attrappe bedient beide Fäden gleichzeitig und zeigt den Effekt
+schlicht nicht — bei der Durchsicht von 1cfb1e4 kostete genau das einen Fehlversuch, bevor
+der gemessene Wert (7,39 s statt 3,85 s für den ersten Wendungsblock nach einem Abbruch)
+überhaupt reproduzierbar war.
+
 ### Nachtrag 19.08.2026: Bündeln lohnt nicht — T11 fragt je Wort einzeln
 
 Die zweite der beiden Zahlen, die Entscheidung 10 offen hielt, und damit die Sperre
@@ -2800,8 +2815,11 @@ Vier Festlegungen dazu, die ersten beiden nicht verhandelbar:
    1cfb1e4) brauchte der erste Wendungsblock nach einem `q` im Wortdurchlauf **7,39 s statt
    3,85 s**, weil sich seine Anfragen 1:1 mit den verworfenen abwechselten. Abbestellt wird
    über den `on_progress`-Rückruf, den `resolve_triage_entries` ohnehin nach jedem Eintrag
-   aufruft; der Abbruch greift damit nach spätestens einem laufenden Modellaufruf. Ein
-   abbestellter Faden ist **kein Fehlschlag** — sein Ergebnis wird verworfen, ohne Meldung.
+   aufruft; der Abbruch greift damit nach spätestens einem laufenden Modellaufruf.
+   Nachgemessen an einem serialisierenden Modellserver (Durchsicht 5fda1b9): nach dem `q`
+   kommt **genau eine** weitere Anfrage, 0,3 s später, und der folgende Wendungsblock läuft
+   ungestört im vollen Takt. Ein abbestellter Faden ist **kein Fehlschlag** — sein Ergebnis
+   wird verworfen, ohne Meldung.
 
 Der Vorfilter (Schritt 1 in `resolve_triage_entries`) arbeitet mit dem Profilstand von
 **vor** dem laufenden Block. Das ist hingenommen und kein Fehler: Ein Kapiteleintrag steht
