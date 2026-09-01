@@ -84,6 +84,7 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | Fortsetzungsfrage (nach jedem Block) | `ask_continue` |
 | Vorladen (des nächsten Blocks, während der Nutzer entscheidet) | `prefetch` |
 | noch nicht geprüfte Einträge (der Rest nach einem Block) | `remaining` |
+| noch unentschiedene Einträge (der Rest nach dem kostenlosen Vorfilter) | `undetermined_entries` — **nicht** `remaining`, das im selben Ablauf schon den Rest nach der Blockgrenze meint (Befund 7, Durchsicht d4f10fc) |
 | Wörterbuch, Nachschlagen | `dictionary`, `lookup` |
 | Auswahlliste, Kandidat | `candidate` |
 | Übersetzung | `translation` |

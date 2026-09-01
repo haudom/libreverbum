@@ -2550,6 +2550,24 @@ vor (`tawdry` steht auf `importance`-Rang 6.193).
 > offene Punkte in konzept.md, „Nachrücken in der Triage" und „Fortsetzungsfrage nach der
 > Wortobergrenze"; gebaut ist daraus eine Sache.
 
+### Nachtrag 01.09.2026: die Vorbelegung erzeugt keine teilweise bekannten Einträge
+
+Aufgefallen bei der Durchsicht von d4f10fc, dort als Nebenbefund einer ganz anderen Messung
+— festgehalten, weil es die Aussage aus Abschnitt 3 verschärft, der `bank`-Fall aus
+konzept.md §5 sei auf der Vorgabe „faktisch abgeschaltet":
+
+`profile.record_preset` bucht **jede** Bedeutung einer vorbelegten Grundform als bekannt.
+Damit ist `pipeline._all_candidates_known` für sie wahr, und sie fällt in die Gruppe
+„vollständig bekannt" — nie in „teilweise bekannt", die Gruppe, aus der die neuen
+Bedeutungen bekannter Wörter kommen. Gemessen an `tools/sherlock.epub` Kapitel 2 gegen ein
+frisch auf B2 vorbelegtes Profil (11.924 Bedeutungen): 1410 Worteinträge, davon **838
+vollständig bekannt, 572 sichere Treffer, 0 teilweise bekannte**.
+
+Das ist keine Eigenart der Messung, sondern folgt aus der Bauart: Eine Vorbelegung, die
+eine Grundform nur zur Hälfte als bekannt buchte, gäbe es nicht. Der `bank`-Fall entsteht
+deshalb erst durch **Triage-Entscheidungen** des Nutzers, nie durch die Vorbelegung — sie
+verhindert ihn im vorbelegten Teil des Wortschatzes sogar aktiv.
+
 ### Eine Zahl mit Geschichte: 8.044, nicht 8.045
 
 Die Messung vom 31.08.2026 nannte für B1 8.045 Bedeutungen, der fertige Code liefert 8.044.
@@ -2699,6 +2717,22 @@ keine zweite Einstiegsstelle: derselbe Aufruf mit weniger Einträgen.
 `limit` heißt im Kern weiterhin `limit` und bleibt die Obergrenze **eines** Aufrufs. Die
 Blockgröße ist eine Entscheidung der Bedienung und steht deshalb in `cli`, nicht im Kern
 (Abschnitt 7, „Die Oberfläche liegt neben dem Kern").
+
+**Die Häufigkeitsordnung gilt innerhalb eines Blocks, nicht über deren Folge.** Unter der
+Vorgabe `order = "new_words_first"` legt `resolve_triage_entries` erst alle sicheren
+Treffer vor, dann die teilweise bekannten (Abschnitt 3, Nachtrag 25.08.2026) — jede Gruppe
+für sich nach Häufigkeit. Ein Folgeaufruf bildet dieselbe Verkettung auf dem Rest, und
+sobald die sicheren Treffer aufgebraucht sind, **springt der nächste Block an die Spitze
+der teilweise bekannten zurück**. Gemessen an `tools/sherlock.epub` Kapitel 2 (1410
+Worteinträge, 963 sichere / 447 teilweise bekannte, `limit = 25`, Durchsicht von d4f10fc):
+Block 38 endet bei Häufigkeit 1, **Block 39 beginnt bei 41** („have"), Block 40 bei 16
+(„more"). Unter `order = "frequency"` tritt der Sprung in 57 Blöcken kein einziges Mal auf.
+
+Das ist hingenommen und nicht übersehen: Es geht nichts verloren, die Auswahlstrategie ist
+am 25.08.2026 mit Messwerten so entschieden, und wer Block 39 erreicht, hat rund 950
+Einträge eines Kapitels durchgesehen. Wer die Zusicherung „häufigste zuerst" (konzept.md
+§4) über Blockgrenzen hinweg braucht, ändert nicht den Blockablauf, sondern stellt
+`[triage] order` auf `"frequency"` (Abschnitt 9).
 
 ### Vorladen: der nächste Block entsteht, während der Nutzer entscheidet
 
