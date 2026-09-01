@@ -108,8 +108,10 @@ def write_exports(
     echten Fehler.
 
     `profile.record_card` läuft erst **nach** einem erfolgreichen `anki.export_deck`:
-    Bricht der Export ab (unaufgelöste Übersetzung, doppelte GUID im selben Export, siehe
-    `anki.export_deck`), steht im Profil nichts, was im Deck nicht ebenso fehlt.
+    Bricht der Export ab (fehlende Übersetzung ohne die Marke `uncertain`, eine Karte, die
+    in ihrer Kartenrichtung nicht bildbar ist — `anki.card_obstacle` —, doppelte GUID im
+    selben Export; siehe `anki.export_deck`), steht im Profil nichts, was im Deck nicht
+    ebenso fehlt.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     paths = export_paths(output_dir, book_title, chapter_number)

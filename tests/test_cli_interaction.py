@@ -442,4 +442,51 @@ def test_learning_a_word_without_a_dictionary_entry_is_refused_for_de_en(
 
     assert cards == []
     assert _events(profile_con) == [("obscure", "deferred", "triage")]
-    assert any("de-en" in line for line in lines)
+    assert any("de_en" in line for line in lines)
+
+
+def test_learning_a_word_whose_form_has_no_boundary_in_the_sentence_is_refused_for_cloze(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """Derselbe Schutz für die zweite Unmöglichkeit (Befund mittel, Durchsicht 35736a9):
+    Steht die Wortform an keiner Wortgrenze des Belegsatzes (`heart` in `heart-broken`),
+    ist daraus kein Lückentext zu bilden — `anki.export_deck` bräche ab, und weil es der
+    erste der beiden Exporte ist, kostete das Deck, Druckseite und alle übrigen Karten.
+
+    Der Fall ist nicht selten: 2.170 von 103.897 Wortvorkommen der Kapitel 1 bis 12 von
+    `tools/dorian_gray.epub` (2,1 %). Vor dieser Nachbesserung fing die Triage allein den
+    `de_en`-Fall ab und ließ diesen laufen."""
+    occurrence = Occurrence(
+        book=_BOOK,
+        chapter_number=1,
+        lemma=Lemma(text="heart", pos="NOUN"),
+        word_form="heart",
+        example_sentence="I can't tell you how heart-broken I am about the whole thing.",
+        frequency=1,
+        proper_noun_frequency=0,
+    )
+    entry = pipeline.ResolvedEntry(
+        occurrence=occurrence,
+        sense=_resolved_sense("heart", "NOUN", "Herz"),
+        status=VocabularyStatus.UNKNOWN,
+    )
+    resolution = pipeline.TriageResolution(
+        entries=[entry], known=0, resolved_known=0, skipped=0, deferred=0
+    )
+    answers = iter(["", "l", "s"])
+    lines: list[str] = []
+
+    cards = interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wörter",
+        card_direction=CardDirection.CLOZE,
+        read_line=lambda _prompt: next(answers),
+        write_line=lines.append,
+    )
+
+    assert cards == []
+    assert _events(profile_con) == [("heart", "deferred", "triage")]
+    assert any("Lückentext" in line for line in lines)

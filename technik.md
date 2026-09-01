@@ -1991,13 +1991,37 @@ Zwei Dinge trafen zusammen:
 > Wörterbuchtreffer verlangt: **markieren** statt abweisen. Die Bedeutung fehlt, die Karte
 > ist deshalb nicht falsch — der Nutzer ergänzt die Rückseite in Anki.
 
-**Ausnahme `de-en`**: Dort steht die Übersetzung auf der Vorderseite (`anki._DE_EN_MODEL`),
+**Ausnahme `de_en`**: Dort steht die Übersetzung auf der Vorderseite (`anki._DE_EN_MODEL`),
 und eine Textmarke als Frage ist keine Karte, sondern eine leere Abfrage — bei mehreren
 solchen Wörtern sogar mehrmals dieselbe. Was keine deutsche Seite hat, lässt sich nicht
-produzieren; diese eine Kartenrichtung bricht weiter sichtbar ab (Regel 13). Damit der
-Abbruch nicht erneut einen ganzen Durchlauf kostet, nimmt die Triage ein „lernen" darauf gar
-nicht erst an, sondern fragt erneut (`cli.interaction._card_is_possible`) — der Abbruch im
-Export ist der Rückhalt, nicht der Regelweg.
+produzieren; diese eine Kartenrichtung bricht weiter sichtbar ab (Regel 13).
+
+### Die eigentliche Lehre: die Frage gehört vor die Entscheidung
+
+Nachgetragen am 01.09.2026 aus der Durchsicht von `35736a9` (Befund `mittel`). Die erste
+Fassung der Behebung fing den `de_en`-Fall vor der Triage ab, damit der Abbruch nicht
+erneut einen ganzen Durchlauf kostet — und übersah, dass **dieselbe Bauart** ein zweites
+Mal offensteht: Beim Lückentext bricht `anki.export_deck` ab, sobald die Wortform an keiner
+Wortgrenze des Belegsatzes steht (`_cloze_text`, Befund 4, Review T13). Auch das kostet als
+erster der beiden Exporte Deck **und** Druckseite samt aller übrigen Karten, und selten ist
+es nicht: **2.170 von 103.897** Wortvorkommen der Kapitel 1 bis 12 von
+`tools/dorian_gray.epub` (2,1 %), in Kapitel 10 allein 22 von 663. Auslöser sind
+Bindestrichkomposita (`heart-broken`) und Wortformen vor einem typografischen Apostroph
+(`the girl's mother`) — beides gewollte Folgen von `anki._WORD_CONTINUING_EXTRA`.
+
+> **Was vorab entscheidbar ist, wird vorab entschieden.** `anki.card_obstacle` beantwortet
+> beide Unmöglichkeiten aus `Occurrence`, `Sense` und Kartenrichtung allein — ohne
+> Wörterbuch, ohne Modell — und liefert den Grund als deutschen Satz. `cli.interaction`
+> fragt damit **vor** der Entscheidung und gibt den Grund aus, statt ein „lernen"
+> anzunehmen, das der Export später verwirft. Die Abbrüche in `_translation_text` und
+> `_cloze_text` bleiben der Rückhalt für jeden Weg, der an dieser Frage vorbeiführt
+> (Regel 13) — beide Seiten müssen dieselbe Grenze ziehen, geprüft in
+> `tests/test_anki.py::test_card_obstacle_and_export_deck_agree`.
+
+Warum der Grund im Kern gebildet wird und nicht in der Oberfläche: Welche Kartenvorlage
+welches Feld auf die Vorderseite nimmt, weiß `anki` — eine Oberfläche, die aus einem bloßen
+`bool` selbst eine Begründung formuliert, nennt beim zweiten Fall zwangsläufig den ersten.
+Genau das tat die erste Fassung, bevor sie den zweiten Fall überhaupt kannte.
 
 Offen bleibt davon unberührt, **ob** solche Einträge überhaupt einen der 25 Plätze bekommen
 sollen — konzept.md, „Bewusst offen", „Ob Einträge ohne Wörterbucheintrag Vorrang haben

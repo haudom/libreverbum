@@ -21,9 +21,9 @@ aus — der Nutzer hat sie in der Triage bewusst gewählt, sie ist nur unbestät
 Review T13), und bekommt statt eines Ausschlusses den Tag `unsicher` (siehe `_tags`).
 Fehlt einer solchen Karte auch die Übersetzung, tritt eine deutsche Textmarke an deren
 Stelle statt eines Abbruchs — dieselbe Unterscheidung, die `printout.py` für die Druckseite
-trifft (`_translation_text`). Dieses Modul importiert aus dem Kern ausschließlich
-`entities` (technik.md §7, „Die Importregel") — insbesondere nicht `profile`: Die GUID
-**zurückzuschreiben**, ist Sache des Aufrufers.
+trifft (dort `_translation_html`, hier `_translation_text` unten). Dieses Modul importiert
+aus dem Kern ausschließlich `entities` (technik.md §7, „Die Importregel") — insbesondere
+nicht `profile`: Die GUID **zurückzuschreiben**, ist Sache des Aufrufers.
 
 Liefert
 -------
@@ -45,6 +45,9 @@ Karten mit derselben GUID innerhalb desselben Exports (Befund 2, Review T13), ei
 fehlende Übersetzung ohne die Marke `uncertain` oder ein Lückentext, dessen Wortform an
 keiner Wortgrenze im Belegsatz steht (Befund 4, Review T13), sind sichtbare Fehlschläge
 (Regel 13), keine leere oder unvollständige Datei.
+
+`card_obstacle` beantwortet die beiden letzteren Fälle **vorab**, damit ein Aufrufer sie
+nicht erst am Ende eines Durchlaufs erfährt — siehe dort.
 """
 
 from __future__ import annotations
@@ -268,9 +271,9 @@ def _translation_text(card: Card) -> str:
     if sense.uncertain:
         raise ValueError(
             f"„{card.occurrence.lemma.text}“ ({card.occurrence.lemma.pos}) hat keinen "
-            "Wörterbucheintrag — in Kartenrichtung de-en stünde die Marke „unsicher“ als "
-            "Frage auf der Vorderseite. Solche Wörter in Richtung en-de oder als "
-            "Lückentext exportieren, oder in der Triage überspringen."
+            "Wörterbucheintrag — in Kartenrichtung de_en stünde die Marke „unsicher“ als "
+            "Frage auf der Vorderseite. Solche Wörter mit --card-direction en_de oder "
+            "cloze exportieren, oder in der Triage überspringen."
         )
     raise ValueError(
         f"„{card.occurrence.lemma.text}“ ({card.occurrence.lemma.pos}) hat keine "
@@ -405,6 +408,56 @@ def _deck_id(deck_name: str) -> int:
 
 
 # ------------------------------------------------------------------------------ Export
+
+
+def card_obstacle(
+    occurrence: Occurrence, sense: Sense, card_direction: CardDirection
+) -> str | None:
+    """Was der Kartenerzeugung in dieser Kartenrichtung im Weg steht, als deutscher Satz —
+    oder `None`, wenn nichts im Weg steht (Befund mittel, Durchsicht 35736a9).
+
+    Beantwortet **vorab**, woran `export_deck` sonst erst am Ende scheitert. Beide
+    Unmöglichkeiten hängen allein an `occurrence`, `sense` und der Kartenrichtung und
+    brauchen weder Wörterbuch noch Modell:
+
+    - **`DE_EN` ohne Übersetzung:** Das Feld steht dort auf der Vorderseite
+      (`_DE_EN_MODEL`, `qfmt`) — eine Textmarke als Frage ergibt keine Karte, sondern eine
+      leere Abfrage (`_translation_text`)
+    - **`CLOZE`, dessen Wortform an keiner Wortgrenze des Belegsatzes steht:** Ohne Lücke
+      kein Lückentext (`_cloze_text`, Befund 4, Review T13). Gemessen an
+      `tools/dorian_gray.epub` trifft das 2.170 von 103.897 Wortvorkommen der Kapitel 1
+      bis 12 (2,1 %), in Kapitel 10 allein 22 von 663 — Bindestrichkomposita wie
+      `heart-broken` und Wortformen unmittelbar vor einem typografischen Apostroph
+      (`the girl's mother`), beides Folgen von `_WORD_CONTINUING_EXTRA` und damit gewollt
+
+    Warum diese Frage getrennt vom Abbruch existiert: `cli.export.write_exports` ruft
+    `export_deck` **vor** `printout.write_printout`. Ein Abbruch dort kostet deshalb beide
+    Dateien samt aller übrigen Karten eines Durchlaufs — nach vollständig durchlaufener
+    Triage, also zum teuersten denkbaren Zeitpunkt. Genau das ist am 01.09.2026 aus der
+    Praxis gemeldet worden (technik.md §8b, Nachtrag). Der Aufrufer (`cli.interaction`)
+    fragt deshalb **vor** der Entscheidung; die Abbrüche in `_translation_text` und
+    `_cloze_text` bleiben der Rückhalt für jeden Weg, der hier nicht vorbeikommt (Regel
+    13). Beide Seiten müssen sich einig sein — geprüft in `tests/test_anki.py`.
+
+    Der Satz ist Oberflächentext und deshalb deutsch (dokumentation.md §1): Der Aufrufer
+    gibt ihn unverändert aus, statt aus einem bloßen `bool` eine eigene Begründung zu
+    bilden. Welche Kartenvorlage welches Feld auf die Vorderseite nimmt, weiß dieses
+    Modul — nicht die Oberfläche.
+    """
+    if card_direction is CardDirection.DE_EN and sense.translation is None:
+        return (
+            f"„{occurrence.lemma.text}“ hat keinen Wörterbucheintrag — in Kartenrichtung "
+            "de_en bliebe die Vorderseite ohne deutsche Bedeutung."
+        )
+    if (
+        card_direction is CardDirection.CLOZE
+        and _find_word_at_boundary(occurrence.example_sentence, occurrence.word_form) == -1
+    ):
+        return (
+            f"„{occurrence.word_form}“ kommt im Belegsatz an keiner Wortgrenze wortwörtlich "
+            "vor — daraus ist kein Lückentext zu bilden."
+        )
+    return None
 
 
 def export_deck(path: Path, cards: Sequence[Card], *, deck_name: str) -> None:

@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from libreverbum import anki
+from libreverbum import anki, printout
 from libreverbum.entities import Book, Card, CardDirection, Lemma, Occurrence, Sense
 
 
@@ -82,6 +82,27 @@ def _card(
         occurrence=occurrence,
         card_direction=direction,
         guid=guid if guid is not None else anki.new_card_guid(occurrence, sense, direction),
+    )
+
+
+def _placeholder_card(
+    occurrence: Occurrence, *, direction: CardDirection = CardDirection.EN_DE
+) -> Card:
+    """Eine Karte auf dem **echten** Platzhalter eines Wortes ohne Wörterbucheintrag
+    (Befund leicht 5, Durchsicht 35736a9): `Sense(lemma=…, uncertain=True)` ohne jedes
+    `wikdict_`-Feld, genau wie `pipeline.run_chapter` ihn für eine leere Auswahlliste und
+    `dictionary.particle_verb_candidates` ihn für ein Phrasal Verb ohne Treffer einsetzt.
+
+    `_card(translation=None, uncertain=True)` behielte `wikdict_sense` und
+    `wikdict_lexentry` und wäre damit kein Wort ohne Wörterbucheintrag, sondern eines mit
+    Eintrag und ohne Übersetzung — ein Fall, den es so nicht gibt. Dieselbe Form baut
+    `tests/test_cli_export.py`."""
+    sense = Sense(lemma=occurrence.lemma, uncertain=True)
+    return Card(
+        sense=sense,
+        occurrence=occurrence,
+        card_direction=direction,
+        guid=anki.new_card_guid(occurrence, sense, direction),
     )
 
 
@@ -411,7 +432,7 @@ def test_an_uncertain_card_without_translation_carries_a_german_mark_instead_of_
     solchen Wort ließ den gesamten Export scheitern, Deck **und** Druckseite. Bis zu 9 von
     25 gezeigten Einträgen tragen nur diesen Platzhalter (technik.md §11, „Warum C2 nicht
     angeboten wird")."""
-    card = _card(_occurrence(), direction=direction, translation=None, uncertain=True)
+    card = _placeholder_card(_occurrence(), direction=direction)
     path = tmp_path / "deck.apkg"
 
     anki.export_deck(path, [card], deck_name="Unsicher")
@@ -430,7 +451,7 @@ def test_an_uncertain_card_without_translation_is_a_visible_failure_for_de_en(
     dieselbe. Was keine deutsche Seite hat, bricht deshalb sichtbar ab, statt still zu
     einer unlernbaren Karte zu werden. `cli.interaction` lässt eine solche Karte in dieser
     Richtung gar nicht erst entstehen; diese Prüfung ist der Rückhalt."""
-    card = _card(_occurrence(), direction=CardDirection.DE_EN, translation=None, uncertain=True)
+    card = _placeholder_card(_occurrence(), direction=CardDirection.DE_EN)
 
     with pytest.raises(ValueError):
         anki.export_deck(tmp_path / "deck.apkg", [card], deck_name="Fehlerfall")
@@ -450,3 +471,70 @@ def test_export_deck_rejects_a_missing_target_directory(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError):
         anki.export_deck(tmp_path / "fehlt" / "deck.apkg", [card], deck_name="Fehlerfall")
+
+
+def test_the_card_and_the_printout_call_a_missing_dictionary_entry_the_same(tmp_path: Path) -> None:
+    """Der gleiche Wortlaut auf Karte und Papier ist Absicht (`anki._UNCERTAIN_TEXT`,
+    Kommentar dort) — festgenagelt statt bloß behauptet (Befund leicht 6, Durchsicht
+    35736a9).
+
+    `anki` und `printout` dürfen einander nicht importieren (technik.md §7, „Die
+    Importregel"), führen den Text deshalb je selbst. Ohne diese Prüfung könnte einer der
+    beiden abwandern, ohne dass ein Test rot wird, und dasselbe Wort hieße auf dem Blatt
+    anders als in Anki. Geprüft wird nicht Literal gegen Literal, sondern gegen das, was
+    `printout` tatsächlich in die Seite schreibt."""
+    occurrence = _occurrence()
+    placeholder = Sense(lemma=occurrence.lemma, uncertain=True)
+    path = tmp_path / "blatt.html"
+
+    printout.write_printout(path, [(occurrence, placeholder)])
+
+    assert anki._UNCERTAIN_TEXT in path.read_text(encoding="utf-8")
+
+
+def test_card_obstacle_and_export_deck_agree(tmp_path: Path) -> None:
+    """`card_obstacle` und `export_deck` müssen dieselbe Grenze ziehen (Befund mittel,
+    Durchsicht 35736a9): Wo die Vorabfrage `None` liefert, muss der Export durchlaufen; wo
+    sie einen Grund nennt, muss er abbrechen.
+
+    Laufen die beiden auseinander, ist genau der Schaden zurück, gegen den die Vorabfrage
+    gebaut ist — entweder bricht der Export trotz grüner Vorabfrage am Ende eines
+    Durchlaufs ab (und kostet Deck, Druckseite und alle übrigen Karten), oder die Triage
+    weist etwas zurück, das der Export klaglos genommen hätte."""
+    ohne_wortgrenze = _occurrence(word_form="heart", example_sentence="I am heart-broken.")
+    faelle = [
+        _card(_occurrence()),
+        _card(_occurrence(), direction=CardDirection.DE_EN),
+        _card(_occurrence(), direction=CardDirection.CLOZE),
+        _placeholder_card(_occurrence()),
+        _placeholder_card(_occurrence(), direction=CardDirection.DE_EN),
+        _placeholder_card(_occurrence(), direction=CardDirection.CLOZE),
+        _card(ohne_wortgrenze, direction=CardDirection.CLOZE),
+        _card(ohne_wortgrenze),
+    ]
+
+    for nummer, card in enumerate(faelle):
+        obstacle = anki.card_obstacle(card.occurrence, card.sense, card.card_direction)
+        path = tmp_path / f"deck{nummer}.apkg"
+        if obstacle is None:
+            anki.export_deck(path, [card], deck_name="Einigkeit")
+            assert path.is_file()
+        else:
+            with pytest.raises(ValueError):
+                anki.export_deck(path, [card], deck_name="Einigkeit")
+
+
+def test_card_obstacle_names_the_two_cases_it_knows() -> None:
+    """Die beiden Unmöglichkeiten, die `card_obstacle` vorab erkennt, und der Regelfall
+    dazwischen — die Meldung nennt jeweils den Grund, nicht bloß ein „geht nicht"
+    (dokumentation.md §1: Was ein Mensch in Sätzen liest, ist deutsch)."""
+    ohne_uebersetzung = Sense(lemma=Lemma(text="jabbar", pos="NOUN"), uncertain=True)
+    ohne_wortgrenze = _occurrence(word_form="heart", example_sentence="I am heart-broken.")
+
+    assert anki.card_obstacle(_occurrence(), _sense(_occurrence()), CardDirection.DE_EN) is None
+    assert anki.card_obstacle(_occurrence(), ohne_uebersetzung, CardDirection.EN_DE) is None
+
+    de_en = anki.card_obstacle(_occurrence(), ohne_uebersetzung, CardDirection.DE_EN)
+    cloze = anki.card_obstacle(ohne_wortgrenze, _sense(ohne_wortgrenze), CardDirection.CLOZE)
+    assert de_en is not None and "de_en" in de_en
+    assert cloze is not None and "Lückentext" in cloze

@@ -122,8 +122,9 @@ Danach läuft der Durchgang:
    passen soll
 
 Nützliche Argumente: `--chapter 3` überspringt die Auswahl, `--card-direction de_en`
-dreht die Karten um, `--output-dir` und `--data-dir` verschieben Ziel- und
-Datenverzeichnis. `python -m cli --help` zeigt alle.
+dreht die Karten um (dann bleiben Wörter ohne Wörterbucheintrag außen vor — ihre
+Vorderseite trüge keine deutsche Bedeutung), `--output-dir` und `--data-dir` verschieben
+Ziel- und Datenverzeichnis. `python -m cli --help` zeigt alle.
 
 Heraus kommen zwei Dateien je Lauf, `<Buchtitel>_kapitel<N>.apkg` und `.html`:
 
