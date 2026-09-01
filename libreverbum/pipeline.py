@@ -700,7 +700,18 @@ def resolve_triage_entries(
 # GER-Niveau, keine eigene Auszählung von LibreVerbum. „Keine Angabe" (kein Eintrag hier)
 # bedeutet keine Vorbelegung; das entscheidet der Aufrufer von `write_vocabulary_preset`,
 # nicht diese Tabelle.
-_PRESET_WORD_COUNT: dict[CefrLevel, int] = {
+#
+# Öffentlich (kein führender Unterstrich) seit Bauschritt 4/5 (31.08.2026): `cli.main`
+# nennt in der Niveaufrage dieselbe Größenordnung, die diese Tabelle beim Schreiben
+# tatsächlich verwendet — ein zweiter, von Hand nachgeführter Zahlensatz im
+# Oberflächentext wäre genau die Art von Dopplung, die auseinanderlaufen kann, ohne dass
+# ein Prüflauf es bemerkt.
+#
+# (Befund a, Durchsicht d8d5954): Die Tabelle muss jedes Niveau aus `CefrLevel` führen —
+# der Zugriff in `write_vocabulary_preset` ist ungeschützt, ein fehlendes Niveau ergäbe
+# einen nackten englischen `KeyError` statt einer deutschen Meldung (Regel 13). Geprüft
+# in `test_preset_word_count_covers_every_cefr_level`.
+PRESET_WORD_COUNT: dict[CefrLevel, int] = {
     CefrLevel.A1: 500,
     CefrLevel.A2: 1000,
     CefrLevel.B1: 2000,
@@ -718,7 +729,7 @@ def _load_wordfreq_lemmas(count: int) -> list[str]:
     (`wordfreq_en_5000.txt`) — Kommentarkopf überspringen (jede mit „#" beginnende oder
     leere Zeile), Rangfolge beibehalten. Die Datei selbst versichert: Ein Präfix
     beliebiger Länge ist eine gültige Auswahl der `count` häufigsten Grundformen — welche
-    Länge ein Niveau bekommt, entscheidet `_PRESET_WORD_COUNT`, nicht diese Funktion."""
+    Länge ein Niveau bekommt, entscheidet `PRESET_WORD_COUNT`, nicht diese Funktion."""
     lemmas = []
     with _WORDFREQ_PRESET_PATH.open(encoding="utf-8") as handle:
         for line in handle:
@@ -728,9 +739,27 @@ def _load_wordfreq_lemmas(count: int) -> list[str]:
     return lemmas[:count]
 
 
+@dataclass(frozen=True)
+class PresetResult:
+    """Ergebnis von `write_vocabulary_preset` (Bauschritt 4/5 der Vorbelegung,
+    31.08.2026): zwei Zählungen, die zusammen sagen, was tatsächlich gebucht wurde, statt
+    nur „fertig" zu melden (Auftragstext) — beide auf `0`, wenn `cefr_level` „keine Angabe"
+    war.
+
+    `lemma_pos_pairs`: wie viele (Grundform, Wortart)-Paare der vorbelegten Liste
+    überhaupt einen Wörterbucheintrag hatten (`dictionary.pos_variants`, „Alle (Grundform,
+    Wortart)-Paare …"; ein Mehrwortausdruck zählt als ein Paar, seine Wortart ist immer
+    leer). `senses`: wie viele Bedeutungen daraus insgesamt gebucht wurden — mindestens so
+    viele wie Paare, meist mehr, weil ein Paar mehrere Bedeutungen tragen kann (`watch` als
+    Substantiv: „Uhr", „Wache")."""
+
+    lemma_pos_pairs: int
+    senses: int
+
+
 def write_vocabulary_preset(
     *, dictionary_path: Path, profile_path: Path, cefr_level: CefrLevel | None, timestamp: datetime
-) -> int:
+) -> PresetResult:
     """Vorbelegung des Profils beim Anlegen (Bauschritt 3/5, 31.08.2026, konzept.md,
     „Bewusst offen", „Woher der Nutzer seinen Grundwortschatz bekommt"): trägt **alle**
     Wörterbuchbedeutungen der häufigsten Grundformen des gewählten Sprachniveaus als
@@ -741,7 +770,7 @@ def write_vocabulary_preset(
     kein Ereignis, kein Aufruf von `profile.record_preset`, das Sprachniveau bleibt
     unverändert (nicht einmal auf `None` gesetzt: „keine Angabe" beim Anlegen ist kein
     Zurücksetzen eines vorhandenen Niveaus, das ist Sache einer anderen Bedienhandlung).
-    Sonst werden `_PRESET_WORD_COUNT[cefr_level]` Grundformen aus `wordfreq_en_5000.txt`
+    Sonst werden `PRESET_WORD_COUNT[cefr_level]` Grundformen aus `wordfreq_en_5000.txt`
     gelesen (`_load_wordfreq_lemmas`).
 
     Die Liste trägt keine Wortart — eine geratene, feste Wortart träfe entweder nur die
@@ -766,12 +795,54 @@ def write_vocabulary_preset(
     bekannt buchen könnte, und ein `uncertain`-Eintrag darf nie als bekannt gebucht werden
     (Auftragstext).
 
-    Schreibt über `profile.record_preset` in einer einzigen Transaktion (ganz oder gar
-    nicht) und liefert die Zahl der gebuchten Ereignisse."""
-    if cefr_level is None:
-        return 0
+    (Befund 1, Durchsicht d8d5954): Der `uncertain`-Platzhalter ist nur der erste Grund
+    für den Wendungsweg. Der zweite ist die Schwelle `score ≥ 50` (technik.md, „Messung:
+    Mehrwortausdrücke"), die allein er kennt: `go to` — Rang 410 der Liste und damit in
+    jedem Kontingent enthalten — hat im Wörterbuch genau eine Zeile mit `lexentry`, und
+    die trägt `score = 0.0` und die Übersetzung „fahren ajoneuvo" (das zweite Wort ist
+    Finnisch). Über den Einzelwortweg gebucht wäre das eine Profilzeile, die **kein
+    Kapiteldurchlauf je einlöst**: Ein echter Durchlauf findet `go to` ebenfalls nur über
+    `contiguous_candidates` und verwirft die Zeile dort an derselben Schwelle.
 
-    lemma_texts = _load_wordfreq_lemmas(_PRESET_WORD_COUNT[cefr_level])
+    (Befund d, Durchsicht d8d5954): Von einem Mehrwortausdruck deckt die Vorbelegung damit
+    nur die Fassung mit `pos = ""` ab. Ein Kapiteldurchlauf erzeugt Wendungen auf **zwei**
+    Wegen — `extraction.extract_particle_verb_candidates` vergibt `pos = "VERB"` —, für
+    ein echtes Partikelverb wie `give up` entstünde also beides, und die `VERB`-Fassung
+    träfe die Vorbelegung nicht. Heute greift das nicht: Keiner der neun Mehrworteinträge
+    der eingefrorenen Liste entsteht auf dem Partikelweg (an 28 echten Kapiteln geprüft —
+    es sind Kontraktionen und Präpositionalfügungen), und die Liste ist per SHA-256
+    eingefroren. Eine künftige Liste mit einem echten Partikelverb wäre hier nachzuziehen.
+
+    Bricht sichtbar ab (Regel 13), wenn das Verzeichnis von `profile_path` nicht
+    existiert — geprüft **vor** dem Nachschlagen und nicht erst beim Öffnen des Profils
+    (Befund b, Durchsicht d8d5954), dasselbe Muster wie `run_chapter` für die
+    Wörterbuchdatei.
+
+    **Für den einmaligen Aufruf beim Anlegen des Profils gedacht** (Befund c, Durchsicht
+    d8d5954): Ein zweiter Aufruf hängt an, statt zu ersetzen — die Ereignisfolge ist
+    anhängend (technik.md §4). Das Ergebnis bleibt dabei richtig (`KNOWN` bleibt `KNOWN`),
+    Profil und Index wachsen aber ohne Gegenwert: A1 schreiben und danach C1 auf dasselbe
+    Profil ergibt 17.583 Ereignisse, davon 2.469 Bedeutungen mit doppeltem
+    `preset`-Ereignis. Dass es beim einen Aufruf bleibt, stellt der Aufrufer sicher.
+
+    Schreibt über `profile.record_preset` in einer einzigen Transaktion (ganz oder gar
+    nicht) und liefert `PresetResult` mit beiden Zählungen."""
+    if cefr_level is None:
+        return PresetResult(lemma_pos_pairs=0, senses=0)
+
+    # (Befund b, Durchsicht d8d5954): Die billige Prüfung vor die teure Arbeit — dasselbe
+    # Muster wie in `run_chapter` für die Wörterbuchdatei (Befund 3, Review T15). Ohne sie
+    # laufen `pos_variant_lists` und `contiguous_candidates` erst vollständig durch (bei C1
+    # rund 0,3 s und gut 15.000 `Event`-Objekte im Speicher), bevor `profile.open_profile`
+    # das fehlende Verzeichnis meldet. Wortlaut wie dort, damit dieselbe Lage nicht zwei
+    # verschiedene Meldungen ergibt.
+    if not profile_path.parent.is_dir():
+        raise ValueError(
+            f"Profilverzeichnis {profile_path.parent} existiert nicht — Verzeichnis "
+            "anlegen, bevor die Profildatei geöffnet wird."
+        )
+
+    lemma_texts = _load_wordfreq_lemmas(PRESET_WORD_COUNT[cefr_level])
     single_word_texts = [text for text in lemma_texts if " " not in text]
     expression_texts = [text for text in lemma_texts if " " in text]
 
@@ -781,10 +852,14 @@ def write_vocabulary_preset(
     )
 
     senses: list[Sense] = []
+    lemma_pos_pairs = 0
     for variants in single_word_variants:
         for _lemma, group in variants:
+            lemma_pos_pairs += 1
             senses.extend(group)
     for matches in expression_matches:
+        if matches:
+            lemma_pos_pairs += 1
         senses.extend(matches)
 
     events = [
@@ -804,4 +879,4 @@ def write_vocabulary_preset(
         profile.record_preset(con, events, cefr_level)
     finally:
         con.close()
-    return len(events)
+    return PresetResult(lemma_pos_pairs=lemma_pos_pairs, senses=len(events))

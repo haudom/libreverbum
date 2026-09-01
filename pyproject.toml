@@ -95,6 +95,12 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# -rs nennt am Ende jedes Laufs jeden übersprungenen Test samt Grund. Ohne die Angabe
+# sieht „grün mit dreißig stillen Skips" aus wie „grün" — genau die Verwechslung, vor der
+# dokumentation.md §10, „Woran sie prüft: gegen den Commit, nicht gegen den Arbeitsbaum"
+# warnt. Zwei Durchsichten hintereinander mussten sie mit einem zweiten vollständigen Lauf
+# ausräumen; als addopts steht die Liste in jedem Lauf da, ohne dass jemand daran denkt.
+addopts = ["-rs"]
 # `package = false` oben heißt: libreverbum wird nicht in die Umgebung installiert. Ohne
 # diese Zeile findet blank aufgerufenes `pytest` das Paket deshalb nicht — nur
 # `python -m pytest` täte es, weil das Verzeichnis dann ohnehin im Suchpfad steht. Das Tor

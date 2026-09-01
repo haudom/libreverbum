@@ -1535,15 +1535,18 @@ def test_write_vocabulary_preset_books_every_dictionary_sense_not_only_the_best_
 ) -> None:
     """Auftragstext: gebucht wird alle Wörterbuchbedeutungen einer vorbelegten Grundform.
     watch als Substantiv trägt im Mini-Wörterbuch zwei Bedeutungen (Uhr, Wache mit
-    niedrigerem score) — beide werden gebucht, nicht nur die bestbewertete."""
-    count = pipeline.write_vocabulary_preset(
+    niedrigerem score) — beide werden gebucht, nicht nur die bestbewertete. Die 5
+    (Grundform, Wortart)-Paare aus dem Kommentar oben (watch NOUN, watch VERB, red ADJ,
+    red NOUN, street NOUN) stehen ebenso in `PresetResult.lemma_pos_pairs`."""
+    result = pipeline.write_vocabulary_preset(
         dictionary_path=mini_dictionary_db,
         profile_path=profile_path,
         cefr_level=CefrLevel.A1,
         timestamp=datetime.now(UTC),
     )
 
-    assert count == 6
+    assert result.lemma_pos_pairs == 5
+    assert result.senses == 6
 
     con = profile.open_profile(profile_path)
     watch_noun_translations = {
@@ -1637,14 +1640,15 @@ def test_write_vocabulary_preset_does_not_book_a_lemma_without_a_dictionary_entr
     con.commit()
     con.close()
 
-    count = pipeline.write_vocabulary_preset(
+    result = pipeline.write_vocabulary_preset(
         dictionary_path=empty_dictionary,
         profile_path=profile_path,
         cefr_level=CefrLevel.A1,
         timestamp=datetime.now(UTC),
     )
 
-    assert count == 0
+    assert result.lemma_pos_pairs == 0
+    assert result.senses == 0
     reader = profile.open_profile(profile_path)
     assert reader.execute("SELECT count(*) FROM event").fetchone()[0] == 0
     assert reader.execute("SELECT count(*) FROM sense").fetchone()[0] == 0
@@ -1659,15 +1663,60 @@ def test_write_vocabulary_preset_with_no_answer_writes_nothing(
     """keine Angabe (cefr_level=None) schreibt keine Ereignisse und setzt kein Niveau —
     hier sogar noch früher sichtbar: Das Profil wird gar nicht erst geöffnet, die
     Profildatei bleibt ganz ungeschrieben."""
-    count = pipeline.write_vocabulary_preset(
+    result = pipeline.write_vocabulary_preset(
         dictionary_path=mini_dictionary_db,
         profile_path=profile_path,
         cefr_level=None,
         timestamp=datetime.now(UTC),
     )
 
-    assert count == 0
+    assert result.lemma_pos_pairs == 0
+    assert result.senses == 0
     assert not profile_path.exists()
+
+
+def test_preset_word_count_covers_every_cefr_level() -> None:
+    """(Befund a, Durchsicht d8d5954), Regel 13: `write_vocabulary_preset` greift
+    ungeschützt auf `PRESET_WORD_COUNT[cefr_level]` zu — fehlte dort ein Niveau, bräche
+    der Lauf mit einem nackten englischen `KeyError` ab statt mit einer deutschen Meldung.
+    Die Tabelle führt deshalb jedes Niveau der Aufzählung, und jedes Kontingent liegt
+    innerhalb der eingefrorenen Liste. Geprüft wird gegen `CefrLevel` und gegen die Liste
+    selbst, nicht gegen die Tabelle: A2, B2 und C1 kommen in keinem anderen Test vor."""
+    assert set(pipeline.PRESET_WORD_COUNT) == set(CefrLevel)
+
+    for level in CefrLevel:
+        count = pipeline.PRESET_WORD_COUNT[level]
+        assert len(pipeline._load_wordfreq_lemmas(count)) == count
+
+
+def test_write_vocabulary_preset_checks_the_profile_directory_before_the_lookup(
+    mini_dictionary_db: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """(Befund b, Durchsicht d8d5954), Regel 13: Die billige Prüfung läuft vor der teuren
+    Arbeit — dasselbe Muster wie `run_chapter` für die Wörterbuchdatei (Befund 3, Review
+    T15). Vor dieser Behebung liefen erst `dictionary.pos_variant_lists` und
+    `dictionary.contiguous_candidates` vollständig durch (bei C1 rund 0,3 s und gut 15.000
+    Ereignisse im Speicher), bevor `profile.open_profile` das fehlende Profilverzeichnis
+    meldete.
+
+    Beide Nachschlagewege werden hier durch eine Attrappe ersetzt, die bei jedem Aufruf
+    abbricht: Der erwartete `ValueError` tritt nur ein, wenn die Verzeichnisprüfung sie nie
+    erreicht — würde stattdessen zuerst nachgeschlagen, schlüge der Test mit der
+    Attrappen-Ausnahme fehl."""
+
+    def _must_not_be_called(*args: object, **kwargs: object) -> list[object]:
+        raise AssertionError("nachgeschlagen, bevor das Profilverzeichnis geprüft war")
+
+    monkeypatch.setattr(dictionary, "pos_variant_lists", _must_not_be_called)
+    monkeypatch.setattr(dictionary, "contiguous_candidates", _must_not_be_called)
+
+    with pytest.raises(ValueError, match="Profilverzeichnis"):
+        pipeline.write_vocabulary_preset(
+            dictionary_path=mini_dictionary_db,
+            profile_path=tmp_path / "fehlt" / "profil.sqlite3",
+            cefr_level=CefrLevel.A1,
+            timestamp=datetime.now(UTC),
+        )
 
 
 @pytest.mark.needs_dictionary
@@ -1678,19 +1727,27 @@ def test_write_vocabulary_preset_against_the_real_dictionary(
     behauptet wird, wird gegen das echte Gegenüber geprüft. Schreibt die Zahl fest, die
     dieser Bau tatsächlich gegen tools/en-de.sqlite3 liefert.
 
-    Abweichung vom Auftragstext: Der Auftrag nennt für B1 (N=2.000) 2.663 Paare und
-    8.045 Bedeutungen aus einer Messung vom 31.08.2026. Diese Umsetzung liefert
-    reproduzierbar 8.044 Ereignisse (eine Bedeutung weniger) — geprüft gegen
-    case-insensitives Nachschlagen, Funktionswörter (the/of/a/…, deren Wörterbucheintrag
-    außerhalb der fünf erkannten Wortarten liegt) und unübliche lexentry-Formate; keine
-    dieser Erklärungen trifft zu. Die Abweichung bleibt ungeklärt und ist hier als Befund
-    festgehalten (Auftragstext: Weicht dein Ergebnis ab, ist das ein Befund für den
-    Bericht und keine Zahl zum Anpassen)."""
-    count = pipeline.write_vocabulary_preset(
+    Abweichung vom Auftragstext, geklärt (Befund 1, Durchsicht d8d5954): Der Auftrag nennt
+    für B1 (N=2.000) 2.663 Paare und 8.045 Bedeutungen aus einer Messung vom 31.08.2026,
+    diese Umsetzung liefert reproduzierbar 2.662 und 8.044. Die Differenz ist genau eine
+    Zeile — `go to`, Rang 410 der Liste und damit in jedem Kontingent enthalten, weshalb
+    die Abweichung bei jedem Niveau dieselbe ist. Das Messskript schickte **jeden**
+    Listeneintrag durch den Einzelwortweg, auch die neun Mehrworteinträge; dieser Weg kennt
+    die Schwelle `score ≥ 50` nicht (technik.md, „Messung: Mehrwortausdrücke"). `go to` hat
+    im Wörterbuch genau eine Zeile mit `lexentry`, und die trägt `score = 0.0` und die
+    Übersetzung „fahren ajoneuvo" (das zweite Wort ist Finnisch); der Wendungsweg dieser
+    Umsetzung (`dictionary.contiguous_candidates`) wirft sie an der Schwelle weg —
+    richtigerweise, denn ein echter Kapiteldurchlauf findet `go to` ebenfalls nur über
+    `contiguous_candidates` und verwirft sie dort genauso. Gebucht wäre sie eine
+    Profilzeile, die kein Kapiteldurchlauf je einlöst. Nachgestellt: Schickt man alle 2.000
+    Grundformen über `dictionary.pos_variant_lists`, kommen genau die 2.663 und 8.045 des
+    Auftrags heraus. **8.044 ist die richtige Zahl, 8.045 war der Messfehler.**"""
+    result = pipeline.write_vocabulary_preset(
         dictionary_path=real_dictionary_path,
         profile_path=profile_path,
         cefr_level=CefrLevel.B1,
         timestamp=datetime.now(UTC),
     )
 
-    assert count == 8044
+    assert result.lemma_pos_pairs == 2662
+    assert result.senses == 8044
