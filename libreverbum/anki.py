@@ -16,12 +16,14 @@ ist ein Pflichtfeld (`entities.Card`), es gibt also keinen Zeitpunkt, zu dem ein
 ohne GUID existiert. Der Aufrufer (T15/T16, noch nicht gebaut) ruft
 `new_card_guid(occurrence, sense, card_direction)` auf und übergibt das Ergebnis dem
 `Card`-Konstruktor; erst danach kennt dieses Modul die Karte überhaupt. `export_deck`
-erwartet Karten **eines** Exports mit bereits aufgelöster Übersetzung (`sense.translation`
-gesetzt); `sense.uncertain=True` schließt eine Karte davon **nicht** aus — der Nutzer hat
-sie in der Triage bewusst gewählt, sie ist nur unbestätigt (Befund 3, Review T13), und
-bekommt statt eines Ausschlusses den Tag `unsicher` (siehe `_tags`). Dieses Modul
-importiert aus dem Kern ausschließlich `entities` (technik.md §7, „Die Importregel") —
-insbesondere nicht `profile`: Die GUID **zurückzuschreiben**, ist Sache des Aufrufers.
+erwartet Karten **eines** Exports; `sense.uncertain=True` schließt eine Karte **nicht**
+aus — der Nutzer hat sie in der Triage bewusst gewählt, sie ist nur unbestätigt (Befund 3,
+Review T13), und bekommt statt eines Ausschlusses den Tag `unsicher` (siehe `_tags`).
+Fehlt einer solchen Karte auch die Übersetzung, tritt eine deutsche Textmarke an deren
+Stelle statt eines Abbruchs — dieselbe Unterscheidung, die `printout.py` für die Druckseite
+trifft (`_translation_text`). Dieses Modul importiert aus dem Kern ausschließlich
+`entities` (technik.md §7, „Die Importregel") — insbesondere nicht `profile`: Die GUID
+**zurückzuschreiben**, ist Sache des Aufrufers.
 
 Liefert
 -------
@@ -40,9 +42,9 @@ Abnahme T17) — dieselbe Angabe wie `cli.interaction` auf dem Bildschirm.
 
 Eine leere Kartenliste, zwei
 Karten mit derselben GUID innerhalb desselben Exports (Befund 2, Review T13), eine
-unaufgelöste Übersetzung oder ein Lückentext, dessen Wortform an keiner Wortgrenze im
-Belegsatz steht (Befund 4, Review T13), sind sichtbare Fehlschläge (Regel 13), keine
-leere oder unvollständige Datei.
+fehlende Übersetzung ohne die Marke `uncertain` oder ein Lückentext, dessen Wortform an
+keiner Wortgrenze im Belegsatz steht (Befund 4, Review T13), sind sichtbare Fehlschläge
+(Regel 13), keine leere oder unvollständige Datei.
 """
 
 from __future__ import annotations
@@ -218,17 +220,64 @@ def _escaped(value: str) -> str:
     return html.escape(value, quote=False)
 
 
+# Wortgleich mit `printout._UNCERTAIN_MARK` samt dessen Zusatz, aber eine eigene
+# Konstante: `anki` und `printout` importieren aus dem Kern beide nur `entities`
+# (technik.md §7, „Die Importregel"), keines der beiden darf das andere holen. Der gleiche
+# Wortlaut ist dabei Absicht — dieselbe Lage soll auf der Karte heißen wie auf dem Papier.
+_UNCERTAIN_TEXT = "unsicher – kein Wörterbucheintrag"
+
+
 def _translation_text(card: Card) -> str:
-    """Die aufgelöste Übersetzung einer Karte — sichtbarer Fehlschlag (Regel 13), wenn sie
-    fehlt: Eine Karte mit `sense.translation is None` ist noch nicht bedeutungsaufgelöst
-    (`entities.Sense`, `uncertain`) und gehört nicht in einen Export."""
-    if card.sense.translation is None:
+    """Der Wert des Feldes „Übersetzung" — dieselben drei `uncertain`-Fälle, die
+    `printout.py`, „Wie mit uncertain verfahren wird" für die Druckseite unterscheidet
+    (Regel 10, Regel 13):
+
+    - **Ohne Übersetzung, `uncertain`:** kein Fehlschlag, sondern `_UNCERTAIN_TEXT`. Genau
+      diesen Platzhalter trägt ein Wort ohne Wörterbucheintrag (`pipeline.run_chapter` für
+      eine leere Auswahlliste, `dictionary.particle_verb_candidates` für ein Phrasal Verb
+      ohne Treffer), und der Nutzer hat ihn in der Triage bewusst gewählt: Es fehlt die
+      Bedeutung, nicht die Karte. Sie trägt zusätzlich den Tag `unsicher` (`_tags`) und
+      lässt sich in Anki von Hand ergänzen.
+    - **Ohne Übersetzung, nicht `uncertain`:** ein echter Fehlschlag der Vorstufe,
+      sichtbarer Abbruch (Regel 13) — wie bisher.
+    - **Mit Übersetzung, `uncertain`:** die Übersetzung; die Unsicherheit trägt hier der
+      Tag, nicht das Feld.
+
+    Bis zum 01.09.2026 brach der erste Fall ebenso ab wie der zweite. Gemeldet aus einem
+    Kapiteldurchlauf: Ein einziges „lernen" auf einem Wort ohne Wörterbucheintrag ließ den
+    gesamten Export scheitern — Deck **und** Druckseite, denn `cli.export.write_exports`
+    ruft `export_deck` zuerst. Der Fall ist häufig, nicht selten: Von 25 in der Triage
+    gezeigten Einträgen tragen 2 (A1) bis 9 (C1) nur den Platzhalter (technik.md §11,
+    „Warum C2 nicht angeboten wird"). Der Tag `unsicher` in `_tags` war unter der alten
+    Prüfung damit unerreichbar, und konzept.md §5 verlangt für einen fehlenden
+    Wörterbuchtreffer ausdrücklich, den Eintrag zu **markieren** statt ihn abzuweisen.
+
+    Ausnahme `CardDirection.DE_EN`: Dort steht dieses Feld auf der **Vorderseite**
+    (`_DE_EN_MODEL`, `qfmt`), und `_UNCERTAIN_TEXT` als Frage ergibt keine Karte, sondern
+    eine leere Abfrage — bei mehreren solchen Wörtern sogar mehrmals dieselbe. Was keine
+    deutsche Seite hat, lässt sich nicht produzieren; das bleibt ein sichtbarer Abbruch.
+    Damit er nicht wieder einen ganzen Durchlauf kostet, lässt `cli.interaction`
+    („lernen" in `_individual_phase`) einen solchen Eintrag in dieser Kartenrichtung gar
+    nicht erst zur Karte werden — die Prüfung hier ist der Rückhalt, nicht der Regelweg.
+    """
+    sense = card.sense
+    if sense.translation is not None:
+        return sense.translation
+    if sense.uncertain and card.card_direction is not CardDirection.DE_EN:
+        return _UNCERTAIN_TEXT
+    if sense.uncertain:
         raise ValueError(
-            f"„{card.occurrence.lemma.text}“ ({card.occurrence.lemma.pos}) hat keine "
-            "aufgelöste Übersetzung (sense.translation ist None) — Export nur für "
-            "Karten mit aufgelöster Bedeutung."
+            f"„{card.occurrence.lemma.text}“ ({card.occurrence.lemma.pos}) hat keinen "
+            "Wörterbucheintrag — in Kartenrichtung de-en stünde die Marke „unsicher“ als "
+            "Frage auf der Vorderseite. Solche Wörter in Richtung en-de oder als "
+            "Lückentext exportieren, oder in der Triage überspringen."
         )
-    return card.sense.translation
+    raise ValueError(
+        f"„{card.occurrence.lemma.text}“ ({card.occurrence.lemma.pos}) hat keine "
+        "aufgelöste Übersetzung (sense.translation ist None) und ist nicht als unsicher "
+        "markiert (sense.uncertain) — Export nur für Karten mit aufgelöster oder als "
+        "unsicher bestätigter Bedeutung."
+    )
 
 
 _WORD_CONTINUING_EXTRA = {"'", "’", "-"}

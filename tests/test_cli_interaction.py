@@ -403,3 +403,43 @@ def test_a_word_without_a_dictionary_entry_keeps_its_uncertain_marker_when_learn
     assert len(cards) == 1
     assert cards[0].sense.uncertain is True
     assert cards[0].sense.translation is None
+
+
+def test_learning_a_word_without_a_dictionary_entry_is_refused_for_de_en(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """In Kartenrichtung `DE_EN` wird „lernen" auf einem Wort ohne Wörterbucheintrag nicht
+    angenommen, sondern erneut gefragt (`interaction._card_is_possible`) — die Vorderseite
+    trüge dort keine deutsche Bedeutung (`anki._DE_EN_MODEL`).
+
+    Regel 13: Die Entscheidung wird nicht stillschweigend zu „skip" umgedeutet, und der
+    Abbruch fällt nicht erst am Ende des Durchlaufs im Export an, wo er Deck und Druckseite
+    samt aller übrigen Karten kostete (gemeldet am 01.09.2026). Dass die dritte Antwort
+    verbraucht wird, ist der eigentliche Beleg: Wäre „l" angenommen worden, bliebe sie
+    ungelesen und es gäbe eine Karte."""
+    placeholder = Sense(lemma=Lemma(text="obscure", pos="NOUN"), uncertain=True)
+    entry = pipeline.ResolvedEntry(
+        occurrence=_occurrence("obscure", "NOUN", 1),
+        sense=placeholder,
+        status=VocabularyStatus.UNKNOWN,
+    )
+    resolution = pipeline.TriageResolution(
+        entries=[entry], known=0, resolved_known=0, skipped=0, deferred=0
+    )
+    answers = iter(["", "l", "s"])
+    lines: list[str] = []
+
+    cards = interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wörter",
+        card_direction=CardDirection.DE_EN,
+        read_line=lambda _prompt: next(answers),
+        write_line=lines.append,
+    )
+
+    assert cards == []
+    assert _events(profile_con) == [("obscure", "deferred", "triage")]
+    assert any("de-en" in line for line in lines)

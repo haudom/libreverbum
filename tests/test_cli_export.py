@@ -177,3 +177,46 @@ def test_a_second_export_of_the_same_meaning_does_not_duplicate_the_card_row(
     )
 
     assert profile_con.execute("SELECT count(*) FROM card").fetchone()[0] == 1
+
+
+def test_a_word_without_a_dictionary_entry_does_not_cost_the_whole_export(
+    tmp_path: Path, profile_con: sqlite3.Connection
+) -> None:
+    """Der am 01.09.2026 gemeldete Fehler, an der Stelle geprüft, an der er auftrat: Eine
+    einzige Karte ohne Wörterbucheintrag (`uncertain=True`, `translation is None`) ließ
+    `write_exports` in `anki.export_deck` abbrechen — und weil das der **erste** der beiden
+    Exporte ist, blieben auch alle übrigen Karten und die Druckseite ungeschrieben.
+
+    Geprüft wird deshalb der gemischte Fall, nicht die unsichere Karte allein: Beide
+    Dateien entstehen, beide Karten stehen im Deck, und `profile.record_card` hat danach
+    für beide eine Zeile geschrieben (Regel 6)."""
+    sicher = _card_for(_occurrence())
+    unsicheres_vorkommen = Occurrence(
+        book=_BOOK,
+        chapter_number=1,
+        lemma=Lemma(text="jabbar", pos="NOUN"),
+        word_form="jabbar",
+        example_sentence="A jabbar stood at the edge of the sietch.",
+        frequency=1,
+        proper_noun_frequency=0,
+    )
+    platzhalter = Sense(lemma=unsicheres_vorkommen.lemma, uncertain=True)
+    unsicher = Card(
+        sense=platzhalter,
+        occurrence=unsicheres_vorkommen,
+        card_direction=CardDirection.EN_DE,
+        guid=anki.new_card_guid(unsicheres_vorkommen, platzhalter, CardDirection.EN_DE),
+    )
+
+    paths = export.write_exports(
+        profile_con,
+        tmp_path / "export",
+        [sicher, unsicher],
+        book_title=_BOOK.title,
+        chapter_number=1,
+    )
+
+    assert paths.anki_path.is_file()
+    assert paths.printout_path.is_file()
+    assert sorted(_apkg_note_guids(paths.anki_path)) == sorted([sicher.guid, unsicher.guid])
+    assert profile_con.execute("SELECT count(*) FROM card").fetchone()[0] == 2

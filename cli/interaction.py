@@ -264,6 +264,23 @@ def _ask_action(read_line: ReadLine, write_line: WriteLine) -> str:
         write_line("Ungültige Eingabe — k, l, s oder q erwartet.")
 
 
+def _card_is_possible(sense: Sense, card_direction: CardDirection) -> bool:
+    """Ob aus `sense` in dieser Kartenrichtung überhaupt eine Karte werden kann
+    (01.09.2026, gemeldet aus einem Kapiteldurchlauf).
+
+    Eine Bedeutung ohne Übersetzung — der `uncertain`-Platzhalter eines Wortes ohne
+    Wörterbucheintrag — ergibt in `CardDirection.DE_EN` keine Karte: Dort steht die
+    Übersetzung auf der Vorderseite (`anki._DE_EN_MODEL`), und was keine deutsche Seite
+    hat, lässt sich nicht produzieren. `anki._translation_text` bricht deshalb ab; diese
+    Frage hier stellt sich **vor** der Entscheidung, damit der Abbruch nicht erst am Ende
+    des Durchlaufs kommt und dabei den gesamten Export kostet — Deck und Druckseite,
+    einschließlich aller anderen Karten. In den beiden übrigen Kartenrichtungen steht die
+    Übersetzung auf der Rückseite und wird dort durch eine deutsche Textmarke ersetzt; die
+    Karte ist dann vollwertig, nur die Bedeutung fehlt.
+    """
+    return sense.translation is not None or card_direction is not CardDirection.DE_EN
+
+
 def _individual_phase(
     *,
     con: sqlite3.Connection,
@@ -291,7 +308,18 @@ def _individual_phase(
         entry = entries_by_occurrence[occurrence]
         for line in _entry_lines(entry):
             write_line(line)
-        action = _ask_action(read_line, write_line)
+        while True:
+            action = _ask_action(read_line, write_line)
+            if action != "learn" or _card_is_possible(entry.sense, card_direction):
+                break
+            # REGEL (dokumentation.md §4 Regel 13): Erneut fragen statt die Entscheidung
+            # stillschweigend zu „skip" zu machen — dieselbe Handhabung wie `_ask_action`
+            # bei einer unbekannten Eingabe. Der Nutzer soll wissen, warum sein „lernen"
+            # nicht angenommen wurde, und selbst zwischen „kenne ich" und „skip" wählen.
+            write_line(
+                "Ohne Wörterbucheintrag ist in Kartenrichtung de-en keine Karte möglich — "
+                "die Vorderseite trüge keine deutsche Bedeutung."
+            )
 
         if action == "quit":
             write_line("Abgebrochen.")

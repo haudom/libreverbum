@@ -1967,6 +1967,43 @@ Der Preis ist bewusst in Kauf genommen: Ein neu bezogenes Wörterbuch mit geänd
 und korrigierbar — der still überschriebene Lernfortschritt der Gegenseite wäre es nicht
 (Abschnitt 4, „Jetzt billig, später teuer: die Anki-Kennung").
 
+### Nachtrag 01.09.2026: Ein Wort ohne Wörterbucheintrag kostet nicht mehr den ganzen Export
+
+Aus einem Kapiteldurchlauf gemeldet: Ein „lernen" auf `jabbar` — ein Wort, das WikDict nicht
+führt — ließ `cli.export.write_exports` abbrechen, und weil `anki.export_deck` der **erste**
+der beiden Exporte ist, entstand gar keine Datei: kein Deck, keine Druckseite, auch nicht
+für die übrigen Karten. Die Triage war da bereits vollständig durchlaufen.
+
+Zwei Dinge trafen zusammen:
+
+- **Die beiden Exporte widersprachen sich.** `printout.py` behandelt eine Bedeutung ohne
+  Übersetzung, aber mit `uncertain`, seit Review T14 ausdrücklich als *keinen* Fehlschlag
+  und druckt eine Textmarke; `anki.py` brach ab, ohne `uncertain` überhaupt anzusehen —
+  dieselbe Kartenliste, gegensätzliche Regel. Der Tag `unsicher` aus `anki._tags` (Befund 3,
+  Review T13) war dadurch von Anfang an unerreichbar
+- **Der Fall ist häufig, nicht selten.** 2 (A1) bis 9 (C1) der 25 in der Triage gezeigten
+  Einträge tragen nur den `uncertain`-Platzhalter (Abschnitt 11, „Warum C2 nicht angeboten
+  wird"). Ein einziges „lernen" darauf genügte
+
+> **Anki zieht mit der Druckseite gleich.** Fehlt die Übersetzung und ist `uncertain`
+> gesetzt, trägt das Feld eine deutsche Textmarke statt eines Abbruchs, und der Tag
+> `unsicher` kennzeichnet die Karte. Das ist ohnehin, was konzept.md §5 für einen fehlenden
+> Wörterbuchtreffer verlangt: **markieren** statt abweisen. Die Bedeutung fehlt, die Karte
+> ist deshalb nicht falsch — der Nutzer ergänzt die Rückseite in Anki.
+
+**Ausnahme `de-en`**: Dort steht die Übersetzung auf der Vorderseite (`anki._DE_EN_MODEL`),
+und eine Textmarke als Frage ist keine Karte, sondern eine leere Abfrage — bei mehreren
+solchen Wörtern sogar mehrmals dieselbe. Was keine deutsche Seite hat, lässt sich nicht
+produzieren; diese eine Kartenrichtung bricht weiter sichtbar ab (Regel 13). Damit der
+Abbruch nicht erneut einen ganzen Durchlauf kostet, nimmt die Triage ein „lernen" darauf gar
+nicht erst an, sondern fragt erneut (`cli.interaction._card_is_possible`) — der Abbruch im
+Export ist der Rückhalt, nicht der Regelweg.
+
+Offen bleibt davon unberührt, **ob** solche Einträge überhaupt einen der 25 Plätze bekommen
+sollen — konzept.md, „Bewusst offen", „Ob Einträge ohne Wörterbucheintrag Vorrang haben
+sollen". Dieser Nachtrag beantwortet nur, was mit einem geschieht, den der Nutzer gewählt
+hat.
+
 ---
 
 ## 8c. Druckausgabe — entschieden

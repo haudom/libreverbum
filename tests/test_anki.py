@@ -385,10 +385,52 @@ def test_missing_word_form_in_the_example_sentence_is_a_visible_failure_for_cloz
 
 
 def test_unresolved_translation_is_a_visible_failure(tmp_path: Path) -> None:
-    """Regel 13: Eine Karte ohne aufgelöste Übersetzung (`sense.translation is None`)
-    bricht den Export sichtbar ab statt eines leeren Feldes."""
+    """Regel 13: Eine Karte ohne aufgelöste Übersetzung (`sense.translation is None`) und
+    **ohne** die Marke `uncertain` bricht den Export sichtbar ab statt eines leeren
+    Feldes — der zweite der drei Fälle aus `anki._translation_text`: ein echter Fehlschlag
+    der Vorstufe, nicht ein Wort ohne Wörterbucheintrag."""
     occurrence = _occurrence()
     card = _card(occurrence, translation=None)
+
+    with pytest.raises(ValueError):
+        anki.export_deck(tmp_path / "deck.apkg", [card], deck_name="Fehlerfall")
+
+
+@pytest.mark.parametrize("direction", [CardDirection.EN_DE, CardDirection.CLOZE])
+def test_an_uncertain_card_without_translation_carries_a_german_mark_instead_of_failing(
+    tmp_path: Path, direction: CardDirection
+) -> None:
+    """Ein Wort ohne Wörterbucheintrag (`uncertain=True`, `translation is None`) kommt ins
+    Deck, mit einer deutschen Textmarke im Feld „Übersetzung" und dem Tag `unsicher` —
+    kein Abbruch (konzept.md §5: „wird der Eintrag **markiert** statt still
+    durchgereicht"; dieselbe Unterscheidung wie `printout.py`, „Wie mit uncertain
+    verfahren wird"). Das Feld steht in beiden Kartenvorlagen an zweiter Stelle
+    (`_SHARED_FIELDS`, `_CLOZE_FIELDS`).
+
+    Gemeldet am 01.09.2026 aus einem Kapiteldurchlauf: Ein einziges „lernen" auf einem
+    solchen Wort ließ den gesamten Export scheitern, Deck **und** Druckseite. Bis zu 9 von
+    25 gezeigten Einträgen tragen nur diesen Platzhalter (technik.md §11, „Warum C2 nicht
+    angeboten wird")."""
+    card = _card(_occurrence(), direction=direction, translation=None, uncertain=True)
+    path = tmp_path / "deck.apkg"
+
+    anki.export_deck(path, [card], deck_name="Unsicher")
+
+    note = _notes(path)[0]
+    assert note["fields"][1] == "unsicher – kein Wörterbucheintrag"
+    assert "unsicher" in note["tags"]
+
+
+def test_an_uncertain_card_without_translation_is_a_visible_failure_for_de_en(
+    tmp_path: Path,
+) -> None:
+    """Regel 13: In Kartenrichtung `DE_EN` steht das Feld „Übersetzung" auf der
+    **Vorderseite** (`anki._DE_EN_MODEL`, `qfmt`) — die Textmarke als Frage wäre keine
+    Karte, sondern eine leere Abfrage, bei mehreren solchen Wörtern sogar mehrmals
+    dieselbe. Was keine deutsche Seite hat, bricht deshalb sichtbar ab, statt still zu
+    einer unlernbaren Karte zu werden. `cli.interaction` lässt eine solche Karte in dieser
+    Richtung gar nicht erst entstehen; diese Prüfung ist der Rückhalt."""
+    card = _card(_occurrence(), direction=CardDirection.DE_EN, translation=None, uncertain=True)
 
     with pytest.raises(ValueError):
         anki.export_deck(tmp_path / "deck.apkg", [card], deck_name="Fehlerfall")
