@@ -4,13 +4,15 @@ auf ein physisches Blatt?
 
 Hintergrund
 -----------
-`printout.MAX_ENTRIES = 36` (../libreverbum/printout.py) stammt aus einer **Rechnung**:
+`printout.MAX_ENTRIES` (../libreverbum/printout.py) stammte aus einer **Rechnung**:
 Arial-Schriftmetrik, Zeilenhöhe, 36 × 13,3 mm = 478,8 mm von 491 mm nutzbarer
-Spaltenhöhe — 97,5 % Füllung (../technik.md §8c, „Gemessene Ergebnisse: »passt auf ein
-Blatt« ist gedeckt"). Gedruckt wurde dabei nie. Eine Durchsicht hat mit Edge headless
-gedruckt und die Rechnung am eigenen Designpunkt widerlegt: 36 Einträge mit rund 75
-Zeichen Übersetzungstext (dem p99-Wert, auf den §8c auslegt) ergaben **zwei** physische
-Seiten. `../technik.md §8c`, „Offene Punkte" nennt genau dieses Werkzeug als fehlend.
+Spaltenhöhe — 97,5 % Füllung (../technik.md §8c, „Gemessene Ergebnisse"). Gedruckt wurde
+dabei nie. Dieses Skript hat am 01.09.2026 mit Edge headless gedruckt und die Rechnung am
+eigenen Designpunkt widerlegt: 36 Einträge mit 74 oder 75 Zeichen Übersetzungstext
+ergaben **zwei** physische Seiten, obwohl dieselbe Eintragszahl bei der p99-Länge (76
+Zeichen), auf die §8c auslegt, wieder auf einer Seite blieb — die gerechnete 97,5-%-Füllung
+ließ keinen Spielraum für das, was ein echter Browser anders macht. `MAX_ENTRIES` ist
+seither auf **33** korrigiert (../technik.md §8c, Nachtrag 01.09.2026).
 
 Dieses Skript rechnet nicht, es druckt. Es erzeugt die Druckseite über den echten Kern
 (`libreverbum.printout.write_printout`, nicht einen Nachbau — ../dokumentation.md §5:
@@ -19,18 +21,25 @@ Browser als PDF ausdrucken und zählt die tatsächlich entstandenen Seiten.
 
 Verfahren
 ---------
-1. Übersetzungstexte kommen aus `tools/en-de.sqlite3` (neben diesem Skript erwartet, wie
-   bei den übrigen Werkzeugen hier): Zu einer Ziellänge wird je die reale `trans_list`
-   ausgewählt, deren Länge ihr am nächsten liegt — keine erfundenen Füllzeichen. Wie
-   `Sense.translation` tatsächlich gefüllt wird (die ganze `trans_list`-Zeile, nicht eine
-   einzelne Bedeutung — `translation.choose_sense`, `translation=chosen.wikdict_trans_list`),
-   bildet `_build_entries` unten nach
-2. Je Kombination aus Eintragszahl und Ziellänge baut `_build_entries` eine Liste aus
+1. Für jede Eintragszahl wählt `_pick_word_forms` **einmal** einen festen Satz Wortformen
+   (`written_rep`) aus `tools/en-de.sqlite3` (neben diesem Skript erwartet, wie bei den
+   übrigen Werkzeugen hier) — unabhängig von der Ziellänge. Wechselten die Wortformen mit
+   der Ziellänge mit, variierten zwei Größen zugleich (Übersetzungslänge **und**
+   Wortformlänge, die die Zeilenzahl mindestens so stark verschiebt) und keine Zeile der
+   Ergebnistabelle wäre mit der nächsten vergleichbar
+2. Zu jeder Ziellänge liefert `_pick_translation_texts` `count` reale `trans_list`-Werte,
+   deren Länge ihr am nächsten liegt — keine erfundenen Füllzeichen, aber unabhängig vom
+   `written_rep`, das in Schritt 1 schon feststeht. Wie `Sense.translation` tatsächlich
+   gefüllt wird (die ganze `trans_list`-Zeile, nicht eine einzelne Bedeutung —
+   `translation.choose_sense`, `translation=chosen.wikdict_trans_list`), bildet
+   `_build_entries` unten nach
+3. Je Kombination aus Eintragszahl und Ziellänge baut `_build_entries` aus den festen
+   Wortformen und den zur Ziellänge gehörenden Übersetzungen eine Liste aus
    `(Occurrence, Sense)`, `write_printout` schreibt daraus die echte HTML-Druckseite
-3. Ein gefundener Browser (Edge oder Chrome, siehe `BROWSER_CANDIDATES`) druckt sie
+4. Ein gefundener Browser (Edge oder Chrome, siehe `BROWSER_CANDIDATES`) druckt sie
    headless zu PDF: `<browser> --headless --disable-gpu --print-to-pdf=<datei>
    --no-pdf-header-footer <html>`
-4. Die PDF-Seiten werden **zweifach** gezählt, ohne einen PDF-Leser (der liegt nicht in
+5. Die PDF-Seiten werden **zweifach** gezählt, ohne einen PDF-Leser (der liegt nicht in
    `.venv/` und soll auch nicht hinzukommen): die einzelnen Seitenobjekte (`/Type
    /Page`) und, gegengeprüft, der `/Count` im Seitenbaum (`/Type /Pages`) — weichen beide
    voneinander ab, bricht das Skript ab statt eine falsche Zahl zu melden
@@ -46,8 +55,10 @@ Aufruf
 Ohne `--entries`/`--length` läuft eine Voreinstellung, die die in ../technik.md §8c
 gemessene Längenverteilung abdeckt (Median 12, p90 32, p95 45, p99 76) sowie die im
 Auftrag genannte Schwelle (60 hält noch, um 65 kippt es). `--p99-length` wird immer
-mitgetestet und trägt die Schlusszeile: die größte getestete Eintragszahl, die bei dieser
-Länge noch sicher auf ein Blatt passt.
+mitgetestet. Die Schlusszeile behauptet „sicher" nur für eine Eintragszahl, die bei
+**jeder** getesteten Länge bis zur p99-Länge einseitig blieb — reißt eine größere Zahl
+irgendwo dazwischen, nennt die Ausgabe die Längen, bei denen das passiert, statt es zu
+verschweigen (siehe „Verfahren und seine Grenzen" unten).
 
 Verfahren und seine Grenzen
 ---------------------------
@@ -56,6 +67,13 @@ braucht deshalb `PYTHONPATH=.`, aufgerufen aus dem Wurzelverzeichnis des Reposit
 wie `tools/ambiguity_check.py`. Es ändert `printout.MAX_ENTRIES` nicht und liest den Wert
 nirgends: Gemessen wird die tatsächliche Blattkapazität, unabhängig davon, welche Zahl
 `printout` heute dafür hält.
+
+Die Schlusszeile bewertet nur die getesteten Längen **bis zur p99-Länge** — Längen
+darüber (etwa 90 oder 110 Zeichen) fließen absichtlich nicht ein, weil §8c auf die
+p99-Länge auslegt, nicht auf den seltenen Ausreißer. Und sie bewertet nur, was tatsächlich
+getestet wurde: Die Voreinstellung für `--length` deckt 74 und 75 Zeichen — genau die
+Lücke, an der die alte Zahl 36 beinahe unentdeckt geblieben wäre — nicht ab; wer diese
+Lücke schließen will, gibt sie mit `--length 74 --length 75` gezielt dazu.
 """
 
 from __future__ import annotations
@@ -128,8 +146,9 @@ def find_browser(preset: str | None) -> tuple[str, str] | None:
 
 def load_translation_pairs(dictionary_path: str) -> list[tuple[str, str]]:
     """Liest alle (`written_rep`, `trans_list`)-Paare aus dem Wörterbuch — die Grundlage,
-    aus der `_pick_translations` unten nach Länge auswählt. Echte Wörterbuchdaten, keine
-    erfundenen Füllzeichen (Auftrag)."""
+    aus der `_pick_word_forms` die Wortformen und `_pick_translation_texts` die
+    Übersetzungen auswählen. Echte Wörterbuchdaten, keine erfundenen Füllzeichen
+    (Auftrag)."""
     con = sqlite3.connect(dictionary_path)
     try:
         rows = con.execute(
@@ -141,27 +160,55 @@ def load_translation_pairs(dictionary_path: str) -> list[tuple[str, str]]:
     return rows
 
 
-def _pick_translations(
+def _pick_word_forms(pairs: list[tuple[str, str]], count: int) -> list[str]:
+    """Wählt `count` verschiedene Wortformen (`written_rep`) **einmal**, unabhängig von
+    jeder Ziellänge — Auftrag: „Die Wortformen dürfen zwischen den Ziellängen nicht
+    wechseln." Sonst variierten Übersetzungslänge und Wortformlänge zugleich, und keine
+    Zeile der Ergebnistabelle wäre mit der nächsten vergleichbar (Modulkopf, „Verfahren").
+    Gewählt wird, wer der über den ganzen Bestand gemessenen typischen Wortformlänge am
+    nächsten liegt — weder die kürzesten noch die längsten Ausreißer, sondern Wortformen,
+    wie sie auf einer echten Seite überwiegend vorkämen; bei Gleichstand entscheidet die
+    alphabetische Reihenfolge, damit der Lauf reproduzierbar bleibt. Bricht sichtbar ab,
+    wenn das Wörterbuch nicht genug verschiedene Wortformen trägt (../dokumentation.md
+    §4, Regel 13) statt mit weniger als verlangt weiterzurechnen."""
+    written_reps = sorted({written_rep for written_rep, _ in pairs}, key=str.casefold)
+    typical_length = statistics.median(len(written_rep) for written_rep in written_reps)
+    ordered = sorted(
+        written_reps,
+        key=lambda written_rep: (abs(len(written_rep) - typical_length), written_rep.casefold()),
+    )
+    selected = ordered[:count]
+    if len(selected) < count:
+        raise ValueError(
+            f"Nur {len(selected)} verschiedene Wortformen im Wörterbuch, {count} verlangt."
+        )
+    return selected
+
+
+def _pick_translation_texts(
     pairs: list[tuple[str, str]], target_length: int, count: int
-) -> list[tuple[str, str]]:
-    """Wählt `count` Paare, deren `trans_list`-Länge `target_length` am nächsten liegt,
-    je `written_rep` höchstens einmal (sonst erschiene dasselbe Stichwort mehrfach auf
-    der Seite, ohne dass das etwas über die Blattkapazität aussagte). Bricht sichtbar ab,
-    wenn das Wörterbuch nicht genug verschiedene Stichwörter dieser Länge trägt
+) -> list[str]:
+    """Wählt `count` echte `trans_list`-Werte, deren Länge `target_length` am nächsten
+    liegt, jeden Text höchstens einmal (sonst trüge derselbe Übersetzungstext zweimal zur
+    Seite bei). Anders als zuvor unabhängig vom `written_rep`: Die Wortform steht durch
+    `_pick_word_forms` schon fest, hier wird nur noch die Übersetzung zur Ziellänge
+    gesucht — weiterhin ein echter `trans_list`-Wert, keine erfundenen Füllzeichen
+    (Auftrag; ../dokumentation.md §5, „was über den Inhalt einer Fremdquelle behauptet
+    wird, wird gegen das echte Gegenüber geprüft"). Bricht sichtbar ab, wenn das
+    Wörterbuch nicht genug verschiedene Übersetzungen dieser Länge trägt
     (../dokumentation.md §4, Regel 13) statt mit weniger als verlangt weiterzurechnen."""
     ordered = sorted(pairs, key=lambda pair: abs(len(pair[1]) - target_length))
-    selected: list[tuple[str, str]] = []
+    selected: list[str] = []
     seen: set[str] = set()
-    for written_rep, trans_list in ordered:
-        key = written_rep.casefold()
-        if key in seen:
+    for _, trans_list in ordered:
+        if trans_list in seen:
             continue
-        seen.add(key)
-        selected.append((written_rep, trans_list))
+        seen.add(trans_list)
+        selected.append(trans_list)
         if len(selected) == count:
             return selected
     raise ValueError(
-        f"Nur {len(selected)} verschiedene Stichwörter im Wörterbuch, {count} für die "
+        f"Nur {len(selected)} verschiedene Übersetzungen im Wörterbuch, {count} für die "
         f"Ziellänge {target_length} verlangt."
     )
 
@@ -169,16 +216,19 @@ def _pick_translations(
 _MEASURE_BOOK = Book(title="Blattfüllungstest", author="tools/print_fit_check.py")
 
 
-def _build_entries(pairs: list[tuple[str, str]]) -> list[tuple[Occurrence, Sense]]:
-    """Baut aus (`written_rep`, `trans_list`)-Paaren dieselbe Eingabeform, die
+def _build_entries(
+    word_forms: list[str], translations: list[str]
+) -> list[tuple[Occurrence, Sense]]:
+    """Baut aus den fest gewählten Wortformen (`_pick_word_forms`) und den zur Ziellänge
+    gehörenden Übersetzungen (`_pick_translation_texts`) dieselbe Eingabeform, die
     `write_printout` von einem echten Kapitel bekäme: je Paar ein `Occurrence` und ein
     `Sense` mit `translation` gleich der echten `trans_list` (`translation.choose_sense`
     setzt genau dieses Feld unverändert, siehe Modulkopf). `pos=""` wie bei Wendungen
     ohne Einzelwortart (`extraction._NO_SINGLE_POS`) — dieses Skript kennt die echte
-    Wortart der Stichwörter nicht und würde mit einer geschätzten sonst ein falsches
+    Wortart der Wortformen nicht und würde mit einer geschätzten sonst ein falsches
     Wortart-Kürzel auf die Seite drucken."""
     entries = []
-    for written_rep, trans_list in pairs:
+    for written_rep, trans_list in zip(word_forms, translations, strict=True):
         lemma = Lemma(text=written_rep.casefold(), pos="")
         occurrence = Occurrence(
             book=_MEASURE_BOOK,
@@ -266,20 +316,22 @@ def count_pdf_pages(pdf_bytes: bytes) -> int:
 def measure(
     entry_count: int,
     target_length: int,
+    word_forms: list[str],
     pairs: list[tuple[str, str]],
     browser: str,
     tmp_dir: Path,
     timeout: float,
 ) -> dict[str, float | int]:
-    """Eine einzelne Messung: `entry_count` Einträge mit Übersetzungen nahe
-    `target_length` Zeichen, echt gedruckt, echte Seitenzahl."""
-    selected = _pick_translations(pairs, target_length, entry_count)
+    """Eine einzelne Messung: `word_forms` (fest, über alle Ziellängen dieselben —
+    `_pick_word_forms`) mit Übersetzungen nahe `target_length` Zeichen, echt gedruckt,
+    echte Seitenzahl."""
+    translations = _pick_translation_texts(pairs, target_length, entry_count)
     html_path = tmp_dir / f"seite_{entry_count}_{target_length}.html"
     pdf_path = tmp_dir / f"seite_{entry_count}_{target_length}.pdf"
-    write_printout(html_path, _build_entries(selected))
+    write_printout(html_path, _build_entries(word_forms, translations))
     render_pdf(browser, html_path, pdf_path, timeout)
     pages = count_pdf_pages(pdf_path.read_bytes())
-    achieved_lengths = [len(trans_list) for _, trans_list in selected]
+    achieved_lengths = [len(trans_list) for trans_list in translations]
     return {
         "entries": entry_count,
         "ziel_laenge": target_length,
@@ -293,7 +345,7 @@ def main() -> int:
         description=(
             "Misst, wie viele Einträge bei welcher Übersetzungslänge tatsächlich auf ein "
             "physisches Blatt passen — gedruckt mit einem echten Browser, nicht gerechnet "
-            "(../technik.md §8c, „Offene Punkte“)."
+            "(../technik.md §8c, „Nachtrag 01.09.2026“)."
         ),
         epilog=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -364,13 +416,26 @@ def main() -> int:
     print(f"Ziellängen (Übersetzungszeichen): {lengths}")
 
     pairs = load_translation_pairs(args.db)
+    # Je Eintragszahl einmal gewählt, nicht je Ziellänge (Modulkopf, „Verfahren", Schritt 1)
+    # — sonst variierten Übersetzungslänge und Wortformlänge zugleich.
+    word_forms_by_count = {count: _pick_word_forms(pairs, count) for count in entry_counts}
 
     results = []
     with tempfile.TemporaryDirectory(prefix="print_fit_check_") as tmp:
         tmp_dir = Path(tmp)
         for length in lengths:
             for count in entry_counts:
-                results.append(measure(count, length, pairs, browser_path, tmp_dir, args.timeout))
+                results.append(
+                    measure(
+                        count,
+                        length,
+                        word_forms_by_count[count],
+                        pairs,
+                        browser_path,
+                        tmp_dir,
+                        args.timeout,
+                    )
+                )
 
     print()
     print(f"{'Einträge':>8}  {'Ziellänge':>9}  {'erreicht':>8}  {'Seiten':>6}")
@@ -380,22 +445,43 @@ def main() -> int:
             f"{result['erreichte_laenge']:>8}  {result['seiten']:>6}"
         )
 
-    fitting = [
-        result["entries"]
-        for result in results
-        if result["ziel_laenge"] == args.p99_length and result["seiten"] == 1
-    ]
+    # (Auftrag, „Die Schlusszeile sagt nur, was gemessen ist"): »sicher« gilt nur für eine
+    # Eintragszahl, die bei **jeder** getesteten Länge bis zur p99-Länge einseitig blieb —
+    # nicht nur bei der p99-Länge selbst. Andernfalls hätte diese Zeile für MAX_ENTRIES=36
+    # beinahe grünes Licht gegeben: Bei p99-Länge allein blieb es einseitig, bei 74 und 75
+    # Zeichen dazwischen nicht (siehe Modulkopf, „Hintergrund").
+    relevant_lengths = sorted(length for length in lengths if length <= args.p99_length)
+    pages_by_count_and_length = {
+        (result["entries"], result["ziel_laenge"]): result["seiten"] for result in results
+    }
+    held_up = []
+    broke_at: dict[int, list[int]] = {}
+    for count in entry_counts:
+        failing = [
+            length for length in relevant_lengths if pages_by_count_and_length[(count, length)] != 1
+        ]
+        if failing:
+            broke_at[count] = failing
+        else:
+            held_up.append(count)
+
     print()
-    if fitting:
+    if held_up:
         print(
-            f"Bei p99-Länge ({args.p99_length} Zeichen) passen bis {max(fitting)} Einträge "
-            f"sicher auf ein Blatt (getestet: {entry_counts})."
+            f"Bei jeder getesteten Länge bis zur p99-Länge ({args.p99_length} Zeichen; "
+            f"getestet: {relevant_lengths}) bleiben diese Eintragszahlen durchgehend "
+            f"einseitig: {held_up} — sicher ist damit höchstens {max(held_up)}."
         )
     else:
         print(
-            f"Keine der getesteten Eintragszahlen {entry_counts} passt bei p99-Länge "
-            f"({args.p99_length} Zeichen) auf ein Blatt."
+            f"Keine der getesteten Eintragszahlen {entry_counts} bleibt bei jeder "
+            f"getesteten Länge bis zur p99-Länge ({args.p99_length} Zeichen; getestet: "
+            f"{relevant_lengths}) einseitig."
         )
+    if broke_at:
+        print("Nicht durchgehend einseitig (Ziellängen, bei denen es auf zwei Seiten kippt):")
+        for count in sorted(broke_at):
+            print(f"  {count} Einträge: {broke_at[count]} Zeichen")
     return 0
 
 
