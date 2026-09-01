@@ -2740,11 +2740,11 @@ Ein Block kostet rund `limit` Modellaufrufe zu je rund 0,5 s (Abschnitt 3, „Na
 26.08.2026") — rund zwölf Sekunden Stillstand vor jedem Block, wenn er erst nach der
 Fortsetzungsfrage entsteht. Das ist genau die Zeit, die konzept.md schon am 26.08.2026 als
 frei benannt hat: „ein Modellaufruf je Nachrücker fällt in die Zeit, in der der Nutzer
-ohnehin liest." Der nächste Block wird deshalb **beim Beginn der Einzelabfrage des
-aktuellen** in einem Hintergrundfaden angestoßen (`prefetch`) und ist bei der
-Fortsetzungsfrage in aller Regel fertig.
+ohnehin liest." Der nächste Block wird deshalb angestoßen, **sobald der aktuelle
+angezeigt wird** — in einem Hintergrundfaden (`prefetch`), und bei der Fortsetzungsfrage
+ist er in aller Regel fertig.
 
-Zwei Festlegungen dazu, beide nicht verhandelbar:
+Vier Festlegungen dazu, die ersten beiden nicht verhandelbar:
 
 1. **Der Hintergrundfaden bekommt eine eigene Profilverbindung.** `sqlite3`-Verbindungen
    sind an den Faden gebunden, der sie erzeugt hat (`check_same_thread`), und der
@@ -2754,6 +2754,17 @@ Zwei Festlegungen dazu, beide nicht verhandelbar:
    erscheint der Fehler bei der Fortsetzungsfrage, nicht im Protokoll (Regel 13). Ein
    Vorladen, das still einen leeren Block liefert, sähe aus wie „Kapitel fertig" — der
    teuerste stille Fehlschlag, den diese Stelle hergibt.
+3. **Das Vorladen gibt nichts aus.** Die Fortschrittszeile aus `cli.main`
+   (`display.safe_print_progress`) schreibt sich per Wagenrücklauf fort und schriebe aus
+   einem Hintergrundfaden mitten in die Triage-Anzeige, über der der Nutzer gerade
+   entscheidet. Sie gehört dem **ersten** Block, vor dem der Nutzer tatsächlich wartet;
+   jeder vorgeladene läuft still. Ist er bei der Fortsetzungsfrage noch nicht fertig,
+   sagt eine Zeile das und der Nutzer wartet sichtbar, statt vor einer stummen
+   Eingabeaufforderung zu sitzen.
+4. **Das Ende wartet nicht auf den Faden.** Wer „nein" sagt oder mit `q` abbricht, will
+   heraus; ein noch laufender Vorladeblock kostet sonst bis zu ein halbe Minute
+   Modellaufrufe, deren Ergebnis niemand mehr ansieht. Der Faden wird deshalb so geführt,
+   dass er das Programmende nicht aufhält — sein Ergebnis wird schlicht verworfen.
 
 Der Vorfilter (Schritt 1 in `resolve_triage_entries`) arbeitet mit dem Profilstand von
 **vor** dem laufenden Block. Das ist hingenommen und kein Fehler: Ein Kapiteleintrag steht
