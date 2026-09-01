@@ -126,7 +126,23 @@ zu verpassen.
 
 **Zwei Erleichterungen von Anfang an**, weil das der kritische Punkt für die Nutzbarkeit ist:
 - **Sammelaktion „ab hier kenne ich alles"** — markiert alle häufigeren Wörter auf einen Schlag
-- **Obergrenze pro Kapitel** — „maximal 25 neue Wörter", der Rest wird zurückgestellt
+- **Blockweise Triage mit Fortsetzungsfrage** — 25 Wörter am Stück, danach die Frage, ob
+  weitergemacht oder aufgehört wird. Wie viel er durchgeht, bestimmt der Nutzer; eine harte
+  Obergrenze gibt es nicht
+
+> **Nachtrag 01.09.2026 — aus der Obergrenze ist eine Blockgröße geworden.** Bis hierher
+> stand hier „Obergrenze pro Kapitel — maximal 25 neue Wörter, der Rest wird
+> zurückgestellt", und das war eine harte Grenze: Wer zwanzig der 25 als bekannt buchte,
+> bekam trotzdem nur die fünf übrigen zu sehen, und was dahinter lag, sah er nie. Genau
+> darauf lief der zweite Teil des T17-Befunds hinaus — der Wortschatz, der ein Kapitel
+> schwer macht (`listlessly`, `tawdry`, `lurid`), steht weit hinten in der
+> Häufigkeitsliste und wird von einer Grenze bei 25 nie erreicht
+> ([technik.md](technik.md) §11, „Was die Vorbelegung nicht löst"). Die Zahl 25 bleibt,
+> aber sie bedeutet jetzt **eine Portion**: Ist der Block durchgeklickt, wird gefragt, ob
+> weitergemacht wird — und der nächste Block ist zu diesem Zeitpunkt bereits im Hintergrund
+> aufgelöst, weil ein Modellaufruf je Eintrag in die Zeit fällt, in der der Nutzer ohnehin
+> liest. Die Triage endet damit, wenn der Nutzer aufhören will, nicht wenn eine Zahl
+> erreicht ist. Technische Seite: [technik.md](technik.md) §12.
 
 > **Nachtrag 26.08.2026 — die Obergrenze bleibt bei 25.** Beurteilt werden sollte sie beim
 > ersten echten Durchlauf; der hat gezeigt, dass nicht die Zahl das Problem ist, sondern der
@@ -336,32 +352,27 @@ Kern, nicht darunter").
   `courteously`), erreicht die Triage trotzdem nicht: Drei davon kommen genau einmal vor,
   wie 553 der 940 Einträge, und ein N, das bis zu ihnen reichte, belegte sie selbst vor.
   Das ist ein Rangproblem, kein Filterproblem, und hängt an den beiden folgenden Punkten
-- **Nachrücken in der Triage** — aufgeworfen am 26.08.2026: Wird ein Wort als bekannt
-  gebucht, rückt das nächsthäufigste Wort des Kapitels nach, statt den Platz verfallen zu
-  lassen. Technisch heißt das, den Auflöser als Iterator zu führen, aus dem die Oberfläche
-  nachzieht, statt eine fertige Liste zu übergeben; ein Modellaufruf je Nachrücker fällt in
-  die Zeit, in der der Nutzer ohnehin liest. **Ändert die Bedeutung der Wortobergrenze**
-  von „25 gezeigte" zu „25 nicht abgelehnte" und braucht deshalb eine Bremse — sonst
-  entsteht mit der Sammelaktion ein Laufband. Kein Ersatz für die Vorbelegung, sondern
-  deren Ergänzung
-- **Fortsetzungsfrage nach der Wortobergrenze** — aufgeworfen am 26.08.2026: Nach 25
-  Wörtern wird gefragt, ob weitergemacht oder aufgehört wird. Das ist die menschliche
-  Bremse für das Nachrücken und legt die Entscheidung dorthin, wo die Information ist.
-  Die Verzahnung mit Abnahmekriterium 5 ist **entschieden am 26.08.2026**: Die Druckseite
-  fasst gemessen 36 Einträge ([technik.md](technik.md) §8c) und **darf im Zweifel mehrere
-  Blätter belegen**. Solange Nachrücken und Fortsetzungsfrage nicht gebaut sind, ändert
-  das nichts — die Wortobergrenze hält die Ausgabe unter der Kapazität eines Blattes, und
-  Abnahmekriterium 5 gilt unverändert. **Mit** ihnen ist der Kriterientext nachzuziehen:
-  „passt auf ein Blatt" wird dann zu „bricht sauber auf so viele Blätter um, wie nötig" —
-  lesbar ohne Nachbearbeitung bleibt die Anforderung
-- **Ob jenseits der Wortobergrenze etwas ins Profil geschrieben wird** — `Origin.WORD_LIMIT`
-  und `KnowledgeState.DEFERRED` stehen für genau diesen Fall im Schema
-  ([technik.md](technik.md) §4), gebucht wird heute nichts: Die Obergrenze wirkt allein
-  lesend in `pipeline.resolve_triage_entries`, `triage.defer_beyond_word_limit` hat außerhalb
-  der Tests keinen Aufrufer. Beides ist vertretbar — ein Vermerk „diesmal nicht gezeigt"
-  bedeutet etwas anderes als das „Überspringen" aus Schritt 4 —, aber es ist nicht
-  entschieden, sondern nebenbei entstanden. Hängt am Nachrücken oben, das die Bedeutung der
-  Grenze ohnehin verschiebt
+- ~~**Nachrücken in der Triage** und **Fortsetzungsfrage nach der Wortobergrenze**~~ —
+  beide aufgeworfen am 26.08.2026, **entschieden am 01.09.2026** als **eine** Sache, siehe
+  §4, „Nachtrag 01.09.2026" und [technik.md](technik.md) §12. Gebaut wird nicht das damals
+  skizzierte Nachrücken Platz für Platz, sondern die **blockweise Triage**: 25 Einträge am
+  Stück, danach die Fortsetzungsfrage, dann der nächste Block — der beim Fragen bereits im
+  Hintergrund aufgelöst ist. Das erreicht dasselbe Ziel (der Wortschatz hinter Platz 25
+  wird erreichbar) und löst zugleich die Bremsfrage: Die Sammelaktion sieht in jedem Block
+  wieder eine vollständige, nummerierte Liste, statt zum Laufband zu werden. Die Verzahnung
+  mit Abnahmekriterium 5 war schon am 26.08.2026 entschieden — die Druckseite fasst
+  gemessen 36 Einträge ([technik.md](technik.md) §8c) und **darf mehrere Blätter belegen**;
+  der Kriterientext ist mit dem Bau nachgezogen
+- ~~**Ob jenseits der Wortobergrenze etwas ins Profil geschrieben wird**~~ — **entschieden
+  am 01.09.2026: nichts.** Mit der blockweisen Triage gibt es keine Grenze mehr, hinter der
+  etwas ohne Zutun des Nutzers verfiele: Wer aufhört, hat auf die Fortsetzungsfrage
+  geantwortet, und diese Antwort ist keine Aussage über die einzelnen Wörter dahinter. Ein
+  Vermerk „diesmal nicht gezeigt" bedeutet etwas anderes als das „Überspringen" aus
+  Schritt 4, und hunderte Ereigniszeilen je Kapitel ohne eine Nutzerentscheidung dahinter
+  wären der teurere Fehler. `Origin.WORD_LIMIT` und `KnowledgeState.DEFERRED` bleiben
+  deshalb im Schema stehen, ohne dass die Obergrenze sie schreibt
+  ([technik.md](technik.md) §4); `triage.defer_beyond_word_limit` behält seine Aufgabe für
+  den einzelnen Block
 - **Ob Einträge ohne Wörterbucheintrag Vorrang haben sollen** — gemessen an einem echten
   Kapitel führen 119 von 1.410 Wort- und 33 von 212 Wendungseinträgen **nur** den
   `uncertain`-Platzhalter. Sie kosten keinen Modellaufruf und stehen unter
@@ -374,9 +385,9 @@ Kern, nicht darunter").
 **Die vier ursprünglichen Fragen sind entschieden**; die technischen Festlegungen samt
 Begründung und Messwerten stehen in [technik.md](technik.md). Die fünf Punkte darüber sind
 am 26.08.2026 aus der Abnahme T17, dem Gespräch darüber und der Auflösung der
-Nacharbeitsliste neu hinzugekommen. Der erste davon ist am 31.08.2026 entschieden und am
-01.09.2026 gebaut; die vier übrigen sind es **nicht** — sie werden erst besprochen, dann
-gebaut.
+Nacharbeitsliste neu hinzugekommen. Vier davon sind inzwischen entschieden — die
+Vorbelegung am 31.08.2026, die drei zur Wortobergrenze am 01.09.2026. Offen ist allein der
+letzte; er wird erst besprochen, dann gebaut.
 
 ---
 
@@ -401,8 +412,11 @@ Das Konzept ist bestätigt, wenn folgender Ablauf an einem echten, DRM-freien EP
 3. Die Übersetzungen passen zum Kontext: Stichprobe von zwanzig Wörtern, darunter mindestens drei
    mehrdeutige und zwei Redewendungen, wird manuell gegengeprüft
 4. Das erzeugte Deck importiert sich in Anki fehlerfrei, Felder und Verschlagwortung sitzen richtig
-5. Die Druckseite passt auf ein Blatt und ist ohne Nachbearbeitung lesbar
+5. Die Druckseite bricht sauber auf so viele Blätter um, wie nötig, und ist ohne
+   Nachbearbeitung lesbar — bis zum 01.09.2026 stand hier „passt auf ein Blatt", was mit
+   der harten Wortobergrenze stand und mit ihr gefallen ist (§4, „Nachtrag 01.09.2026")
 6. Beim zweiten Durchlauf desselben Kapitels werden die als *bekannt* markierten Wörter **nicht
    erneut** abgefragt — das Profil greift
 7. (Optional - Wäre schön muss aber am anfang noch nicht sein) Die Triage lässt sich in unter zehn Minuten durchlaufen — inklusive Sammelaktion und
-   Wortobergrenze
+   Fortsetzungsfrage, gemessen an **einem** Block (§4, „Nachtrag 01.09.2026"); wie viele
+   Blöcke er durchgeht, entscheidet seither der Nutzer

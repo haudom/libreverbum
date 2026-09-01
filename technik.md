@@ -24,6 +24,7 @@ am saubersten auf:
 | 9 | Ablage und Konfiguration zur Laufzeit | **entschieden** (12.08.2026) |
 | 10 | Lizenz des eigenen Codes | **entschieden** (26.08.2026) |
 | 11 | Vorbelegung des Grundwortschatzes | **entschieden** (31.08.2026) |
+| 12 | Blockweise Triage mit Vorladen | **entschieden** (01.09.2026) |
 
 Frage 5 stand anfangs nicht auf der Liste. Sie ist aus Frage 2 entstanden, deren Messung
 mit der Folgerung endete, nicht die Datenquelle sei der Engpass, sondern die
@@ -53,6 +54,11 @@ Vorbelegung des Grundwortschatzes stand seit dem 26.08.2026 als erster Punkt unt
 konzept.md, „Bewusst offen" und ist am 31.08.2026 entschieden worden. Sie hat eine eigene
 Datenquelle, eine eigene Lizenzlage und eine eigene Messreihe und ist deshalb kein Anhang
 zu Frage 2 — siehe Abschnitt 11.
+
+Frage 12 stammt wie Frage 11 aus der Abnahme und ist deren Fortsetzung: Die Vorbelegung
+hat die erste Hälfte des T17-Befunds gelöst, nicht die zweite (Abschnitt 11, „Was die
+Vorbelegung nicht löst"). Was übrig blieb, ist ein Rangproblem — und das löst keine
+Datenquelle, sondern nur der Verzicht auf die harte Wortobergrenze. Siehe Abschnitt 12.
 
 Frage 2 stand bewusst weit oben, weil sie das Konzept hätte kippen können: Ein freies,
 offline nutzbares EN→DE-Wörterbuch mit sauberer Lizenz **und** Bedeutungsangaben ist
@@ -2539,8 +2545,10 @@ unterscheiden. Ein N, das groß genug wäre, um bis zu ihnen zu reichen, belegte
 vor (`tawdry` steht auf `importance`-Rang 6.193).
 
 > **Das ist ein Rangproblem, kein Filterproblem.** Was den schweren Wortschatz nach vorn
-> bringt, hängt an den beiden anderen offenen Punkten in konzept.md — „Nachrücken in der
-> Triage" und „Fortsetzungsfrage nach der Wortobergrenze" —, nicht an einem größeren N.
+> bringt, ist nicht ein größeres N, sondern der Verzicht auf die harte Grenze bei 25 —
+> **entschieden am 01.09.2026**, siehe Abschnitt 12. Bis dahin standen dafür zwei getrennte
+> offene Punkte in konzept.md, „Nachrücken in der Triage" und „Fortsetzungsfrage nach der
+> Wortobergrenze"; gebaut ist daraus eine Sache.
 
 ### Eine Zahl mit Geschichte: 8.044, nicht 8.045
 
@@ -2635,6 +2643,109 @@ Kern bildet auf dem Wendungsweg nach derselben Vorschrift Grundformen aus mehrer
   entsteht auf dem Partikelweg (an 28 echten Kapiteln geprüft, es sind Kontraktionen und
   Präpositionalfügungen), und die Liste ist per SHA-256 eingefroren. Eine neu erzeugte
   Liste mit einem echten Partikelverb wäre hier nachzuziehen
+
+---
+
+## 12. Blockweise Triage mit Vorladen — entschieden
+
+> Entschieden am 01.09.2026. Inhaltliche Seite: konzept.md §4, „Nachtrag 01.09.2026 — aus
+> der Obergrenze ist eine Blockgröße geworden".
+
+**Die Triage läuft in Blöcken.** Ein Block sind 25 Worteinträge (11 Wendungen), aufgelöst,
+angezeigt, durchentschieden; danach die **Fortsetzungsfrage**, und bei „ja" der nächste
+Block. Es gibt keine harte Obergrenze mehr — wie weit ein Kapitel durchgegangen wird,
+entscheidet der Nutzer und nicht eine Zahl im Code.
+
+### Warum Blöcke und kein Nachrücken Platz für Platz
+
+konzept.md skizzierte am 26.08.2026 etwas anderes: den Auflöser als Iterator führen und je
+gebuchtem „kenne ich" einen einzelnen Nachrücker anhängen. Das scheitert an der
+**Sammelaktion**. Sie markiert „alle in der Anzeige davorstehenden Wörter" und trägt nur
+dann etwas, wenn die vollständige, nummerierte Liste **vor** der ersten Einzelentscheidung
+sichtbar ist (`cli/interaction.py`, „Wie die Sammelaktion hier funktioniert"). Ein Eintrag,
+der während der Einzelabfrage hinten angehängt wird, steht hinter jeder schon getroffenen
+Entscheidung — die Sammelaktion erreicht ihn nie, und die Liste hört auf, ein Ende zu
+haben. Genau das nannte konzept.md „Laufband".
+
+Der Block löst beides mit derselben Grenze: Er ist die Einheit, über die die Sammelaktion
+läuft, **und** die Einheit, nach der gefragt wird. Die Bremse ist damit keine zusätzliche
+Erfindung, sondern fällt mit der Anzeigeeinheit zusammen.
+
+### Was die Blockgrößen bedeuten — und warum 11 bleibt
+
+`WORD_BLOCK_SIZE = 25` ist dieselbe Zahl wie die frühere Wortobergrenze, aber nicht mehr
+dieselbe Aussage: Sie beschränkt nichts, sie portioniert. Beurteilt ist sie in der Praxis
+(konzept.md §4, „Nachtrag 26.08.2026") und bleibt deshalb stehen.
+
+`EXPRESSION_BLOCK_SIZE = 11` **verliert dagegen seine bisherige Herleitung.** Sie lautete
+`printout.MAX_ENTRIES - WORD_LIMIT` — was die Triage durchlässt, muss zusammen auf ein Blatt
+passen. Mit der mehrseitigen Druckseite (unten) trägt diese Rechnung nicht mehr. Die Zahl
+bleibt trotzdem, jetzt mit einer eigenen Begründung: Wendungen sind seltener als Wörter
+(rund 213 Kandidaten je Kapitel gegen rund 1.400, „Messung: Mehrwortausdrücke"), sie stehen
+im Ablauf **hinter** dem Wortdurchlauf, und ein zweiter Block von 25 hielte den Nutzer dort
+länger fest, als er nach den Wörtern noch will. Wer die Zahl ändert, ändert eine Portion,
+keine Grenze — und braucht dafür keine neue Messung, sondern einen Durchlauf mit einem
+Menschen davor.
+
+### Der Kern liefert den Rest mit, statt ihn wegzuwerfen
+
+`pipeline.resolve_triage_entries` verarbeitet die nach Häufigkeit sortierte Liste, bis
+`limit` Einträge behalten sind, und zählte alles Übrige bisher nur als `deferred`. Für den
+Folgeblock muss dieselbe Funktion **dort weitermachen können, wo der vorige aufhörte**;
+`TriageResolution` führt dafür die noch nicht geprüften Einträge als `remaining` mit. Der
+Aufrufer ruft mit dieser Restliste erneut auf — kein Zustand in der Funktion, kein Iterator,
+keine zweite Einstiegsstelle: derselbe Aufruf mit weniger Einträgen.
+
+`limit` heißt im Kern weiterhin `limit` und bleibt die Obergrenze **eines** Aufrufs. Die
+Blockgröße ist eine Entscheidung der Bedienung und steht deshalb in `cli`, nicht im Kern
+(Abschnitt 7, „Die Oberfläche liegt neben dem Kern").
+
+### Vorladen: der nächste Block entsteht, während der Nutzer entscheidet
+
+Ein Block kostet rund `limit` Modellaufrufe zu je rund 0,5 s (Abschnitt 3, „Nachtrag
+26.08.2026") — rund zwölf Sekunden Stillstand vor jedem Block, wenn er erst nach der
+Fortsetzungsfrage entsteht. Das ist genau die Zeit, die konzept.md schon am 26.08.2026 als
+frei benannt hat: „ein Modellaufruf je Nachrücker fällt in die Zeit, in der der Nutzer
+ohnehin liest." Der nächste Block wird deshalb **beim Beginn der Einzelabfrage des
+aktuellen** in einem Hintergrundfaden angestoßen (`prefetch`) und ist bei der
+Fortsetzungsfrage in aller Regel fertig.
+
+Zwei Festlegungen dazu, beide nicht verhandelbar:
+
+1. **Der Hintergrundfaden bekommt eine eigene Profilverbindung.** `sqlite3`-Verbindungen
+   sind an den Faden gebunden, der sie erzeugt hat (`check_same_thread`), und der
+   Hauptfaden schreibt währenddessen die Triage-Entscheidungen. Eine geteilte Verbindung
+   wäre hier kein Geschwindigkeitsproblem, sondern ein Fehler.
+2. **Ein Fehlschlag im Vorladen wird nicht verschluckt.** Bricht der Modellserver weg,
+   erscheint der Fehler bei der Fortsetzungsfrage, nicht im Protokoll (Regel 13). Ein
+   Vorladen, das still einen leeren Block liefert, sähe aus wie „Kapitel fertig" — der
+   teuerste stille Fehlschlag, den diese Stelle hergibt.
+
+Der Vorfilter (Schritt 1 in `resolve_triage_entries`) arbeitet mit dem Profilstand von
+**vor** dem laufenden Block. Das ist hingenommen und kein Fehler: Ein Kapiteleintrag steht
+je Grundform genau einmal (`entities.Occurrence`), die Entscheidungen des laufenden Blocks
+betreffen also andere Einträge als die des nächsten. Im Grenzfall — dieselbe Bedeutung
+unter zwei Grundformen — wird ein Eintrag einmal zu viel gezeigt, nicht einer zu wenig.
+
+### Folge: die Druckseite bricht um, statt abzubrechen
+
+`printout.render_chapter_page` wies bisher mehr als `MAX_ENTRIES = 36` Einträge sichtbar
+zurück (Regel 13) — richtig, solange die Wortobergrenze garantierte, dass nie mehr ankamen.
+Diese Garantie ist weg: Wer vier Blöcke durchgeht, kann mehr als 36 Karten haben. Der
+Abbruch wird deshalb zum **Seitenumbruch**; Abnahmekriterium 5 ist mit derselben Änderung
+nachgezogen (konzept.md, „Abnahmekriterien"). Die Kapazität von 36 bleibt gemessen und
+begründet (Abschnitt 8c) — sie sagt jetzt, wo umgebrochen wird, statt wo abgebrochen wird.
+
+### Offene Punkte
+
+- **Wie oft ein Nutzer tatsächlich weitermacht, ist nicht gemessen.** Bleibt es beim ersten
+  Block, ist der ganze Umbau ein Sicherheitsnetz; werden es regelmäßig vier, gehört die
+  Blockgröße neu beurteilt. Beides ist erst nach echten Durchläufen zu sagen
+- **Das Vorladen greift nur einen Block voraus.** Zwei Blöcke im Voraus wären möglich,
+  bringen aber nur etwas, wenn ein Block schneller durchgeklickt ist, als der nächste
+  entsteht — kein gemessener Anlass, also Regel 14
+- **Über Kapitelgrenzen hinweg wird nicht vorgeladen.** Der Durchlauf ist auf ein Kapitel
+  angelegt (Abschnitt 7); „ganzes Buch auf einmal" ist Phase 2 (konzept.md, „Phasenplan")
 
 ---
 

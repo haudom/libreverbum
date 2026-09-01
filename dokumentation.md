@@ -80,6 +80,10 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | Sprachniveau (nach GER, A1–C1, für die Vorbelegung) | `cefr_level` (`CefrLevel`) — **nicht** `level`, das ist die Gliederungsebene der Navigation |
 | unbekannt / bekannt / neue Bedeutung eines bekannten Wortes (Abgleich Kapitelwortschatz ↔ Profil) | `unknown` / `known` / `new_meaning_of_known_word` (`VocabularyStatus`) |
 | Triage, Sammelaktion, Wortobergrenze | `triage`, `bulk_mark`, `word_limit` |
+| Block (eine Portion der Triage), Blockgröße | `block`, `block_size` — die Zahl, nach der die Fortsetzungsfrage kommt (konzept.md §4, „Nachtrag 01.09.2026"); **nicht** `limit`, das im Kern weiterhin die Obergrenze **eines** Aufrufs ist |
+| Fortsetzungsfrage (nach jedem Block) | `ask_continue` |
+| Vorladen (des nächsten Blocks, während der Nutzer entscheidet) | `prefetch` |
+| noch nicht geprüfte Einträge (der Rest nach einem Block) | `remaining` |
 | Wörterbuch, Nachschlagen | `dictionary`, `lookup` |
 | Auswahlliste, Kandidat | `candidate` |
 | Übersetzung | `translation` |
