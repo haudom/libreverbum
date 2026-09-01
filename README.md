@@ -118,8 +118,8 @@ Danach läuft der Durchgang:
    zu welcher Nummer kennst du alles?"; ein Tastendruck erledigt damit den ganzen vorderen
    Teil. Erst für den Rest kommt die Einzelabfrage, je Wort mit Belegsatz aus dem Buch und
    Bedeutung: `[k]enne ich`, `[l]ernen`, `[s]kip`, `[q]uit`
-5. **Export** — höchstens 25 Wörter und 11 Wendungen, weil die Druckseite auf ein Blatt
-   passen soll
+5. **Export** — höchstens 25 Wörter und 11 Wendungen je Block; wer mehr will, geht nach
+   der Fortsetzungsfrage in den nächsten Block ([technik.md](technik.md) §12)
 
 Nützliche Argumente: `--chapter 3` überspringt die Auswahl, `--card-direction de_en`
 dreht die Karten um (dann bleiben Wörter ohne Wörterbucheintrag außen vor — ihre
@@ -130,7 +130,8 @@ Heraus kommen zwei Dateien je Lauf, `<Buchtitel>_kapitel<N>.apkg` und `.html`:
 
 - das **Anki-Deck** mit Wort, Bedeutung, Belegsatz und Verschlagwortung nach Buch, Autor
   und Kapitel — direkt importierbar, ohne Bastelei mit CSV-Spalten
-- die **Druckseite**, zweispaltig, aus dem Browser heraus auf ein Blatt zu drucken
+- die **Druckseite**, zweispaltig, aus dem Browser heraus zu drucken — auf so viele
+  Blätter, wie nötig ([technik.md](technik.md) §12)
 
 Ein zweiter Lauf über dasselbe Kapitel überschreibt nichts, sondern legt sich als
 `…_2` daneben. In Anki landet er trotzdem im selben Deck: Deck-Kennung und Notiz-GUID

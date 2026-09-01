@@ -2077,6 +2077,45 @@ Maximum 199.
 > trägt das Kriterium weiterhin — beurteilt wurde sie bei der Abnahme T17 (konzept.md,
 > Schritt 4, Nachtrag 26.08.2026: sie bleibt bei 25).
 
+Diese Rechnung ergab `MAX_ENTRIES = 36`. Seit dem Nachtrag unten gilt das nicht mehr —
+geprüft und gültig ist **33** (`libreverbum/printout.py`).
+
+### Nachtrag 01.09.2026: echt gedruckt statt gerechnet — `MAX_ENTRIES` auf 33 korrigiert
+
+Am 01.09.2026 hat `tools/print_fit_check.py` zum ersten Mal wirklich gedruckt: Edge
+headless, echte `trans_list`-Werte aus `tools/en-de.sqlite3`, PDF-Seiten gezählt statt
+Zeilen gerechnet (Verfahren im Kopf des Skripts). Ergebnis: **36 Einträge passen bei der
+p99-Länge (76 Zeichen), auf die diese Rechnung auslegt, nicht mehr sicher auf ein Blatt.**
+
+Bei 36 Einträgen, je Ziellänge der Übersetzung in Zeichen, physische Seiten:
+
+| Ziellänge | 12 | 32 | 45 | 60 | 65 | 70 | 72 | 74 | 75 | 76 | 80 | 90 | 110 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Seiten | 1 | 1 | 1 | 1 | 1 | 1 | 1 | **2** | **2** | 1 | **2** | **2** | **2** |
+
+Bei fester Länge, je Eintragszahl: 37 und 40 Einträge brauchen **bei jeder** getesteten
+Länge zwei Seiten; bei 80 Zeichen brauchen 34 und 35 Einträge zwei, 30/32/33 eine; bei
+90 Zeichen brauchen schon 30 zwei. Bei **33** Einträgen dagegen halten die Ziellängen
+60/65/70/72/74/75/76/78/80 **durchweg eine Seite** — erst 82 und 85 Zeichen ergeben zwei.
+Darauf beruht die Korrektur auf `MAX_ENTRIES = 33`.
+
+Drei Dinge sind daran festzuhalten:
+
+1. **Die Rechnung war nicht falsch, sie war zu knapp.** 97,5 % Füllung (Abschnitt oben)
+   lässt keinen Spielraum für das, was ein echter Browser anders macht als eine
+   Schriftmetrik-Rechnung — Zeilenumbruch, Silbentrennung, Schriftrendering im Detail
+   weichen vom rechnerischen Modell ab, und bei fast voller Blattbelegung reicht das schon.
+2. **Die Messung ist über die Übersetzungslänge nicht monoton** — 74 und 75 Zeichen
+   ergeben bei 36 Einträgen zwei Seiten, 76 wieder eine. Das ist kein Messfehler des
+   Browsers, sondern liegt an der Auswahl: Zu jeder Ziellänge zieht `print_fit_check.py`
+   andere Wörterbucheinträge, und deren **Wortformlänge** verschiebt die Zeilenzahl
+   mindestens so stark wie die Übersetzung. Wer diese Zahl neu zieht, muss das wissen —
+   sonst liest er aus einem einzelnen Längenwert eine Sicherheit heraus, die nicht drinsteht.
+   Genau daran wäre die Messung fast vorbeigegangen: Ohne die Gegenprobe über mehrere
+   Ziellängen hätte schon 36 Einträge bei 76 Zeichen grünes Licht bekommen.
+3. Der offene Punkt „Für die Kapazitätsprüfung fehlt ein Werkzeug in `tools/`" (unten) ist
+   damit **erledigt**: `tools/print_fit_check.py` ist dieses Werkzeug.
+
 ### Eine direkte PDF-Ausgabe ist Phase 2
 
 Ein PDF ohne den Handgriff im Browser verlangte eine der oben verworfenen Bibliotheken oder
@@ -2090,16 +2129,6 @@ mit dem HTML aus Phase 1 als Quelle.
   geprüft, Abnahmekriterium 5 erfüllt), „könnte aber etwas schöner sein" — Gestaltung, nicht
   Kapazität. Bewusst zurückgestellt, bis eine erste vollständig funktionierende Fassung
   steht; die steht jetzt
-- **Für die Kapazitätsprüfung fehlt ein Werkzeug in `tools/`.** Die Zahlen oben brauchen
-  echte Schriftmetrik, und in `.venv/` liegt weder PIL noch `fontTools` — gerechnet hat sie
-  ein Wegwerfskript, und **zwei Abnahmeläufe haben dafür je einen minimalen TrueType-Leser
-  neu geschrieben**. Sie sind damit die einzigen Messwerte dieses Dokuments, die sich nicht
-  aus `tools/` reproduzieren lassen, wogegen CLAUDE.md von den Messskripten ausdrücklich
-  sagt, sie reproduzierten die Messungen, auf die sich technik.md stützt. Der dritte
-  Anwendungsfall liegt damit vor, Regel 14 steht also nicht mehr entgegen: Die richtige
-  Ablage wäre ein `tools/print_fit_check.py` derselben Bauart wie die übrigen Messskripte —
-  Standardbibliothek, Schriftdatei aus dem System, Rechnung gegen das Druck-CSS von
-  `printout`
 
 ---
 
@@ -2778,8 +2807,10 @@ unter zwei Grundformen — wird ein Eintrag einmal zu viel gezeigt, nicht einer 
 zurück (Regel 13) — richtig, solange die Wortobergrenze garantierte, dass nie mehr ankamen.
 Diese Garantie ist weg: Wer vier Blöcke durchgeht, kann mehr als 36 Karten haben. Der
 Abbruch wird deshalb zum **Seitenumbruch**; Abnahmekriterium 5 ist mit derselben Änderung
-nachgezogen (konzept.md, „Abnahmekriterien"). Die Kapazität von 36 bleibt gemessen und
-begründet (Abschnitt 8c) — sie sagt jetzt, wo umgebrochen wird, statt wo abgebrochen wird.
+nachgezogen (konzept.md, „Abnahmekriterien"). Die Kapazität bleibt gemessen und begründet
+(Abschnitt 8c) — sie sagt jetzt, wo umgebrochen wird, statt wo abgebrochen wird. Die Zahl
+selbst ist seit dem Nachtrag 01.09.2026 in Abschnitt 8c nicht mehr 36, sondern **33**: die
+dort gerechnete Zahl hielt beim echten Druck nicht.
 
 ### Offene Punkte
 

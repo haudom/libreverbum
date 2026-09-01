@@ -46,7 +46,7 @@ class _StructureParser(HTMLParser):
     `epub._FlowingTextParser` (dokumentation.md §5, „für die Struktur genügt
     html.parser"), hier auf die erzeugte Druckseite angewendet. `word_forms` liefert eine
     exakte Liste statt einer Teilstring-Prüfung auf `body_text` (Befund 4, Durchsicht
-    4fa3c8e): `wort3` ist Teilstring von `wort30`…`wort36`, `body_text` allein kann eine
+    4fa3c8e): `wort3` ist Teilstring von `wort30`…`wort33`, `body_text` allein kann eine
     Vereinigungsprüfung deshalb nicht tragen."""
 
     def __init__(self) -> None:
@@ -269,7 +269,7 @@ def test_exactly_max_entries_plus_one_yields_second_sheet_with_a_single_entry(
     parser = _parse(path)
     assert parser.list_item_count == len(entries)
     # Zählung statt Teilstring-Prüfung (Befund 4, Durchsicht 4fa3c8e): `wort3 in
-    # body_text` wäre auch bei `wort30`…`wort36` wahr — erst der Abgleich der
+    # body_text` wäre auch bei `wort30`…`wort33` wahr — erst der Abgleich der
     # tatsächlich ausgegebenen Wortformen als Menge (mit Häufigkeit) hält die
     # Docstring-Zusage „keiner erscheint doppelt, Vereinigung geprüft".
     assert Counter(parser.word_forms) == expected_word_forms

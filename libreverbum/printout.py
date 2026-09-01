@@ -131,27 +131,30 @@ from libreverbum.entities import Occurrence, Sense
 # dasselbe Blatt — sie sagt jetzt aber, **wo** `_group_entries` umbricht, nicht mehr, wo
 # `write_printout` abbricht.
 #
-# Messung 21.08.2026, echte Arial-Metrik (C:/Windows/Fonts/arial.ttf) gegen alle 157.801
-# `trans_list`-Werte aus `tools/en-de.sqlite3`, gegen das CSS dieses Moduls (`_CSS`
-# unten): Satzspiegel 180 × 267 mm, Spalte 85 mm, nutzbare Gesamtspaltenlänge nach `h1`
-# und `p.kapitel`: 491 mm. Zeilenhöhe 11 pt × 1,2 = 4,66 mm, dazu 4 mm `margin` je
-# Eintrag. `trans_list`-Längen: Median 12 Zeichen, p90 32, p95 45, p99 76, Maximum 199.
-# Bei p99-Länge (76 Zeichen) wickelt ein Eintrag in dieser Spaltenbreite auf
-# durchschnittlich zwei Zeilen: 2 × 4,66 mm + 4 mm = 13,3 mm je Eintrag. 491 mm ÷ 13,3 mm
-# = 36,9 — bei 37 Einträgen reichte selbst die p99-Länge nicht mehr sicher (37 × 13,3 mm
-# = 492,1 mm > 491 mm), bei 36 schon (36 × 13,3 mm = 478,8 mm, 12,2 mm Rand). Zum
-# Vergleich: 25 Einträge mit der jeweils längsten real vorkommenden `trans_list` (`draw`
-# 103 Zeichen, `set` 65) füllen 277 mm (56 % des Blattes), 25 Einträge auf p99-Länge
-# 333 mm (68 %) — die alte, aus der Wortobergrenze abgeleitete Zahl 25 lag damit weit
-# unter der tatsächlichen Kapazität. Wer diese Zahl neu misst, misst gegen dieselbe
-# Arial-Metrik und dasselbe CSS wie hier — ändert sich eines von beiden, ist die Rechnung
-# neu zu ziehen.
+# Messung 01.09.2026, `tools/print_fit_check.py`: echt gedruckt (Edge headless), echte
+# `trans_list`-Werte aus `tools/en-de.sqlite3`, PDF-Seiten gezählt — überschreibt die
+# vorherige, nur gerechnete Zahl (technik.md §8c, „Gemessene Ergebnisse"; Herkunft der 36
+# dort, nicht hier). Bei 33 Einträgen bleibt es lückenlos bei einem Blatt für jede
+# getestete Übersetzungslänge bis 80 Zeichen (60/65/70/72/74/75/76/78/80 Zeichen),
+# einschließlich der p99-Länge von 76 Zeichen, auf die diese Zahl auslegt (technik.md
+# §8c). Erst 82 und 85 Zeichen ergeben zwei Blätter. Die gerechnete 97,5-%-Füllung, aus
+# der 36 stammte, ließ dagegen keinen Spielraum für das, was ein echter Browser anders
+# macht als eine Schriftmetrik-Rechnung: 36 Einträge kippen schon bei 74 und 75 Zeichen
+# auf zwei Seiten.
+#
+# Die Messung ist über die Übersetzungslänge nicht monoton (bei 36 Einträgen ergeben 74
+# und 75 Zeichen zwei Seiten, 76 wieder eine) — kein Messfehler, sondern die Wortformlänge
+# der zu jeder Ziellänge gezogenen Wörterbucheinträge verschiebt die Zeilenzahl mindestens
+# so stark wie die Übersetzung selbst. Wer diese Zahl neu zieht, zieht sie deshalb erneut
+# mit `tools/print_fit_check.py` gegen echten Ausdruck, nicht mit einer Schriftmetrik —
+# und ändert sich das CSS dieses Moduls (`_CSS` unten) oder die p99-Länge aus technik.md
+# §8c, ist die Messung zu wiederholen.
 #
 # (Befund 5, Durchsicht 4fa3c8e): Der Verweis im Moduldocstring, Abschnitt
 # „Voraussetzungen", zeigte zuvor auf „konzept.md §4, »Obergrenze pro Kapitel«" — einen
 # Anker, den es seit dem Nachtrag 01.09.2026 in konzept.md §4 nicht mehr gibt (dort nur
 # noch als zitierte alte Fassung). Nachgezogen auf „konzept.md §4, »Nachtrag 01.09.2026«".
-MAX_ENTRIES = 36
+MAX_ENTRIES = 33
 
 
 def _escaped(value: str) -> str:
