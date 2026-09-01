@@ -24,13 +24,29 @@ kennen darf.
 Liefert
 -------
 `write_printout` schreibt eine vollständige HTML-Datei mit eingebettetem `@page`- und
-`columns`-CSS (bauplan.md T14: zweispaltig, auf ein Blatt): Buch und Kapitel als
-Überschrift, darunter Wort, Wortart-Kürzel bei Homographen (Befund 4, Review T14) und
-Übersetzung je Zeile, alphabetisch nach `word_form` (Begründung unten, „Warum
-alphabetisch"). `<`, `>` und `&` aus dem Buchtext werden maskiert (`html.escape`,
-`quote=False` wie `anki._escaped`) — ein Belegsatz darf die Seite nicht zerlegen;
-typografische Anführungszeichen und Gedankenstrich bleiben unangetastet
-(dokumentation.md §1).
+`columns`-CSS (bauplan.md T14: zweispaltig): Buch und Kapitel als Überschrift, darunter
+Wort, Wortart-Kürzel bei Homographen (Befund 4, Review T14) und Übersetzung je Zeile,
+alphabetisch nach `word_form` (Begründung unten, „Warum alphabetisch"). `<`, `>` und `&`
+aus dem Buchtext werden maskiert (`html.escape`, `quote=False` wie `anki._escaped`) — ein
+Belegsatz darf die Seite nicht zerlegen; typografische Anführungszeichen und Gedankenstrich
+bleiben unangetastet (dokumentation.md §1).
+
+Wie mit mehr als MAX_ENTRIES Einträgen verfahren wird
+-------------------------------------------------------
+Bis zum 01.09.2026 war das ein sichtbarer Fehlschlag: Die Wortobergrenze pro Kapitel
+(konzept.md §4) garantierte, dass nie mehr als `MAX_ENTRIES` Einträge ankamen, also wies
+`write_printout` mehr sichtbar zurück (Regel 13). Die blockweise Triage (konzept.md §4,
+„Nachtrag 01.09.2026") hat diese Garantie aufgehoben — wer mehrere Blöcke durchgeht, kann
+mehr als `MAX_ENTRIES` Karten haben. Der Abbruch ist deshalb zum **Seitenumbruch**
+geworden (technik.md §12, „Folge: die Druckseite bricht um, statt abzubrechen";
+Abnahmekriterium 5): `_group_entries` schneidet die sortierte Liste in Gruppen zu
+höchstens `MAX_ENTRIES`, jede Gruppe bekommt einen eigenen Blatt-Container mit eigener
+Kapitelüberschrift (sonst weiß der Leser beim zweiten Blatt nicht mehr, wozu es gehört)
+und — bei mehr als einem Blatt — einer Blattzählung „Blatt n von m". Der Umbruch selbst
+steht als erzwungene CSS-Regel zwischen den Containern (`div.blatt`), nicht dem
+natürlichen Fließverhalten des Browsers überlassen: Nur ein expliziter Umbruch an genau
+dieser Stelle hält die in `MAX_ENTRIES` gemessene Kapazität je Blatt ein, und ob der
+Browser von sich aus richtig umbräche, ist nicht prüfbar.
 
 Wie mit `uncertain` verfahren wird
 -----------------------------------
@@ -106,8 +122,14 @@ from libreverbum.entities import Occurrence, Sense
 # Rechnung erreichte (Wortobergrenze pro Kapitel, konzept.md §4). Ob und wie `entries`
 # und `expressions` aus `pipeline.run_chapter` zusammen auf diese eine Seite kommen, ist
 # die noch offene T16-Entscheidung (bauplan.md T16, „213 Wendungen je Kapitel"); dieser
-# Wert begrenzt nur, was `write_printout` überhaupt noch auf ein Blatt bekommt, unabhängig
-# davon, was T16 am Ende hineinlegt.
+# Wert begrenzt nur, was `write_printout` je Blatt unterbringt, unabhängig davon, was T16
+# am Ende hineinlegt.
+#
+# Nachtrag 01.09.2026 (technik.md §12, „Folge: die Druckseite bricht um, statt
+# abzubrechen"): Mit der blockweisen Triage garantiert keine Wortobergrenze mehr, dass nie
+# mehr als MAX_ENTRIES Einträge ankommen. Die Zahl bleibt unverändert und misst weiter
+# dasselbe Blatt — sie sagt jetzt aber, **wo** `_group_entries` umbricht, nicht mehr, wo
+# `write_printout` abbricht.
 #
 # Messung 21.08.2026, echte Arial-Metrik (C:/Windows/Fonts/arial.ttf) gegen alle 157.801
 # `trans_list`-Werte aus `tools/en-de.sqlite3`, gegen das CSS dieses Moduls (`_CSS`
@@ -238,6 +260,18 @@ _CSS = """
     span.wort { font-weight: bold; }
     span.wortart { font-size: 9pt; font-style: italic; color: #555555; }
     span.unsicher { font-style: italic; color: #555555; }
+    /* Erzwungener Seitenumbruch zwischen den Blatt-Containern (Moduldocstring, „Wie mit
+       mehr als MAX_ENTRIES Einträgen verfahren wird") — nicht dem natürlichen
+       Fließverhalten des Browsers überlassen: Ohne `:last-of-type` bekäme auch das letzte
+       Blatt einen Umbruch danach und der Ausdruck endete auf einer leeren Seite. */
+    div.blatt {
+      page-break-after: always;
+      break-after: page;
+    }
+    div.blatt:last-of-type {
+      page-break-after: auto;
+      break-after: auto;
+    }
     """
 
 
@@ -251,34 +285,64 @@ def _entry_html(occurrence: Occurrence, sense: Sense) -> str:
     )
 
 
+def _group_entries(
+    ordered: Sequence[tuple[Occurrence, Sense]],
+) -> list[Sequence[tuple[Occurrence, Sense]]]:
+    """Schneidet die bereits sortierte Liste in Blätter zu höchstens `MAX_ENTRIES`
+    Einträgen (Moduldocstring, „Wie mit mehr als MAX_ENTRIES Einträgen verfahren wird") —
+    explizit hier in Python, nicht dem natürlichen Umbruch des Browsers überlassen. Die
+    Reihenfolge aus `ordered` bleibt je Gruppe erhalten, Gruppen entstehen nur durch
+    Schneiden, nicht durch Umsortieren."""
+    return [ordered[start : start + MAX_ENTRIES] for start in range(0, len(ordered), MAX_ENTRIES)]
+
+
+def _sheet_html(
+    group: Sequence[tuple[Occurrence, Sense]],
+    book_title: str,
+    chapter_number: int,
+    sheet_number: int,
+    sheet_count: int,
+) -> str:
+    """Ein einzelner Blatt-Container mit eigener Kapitelüberschrift — sonst weiß der Leser
+    beim zweiten Blatt nicht mehr, wozu es gehört — und, bei mehr als einem Blatt, einer
+    Blattzählung „Blatt n von sheet_count"; bei genau einem Blatt entfällt sie, „Blatt 1
+    von 1" wäre Lärm."""
+    zaehlung = f" – Blatt {sheet_number} von {sheet_count}" if sheet_count > 1 else ""
+    items = "\n    ".join(_entry_html(occurrence, sense) for occurrence, sense in group)
+    return f"""<div class="blatt">
+    <h1>{book_title}</h1>
+    <p class="kapitel">Kapitel {chapter_number}{zaehlung}</p>
+    <ul class="wortliste">
+    {items}
+    </ul>
+    </div>"""
+
+
 def write_printout(path: Path, entries: Sequence[tuple[Occurrence, Sense]]) -> None:
     """Schreibt die Kapitelliste als druckfertige HTML-Datei nach `path` (bauplan.md T14,
-    Abnahmekriterium 5): Buch und Kapitel als Überschrift, darunter `entries`
-    alphabetisch nach `word_form` (Moduldocstring, „Warum alphabetisch").
+    Abnahmekriterium 5): Buch und Kapitel als Überschrift, darunter `entries` alphabetisch
+    nach `word_form` (Moduldocstring, „Warum alphabetisch"), auf so viele Blätter verteilt,
+    wie nötig — höchstens `MAX_ENTRIES` je Blatt (Moduldocstring, „Wie mit mehr als
+    MAX_ENTRIES Einträgen verfahren wird").
 
     Sichtbare Fehlschläge statt einer leeren, stillschweigend gekürzten oder
-    unvollständigen Datei (Regel 13): eine leere Liste, mehr als `MAX_ENTRIES` Wörter
-    (Moduldocstring, Kommentar bei `MAX_ENTRIES`), Wörter aus mehreren Kapiteln
+    unvollständigen Datei (Regel 13): eine leere Liste, Wörter aus mehreren Kapiteln
     (`_ensure_single_chapter`) oder eine nicht aufgelöste und nicht als unsicher
     bestätigte Übersetzung (`_translation_html`, Moduldocstring „Wie mit uncertain
     verfahren wird").
     """
     if not entries:
         raise ValueError("Druckseite ohne Wörter ergibt keine sinnvolle Kapitelliste.")
-    if len(entries) > MAX_ENTRIES:
-        raise ValueError(
-            f"{len(entries)} Wörter übergeben, auf ein Blatt passen aber höchstens "
-            f"{MAX_ENTRIES} ({len(entries) - MAX_ENTRIES} zu viel; Rechnung dazu im "
-            "Kommentar bei MAX_ENTRIES) — die Auswahl trifft der Aufrufer: vor dem Druck "
-            "kürzen, statt hier still zu kürzen oder unangesagt eine zweite Seite "
-            "anzuhängen."
-        )
     _ensure_single_chapter(entries)
 
     ordered = sorted(entries, key=_sort_key)
     book_title = _escaped(ordered[0][0].book.title)
     chapter_number = ordered[0][0].chapter_number
-    items = "\n    ".join(_entry_html(occurrence, sense) for occurrence, sense in ordered)
+    groups = _group_entries(ordered)
+    sheets = "\n    ".join(
+        _sheet_html(group, book_title, chapter_number, sheet_number, len(groups))
+        for sheet_number, group in enumerate(groups, start=1)
+    )
 
     document = f"""<!DOCTYPE html>
 <html lang="de">
@@ -288,11 +352,7 @@ def write_printout(path: Path, entries: Sequence[tuple[Occurrence, Sense]]) -> N
     <style>{_CSS}</style>
 </head>
 <body>
-    <h1>{book_title}</h1>
-    <p class="kapitel">Kapitel {chapter_number}</p>
-    <ul class="wortliste">
-    {items}
-    </ul>
+    {sheets}
 </body>
 </html>
 """

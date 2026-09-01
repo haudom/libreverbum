@@ -1,5 +1,6 @@
 """Prüft `libreverbum/printout.py` — bauplan.md T14, Kapitelliste als Druckseite,
-zweispaltig, auf ein Blatt (Abnahmekriterium 5)."""
+zweispaltig, auf so viele Blätter umbrechend wie nötig (Abnahmekriterium 5, nachgezogen
+01.09.2026)."""
 
 from __future__ import annotations
 
@@ -119,6 +120,26 @@ def test_book_and_chapter_appear_as_heading(tmp_path: Path) -> None:
     assert "7" in parser.body_text
 
 
+def test_every_sheet_carries_the_chapter_heading(tmp_path: Path) -> None:
+    """Vorgabe des Auftrags: „Jedes Blatt trägt die Kapitelüberschrift (sonst weiß der
+    Leser beim zweiten Blatt nicht mehr, wozu es gehört)." Bei zwei Blättern steht Buch
+    und Kapitel deshalb zweimal auf der Seite. Verfälschungsprobe: Überschrift nur einmal
+    vor allen Blatt-Containern ausgegeben (wie zuvor bei einem einzigen Blatt) ließ diese
+    Prüfung fehlschlagen, weil `<h1>` nur einmal statt zweimal vorkam."""
+    path = tmp_path / "kapitelliste.html"
+    entries = [
+        _entry(f"wort{n}", f"übersetzung{n}", chapter_number=7)
+        for n in range(printout.MAX_ENTRIES + 1)
+    ]
+
+    printout.write_printout(path, entries)
+
+    document = path.read_text(encoding="utf-8")
+    assert document.count("<h1>") == 2
+    assert document.count(_BOOK.title) >= 2
+    assert document.count("Kapitel 7") >= 2
+
+
 def test_entries_are_sorted_alphabetically_by_word_form(tmp_path: Path) -> None:
     """Moduldocstring, „Warum alphabetisch": Die Wortliste steht alphabetisch nach
     `word_form`, unabhängig von der Übergabereihenfolge und von Groß-/Kleinschreibung
@@ -155,27 +176,66 @@ def test_special_characters_are_escaped_and_do_not_tear_the_page_apart(tmp_path:
     assert injected in parser.body_text
 
 
-def test_capacity_limit_raises_instead_of_silently_truncating(tmp_path: Path) -> None:
-    """Regel 13 (dokumentation.md §4): Mehr Einträge, als `printout.MAX_ENTRIES`
-    vorsieht, sind ein sichtbarer Fehlschlag — kein stillschweigend gekürztes Blatt,
-    keine zweite Seite ohne Ansage."""
+def test_more_than_the_capacity_wraps_onto_a_second_sheet(tmp_path: Path) -> None:
+    """konzept.md, Abnahmekriterium 5 (nachgezogen 01.09.2026): „Die Druckseite bricht
+    sauber auf so viele Blätter um, wie nötig" — mehr Einträge, als `MAX_ENTRIES` auf ein
+    Blatt passen, sind kein Fehlschlag mehr, sondern ergeben ein zweites Blatt, das die
+    restlichen Einträge trägt. Verfälschungsprobe: Mit der alten Gruppierung um eins
+    verschoben (`range(0, len(ordered), MAX_ENTRIES + 1)`) fiel diese Prüfung, weil dann
+    wieder nur ein `div.blatt` entstand."""
     path = tmp_path / "kapitelliste.html"
     entries = [_entry(f"wort{n}", f"übersetzung{n}") for n in range(printout.MAX_ENTRIES + 1)]
 
-    with pytest.raises(ValueError):
-        printout.write_printout(path, entries)
+    printout.write_printout(path, entries)
 
-    assert not path.exists()
+    document = path.read_text(encoding="utf-8")
+    assert document.count('<div class="blatt">') == 2
+    parser = _parse(path)
+    assert parser.list_item_count == len(entries)
+    for occurrence, _ in entries:
+        assert occurrence.word_form in parser.body_text
 
 
-def test_capacity_limit_accepts_exactly_the_maximum(tmp_path: Path) -> None:
-    """Gegenprobe zur vorigen Prüfung: Genau `MAX_ENTRIES` Wörter sind kein Fehlschlag."""
+def test_exactly_max_entries_plus_one_yields_second_sheet_with_a_single_entry(
+    tmp_path: Path,
+) -> None:
+    """`MAX_ENTRIES + 1` Einträge ergeben genau zwei Blätter, das zweite mit genau einem
+    Eintrag — kein Eintrag geht verloren, keiner erscheint doppelt (Vereinigung geprüft,
+    nicht nur die Anzahl). Verfälschungsprobe: Alle Einträge doch auf ein Blatt gepackt
+    (Gruppierung übersprungen, `_group_entries` gibt `[ordered]` zurück) ließ diese
+    Prüfung fehlschlagen, weil nur ein `div.blatt` statt zwei entstand."""
+    path = tmp_path / "kapitelliste.html"
+    entries = [_entry(f"wort{n}", f"übersetzung{n}") for n in range(printout.MAX_ENTRIES + 1)]
+    expected_word_forms = {occurrence.word_form for occurrence, _ in entries}
+
+    printout.write_printout(path, entries)
+
+    document = path.read_text(encoding="utf-8")
+    sheets = document.split('<div class="blatt">')[1:]
+    assert len(sheets) == 2
+    assert sheets[0].count("<li>") == printout.MAX_ENTRIES
+    assert sheets[1].count("<li>") == 1
+
+    parser = _parse(path)
+    assert parser.list_item_count == len(entries)
+    found_word_forms = {word for word in expected_word_forms if word in parser.body_text}
+    assert found_word_forms == expected_word_forms
+
+
+def test_capacity_limit_accepts_exactly_the_maximum_on_a_single_sheet(tmp_path: Path) -> None:
+    """Bei genau `MAX_ENTRIES` Einträgen bleibt es bei einem Blatt und ohne Blattzählung
+    (Moduldocstring, „bei genau einem Blatt entfällt sie, »Blatt 1 von 1« wäre Lärm").
+    Verfälschungsprobe: Die Blattzählung ohne die `sheet_count > 1`-Bedingung immer
+    angehängt ließ diese Prüfung fehlschlagen, weil „Blatt 1 von 1" im Text auftauchte."""
     path = tmp_path / "kapitelliste.html"
     entries = [_entry(f"wort{n}", f"übersetzung{n}") for n in range(printout.MAX_ENTRIES)]
 
     printout.write_printout(path, entries)
 
-    assert path.exists()
+    document = path.read_text(encoding="utf-8")
+    assert document.count('<div class="blatt">') == 1
+    parser = _parse(path)
+    assert "Blatt" not in parser.body_text
 
 
 def test_rejects_an_empty_word_list(tmp_path: Path) -> None:
