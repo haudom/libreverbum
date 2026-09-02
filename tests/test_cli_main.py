@@ -22,7 +22,7 @@ from cli import display
 from cli import main as cli_main
 from cli.main import _build_parser, main
 from libreverbum import dictionary, epub, pipeline, profile
-from libreverbum.entities import Book, CefrLevel, Chapter
+from libreverbum.entities import Book, CefrLevel, Chapter, Lemma, Occurrence
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -1232,7 +1232,16 @@ def test_resolve_with_progress_closes_the_line_even_when_the_model_server_fails(
 
     Verfälschungsprobe: `finish_progress_line()` hinter statt in `try/finally` aufgerufen
     (der Stand vor dieser Behebung) ließ diesen Test rot werden, weil `finish_calls` dann
-    leer blieb — die Ausnahme verließ `_resolve_with_progress`, bevor die Zeile schloss."""
+    leer blieb — die Ausnahme verließ `_resolve_with_progress`, bevor die Zeile schloss.
+
+    `entries` trägt seit Befund 7 (Durchsicht e537273) einen einzelnen Eintrag statt einer
+    leeren Liste: `_resolve_with_progress` leitet `started` nur noch aus `bool(entries)` her
+    (das tote `nonlocal started; started = True` in `_on_progress` ist weg) — die reale
+    `pipeline.resolve_triage_entries` ruft `on_progress` ohnehin nie bei leeren `entries`
+    auf. Die Attrappe unten tut das trotzdem, rein um `finish_calls` zu prüfen; mit einer
+    leeren Liste bliebe `started` seit der Behebung `False`, und `finish_progress_line`
+    liefe nicht — nicht wegen eines Fehlers in `_resolve_with_progress`, sondern weil die
+    Attrappe dann eine Lage nachstellte, die der echte Kern nie herstellt."""
     finish_calls: list[None] = []
     monkeypatch.setattr(
         "cli.main.finish_progress_line", lambda **_kwargs: finish_calls.append(None)
@@ -1255,12 +1264,28 @@ def test_resolve_with_progress_closes_the_line_even_when_the_model_server_fails(
 
     monkeypatch.setattr("cli.main.pipeline.resolve_triage_entries", _raising_resolve_triage_entries)
 
+    entries = [
+        pipeline.VocabularyEntry(
+            occurrence=Occurrence(
+                book=Book(title="Testbuch", author="Testautorin"),
+                chapter_number=1,
+                lemma=Lemma(text="word", pos="NOUN"),
+                word_form="word",
+                example_sentence="A word in a sentence.",
+                frequency=1,
+                proper_noun_frequency=0,
+            ),
+            candidates=[],
+            status={},
+        )
+    ]
+
     con = sqlite3.connect(":memory:")
     try:
         with pytest.raises(RuntimeError):
             cli_main._resolve_with_progress(
                 con=con,
-                entries=[],
+                entries=entries,
                 limit=5,
                 url="http://127.0.0.1:0/v1",
                 get_model_name=lambda: "mini-model",
@@ -1270,6 +1295,26 @@ def test_resolve_with_progress_closes_the_line_even_when_the_model_server_fails(
         con.close()
 
     assert finish_calls, "finish_progress_line lief nicht, obwohl bereits berichtet wurde."
+
+
+def test_resolve_progress_announcement_is_never_longer_than_the_shortest_count_line() -> None:
+    """Befund 7 (Durchsicht e537273): `display.safe_print_progress` verlangt, dass der Text
+    innerhalb eines Laufs nur wächst, nie kürzt (Docstring dort) — sonst blieben Reste der
+    Ankündigung stehen, sobald die erste Zählzeile kürzer wäre. Vorgerechnet hält das
+    (Ankündigung 30 Zeichen, kürzestmögliche Zählzeile 74), geprüft war es bisher nirgends
+    — nur, dass die Ankündigung **vor** der ersten Zählzeile steht
+    (`test_full_run_reports_progress_through_cli_display`).
+
+    Die kürzestmögliche Zählzeile hat für jede der vier Zahlen genau eine Ziffer (`0`);
+    beide Seiten werden aus `cli.main._RESOLVE_ANNOUNCEMENT`/`_resolve_progress_text`
+    gebaut statt aus zwei von Hand nachgezählten Literalen — sonst prüfte der Test nur
+    sich selbst, nicht den tatsächlichen Text.
+
+    Verfälschungsprobe: `_RESOLVE_ANNOUNCEMENT` versuchsweise auf eine 80 Zeichen lange
+    Zeile verlängert ließ diesen Test rot werden — siehe Bericht."""
+    shortest_count_line = cli_main._resolve_progress_text(0, 0, 0, 0)
+
+    assert len(cli_main._RESOLVE_ANNOUNCEMENT) < len(shortest_count_line)
 
 
 def _stub_vocabulary() -> pipeline.ChapterVocabulary:

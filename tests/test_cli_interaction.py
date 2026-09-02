@@ -744,6 +744,42 @@ def test_every_block_ends_with_a_summary_of_its_decisions(profile_con: sqlite3.C
     ), written
 
 
+def test_block_summary_after_an_abort_does_not_claim_the_block_was_finished(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """Befund 5 (Durchsicht e537273): Nach `q` stand „Block beendet:" unmittelbar unter
+    „Abgebrochen." — der Block wurde in diesem Fall gerade nicht beendet, sondern
+    verlassen. Die Zahlen und ihre Reihenfolge bleiben unverändert, nur die Überschrift
+    wechselt auf „Bis hierher:".
+
+    Verfälschungsprobe: `heading` in `_write_block_summary` fest auf „Block beendet"
+    belassen (der Stand vor dieser Behebung) lässt die zweite Zusicherung unten rot
+    werden."""
+    resolution = pipeline.TriageResolution(
+        entries=_entries(2), known=0, resolved_known=0, skipped=0, remaining=[]
+    )
+    written: list[str] = []
+    answers = iter(["", "q"])  # keine Sammelaktion, sofortiger Abbruch bei word0
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(answers),
+        write_line=written.append,
+        style=display.PLAIN_STYLE,
+    )
+
+    assert any(
+        "Bis hierher: 0 zum Lernen, 0 als bekannt gebucht, 0 übersprungen." in line
+        for line in written
+    ), written
+    assert not any("Block beendet" in line for line in written)
+
+
 def test_entries_use_ascii_fallback_characters_without_unicode_support(
     profile_con: sqlite3.Connection,
 ) -> None:

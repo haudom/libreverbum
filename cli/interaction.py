@@ -28,11 +28,20 @@ vorgeladenen Folgeblock — siehe `_BlockPrefetch` unten).
 Anzeigeform (Bauschritt 2/2 der Konsolenausgabe, Auftragstext vom 02.09.2026, technik.md
 §13, „Triage-Anzeige"): Trennlinie mit Zähler, Wortform und Bedeutung in einer Kopfzeile,
 Nebendaten und Belegsatz eingerückt darunter (`_entry_lines`) — der Grund steht dort, nicht
-hier. Sämtliche Textbausteine kommen aus `cli.display` (`Style`, `bold`/`dim`/`highlight`,
-`entry_rule`, `cover`, `wrap_indented`); dieses Modul schreibt keinen Farbcode und keine
-Sonderzeichen von Hand, damit die farb- und sonderzeichenlose Spielart (`cli.display.
-PLAIN_STYLE`, Vorgabe für `run_triage_pass`/`run_triage_blocks` unten) automatisch dieselbe
-Struktur trägt.
+hier. Sämtliche stilabhängigen Textbausteine (Farbe, Umbruch, Pfeil, Trennpunkt,
+Anführungszeichen, Trennlinien) kommen aus `cli.display` (`Style`, `bold`/`dim`/`highlight`,
+`entry_rule`, `cover`, `headline`, `wrap_indented`); dieses Modul schreibt keinen Farbcode
+und keines dieser Zeichen von Hand, damit die farb- und sonderzeichenlose Spielart
+(`cli.display.PLAIN_STYLE`, Vorgabe für `run_triage_pass`/`run_triage_blocks` unten)
+automatisch dieselbe Struktur trägt. (Befund 2, Durchsicht e537273, korrigiert: eine
+frühere Fassung dieses Satzes behauptete das uneingeschränkt.) Ausgenommen sind
+Gedankenstrich und Auslassungspunkte in den eigenen Meldungen dieses Moduls (etwa
+„Ungültige Eingabe — k, l, s oder q erwartet.") — das ist gewöhnliche
+Oberflächentext-Typografie (dokumentation.md §1), kein stilabhängiges Sonderzeichen im Sinn
+von `cli.display._SPECIAL_CHARS`, und `safe_print`s Ausweichkodierung fängt eine Konsole
+ohne sie ohnehin ab (kein Absturz, nur `?` statt des Zeichens) — anders als bei `─`/`═`/
+`→`/`·` und den typografischen Anführungszeichen lohnt sich dafür keine eigene, vorab
+prüfende Ausweichlogik.
 
 Warum die Auflösung nicht mehr hier liegt (Befund schwer 1, zweite T16-Durchsicht)
 ------------------------------------------------------------------------------------
@@ -273,8 +282,9 @@ def _entry_lines(
     Nutzermeldung: „Man muss immer das Wort … zwischen dem Zitat … und der Ausgabe aus dem
     vorherigen Wort suchen"; Begründung technik.md §13, „Triage-Anzeige"): eine Trennlinie
     mit Zähler `position`/`total` (`display.entry_rule`), Wortform und Übersetzung in
-    einer Kopfzeile, Nebendaten (Wortart, Häufigkeit, Bedeutungsangabe) und Belegsatz
-    eingerückt darunter. Kein Inhalt geht dabei verloren, nur die Anordnung ändert sich —
+    einer — bei Bedarf umgebrochenen — Kopfzeile (`display.headline`, Befund 3, Durchsicht
+    e537273), Nebendaten (Wortart, Häufigkeit, Bedeutungsangabe) und Belegsatz eingerückt
+    darunter. Kein Inhalt geht dabei verloren, nur die Anordnung ändert sich —
     Regel 1 (dokumentation.md §4): `dictionary.label` liefert weiterhin `NO_SENSE_LABEL`
     beziehungsweise `UNCERTAIN_LABEL`, wenn `entry.sense` keinen `sense`-Text trägt, statt
     dass diese Zeilen wegfielen.
@@ -287,10 +297,10 @@ def _entry_lines(
     translation_text = entry.sense.translation or entry.sense.wikdict_trans_list or "?"
 
     lines = [display.entry_rule(position, total, chosen, style)]
-    lines.append(
-        f"  {display.bold(occurrence.word_form, style)}"
-        f"{display.arrow(style)}{display.highlight(translation_text, style)}"
-    )
+    # (Befund 3, Durchsicht e537273): `display.headline` bricht die Kopfzeile um — vor
+    # dieser Behebung lief sie als einzige Zeile eines Eintrags über den Bildschirmrand,
+    # weil `Sense.translation` die ganze `wikdict_trans_list` trägt (bis zu 245 Zeichen).
+    lines.extend(display.headline(occurrence.word_form, translation_text, style))
     if entry.status is VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD:
         lines.append(f"  {display.highlight('[neue Bedeutung eines bekannten Wortes]', style)}")
 
@@ -611,19 +621,29 @@ def _write_block_summary(
     triage_pass: TriagePass, bulk_marked: int, chosen_before: int, write_line: WriteLine
 ) -> None:
     """Bilanz am Blockende (zweite Nutzermeldung vom 02.09.2026): was dieser Block
-    gebracht hat, und — sobald schon ein Block oder der Wörter-Deckel davorliegt — der
-    Kapitelstand.
+    gebracht hat, und — sobald `chosen_before` etwas beiträgt — der Kapitelstand.
 
     Die als bekannt gebuchten zählen die Sammelaktion mit: Für den Nutzer ist „als bekannt
     gebucht" eine Zahl, nicht zwei Wege dorthin (`bulk_mark` und die Einzelabfrage buchen
     beide `KnowledgeState.KNOWN`, nur mit anderer `Origin`).
 
     Die Kapitelzeile erscheint nur, wenn `chosen_before` etwas beiträgt — beim allerersten
-    Block stünde sonst zweimal dieselbe Zahl untereinander."""
+    Block stünde sonst zweimal dieselbe Zahl untereinander. (Befund 5, Durchsicht e537273,
+    berichtigt: „sobald schon ein Block oder der Wörter-Deckel davorliegt" traf das
+    Prädikat nicht wörtlich — ein erster Block ohne einzige „lernen"-Entscheidung lässt
+    `chosen_before` bei 0, obwohl ein ganzer Block bereits lief; die Zeile erscheint dann
+    im zweiten Block trotzdem nicht.)
+
+    Nach einem Abbruch mit `q` (`triage_pass.aborted`) steht statt „Block beendet:" die
+    Überschrift „Bis hierher:" (Befund 5, Durchsicht e537273): Auf dem Bildschirm folgte
+    diese Zeile bislang unmittelbar auf „Abgebrochen." — der Block wurde in diesem Fall
+    gerade nicht beendet, sondern verlassen. Die Zahlen und ihre Reihenfolge bleiben
+    unverändert, nur dieses eine Wort wechselt."""
     chosen_now = len(triage_pass.cards)
+    heading = "Bis hierher" if triage_pass.aborted else "Block beendet"
     write_line("")
     write_line(
-        f"  Block beendet: {chosen_now} zum Lernen, "
+        f"  {heading}: {chosen_now} zum Lernen, "
         f"{triage_pass.known + bulk_marked} als bekannt gebucht, "
         f"{triage_pass.deferred} übersprungen."
     )

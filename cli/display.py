@@ -44,9 +44,12 @@ Fettdruck, Dimmen und farbige Hervorhebung als Funktion von `Style` — ohne Far
 unverändert. `arrow`/`dot`/`quote` liefern die in `cli.interaction` verwendeten
 Sonderzeichen samt ASCII-Ersatz. `entry_rule` ist die Trennlinie mit rechtsbündigem
 Zähler vor jedem Triage-Eintrag, `cover` das Deckel-Banner für „Wörter"/„Wendungen".
-`wrap_indented` bricht eine lange Zeile auf `Style.width` um, Folgezeilen mit derselben
-Einrückung. `PLAIN_STYLE` ist die farb- und sonderzeichenlose Vorgabe für Aufrufer, denen
-der Ausgabestil gleichgültig ist (etwa die meisten Tests von `cli.interaction`).
+`headline` bricht Wortform und Übersetzung eines Eintrags um **und** färbt sie ein
+(Befund 3, Durchsicht e537273) — die einzige Anzeigeebene, die Umbruch und Farbe in einem
+Schritt braucht, weil beides in einer Zeile gemischt ist. `wrap_indented` bricht eine
+lange Zeile auf `Style.width` um, Folgezeilen mit derselben Einrückung. `PLAIN_STYLE` ist
+die farb- und sonderzeichenlose Vorgabe für Aufrufer, denen der Ausgabestil gleichgültig
+ist (etwa die meisten Tests von `cli.interaction`).
 """
 
 from __future__ import annotations
@@ -130,7 +133,7 @@ def _terminal_width() -> int:
 class Style:
     """Ausgabefähigkeit eines Ziels, einmal je Lauf ermittelt (`detect_style`) — ob es
     ANSI-Farbe trägt und ob seine Kodierung die in `cli.interaction` verwendeten
-    Sonderzeichen (`─`, `→`, `·`, typografische Anführungszeichen) darstellen kann. Kein
+    Sonderzeichen (`─`, `═`, `→`, `·`, typografische Anführungszeichen) darstellen kann. Kein
     Konfigurationsschalter (dokumentation.md §4 Regel 14) — eine zur Laufzeit feststellbare
     Fähigkeit des Ziels, keine Einstellung."""
 
@@ -144,15 +147,19 @@ PLAIN_STYLE = Style(supports_color=False, supports_unicode=False, width=80)
 # `cli.interaction` prüfen Entscheidungen, nicht die Bildschirmausgabe (dokumentation.md
 # §5), und bekommen mit dieser Vorgabe eine deterministische, plattformunabhängige Form.
 
-# Trennlinie, Pfeil, Trennpunkt, deutsche Anführungszeichen (öffnend U+201E, schließend
-# U+201C — dieselben Zeichen wie in cli/main.py, `_choose_chapter`).
-_SPECIAL_CHARS = "─→·„“"
+# Trennlinie (einfach ─, doppelt ═ im Deckel-Banner), Pfeil, Trennpunkt, deutsche
+# Anführungszeichen (öffnend U+201E, schließend U+201C — dieselben Zeichen wie in
+# cli/main.py, `_choose_chapter`).
+# (Befund 2, Durchsicht e537273): `═` fehlte hier — `cover` zeichnet es, die Probe deckte
+# es also nicht ab. Folgenlos an allen 14 Standard-Codecs, die die übrigen Zeichen tragen
+# (sie tragen auch `═`), aber die Absicherung war unvollständig.
+_SPECIAL_CHARS = "─═→·„“"
 
 
 def _stream_supports_unicode(stream: TextIO) -> bool:
     """Prüft, ob die Kodierung von `stream` die oben genannten Sonderzeichen darstellen
     kann — nicht ob sie UTF-8 ist: `cp1252` etwa stellt „ “ und den Gedankenstrich bereits
-    dar, aber nicht `─`/`→`/`·` (Auftragstext vom 02.09.2026). Eine fehlende oder
+    dar, aber nicht `─`/`═`/`→`/`·` (Auftragstext vom 02.09.2026). Eine fehlende oder
     unbekannte Kodierung gilt als unfähig — der sichere Fehlschlag ist der ASCII-Ersatz,
     nicht ein Bildschirm voller `?` (`safe_print`s eigentliche Gefahr, hier von vornherein
     vermieden statt erst hinterher ausgewichen)."""
@@ -184,7 +191,14 @@ def _enable_windows_console_color(stream: TextIO) -> bool:
     liefert `False`, statt die Ausnahme durchzureichen: Farbe ist hier eine Fähigkeit des
     Ziels, keine Voraussetzung für den Lauf. Das macht diese Funktion zugleich mit einem
     beliebigen Strom prüfbar, ohne ein echtes Terminal zu brauchen (Auftragstext, „Sorg
-    dafür, dass Tests … prüfen können, ohne ein echtes Terminal zu brauchen")."""
+    dafür, dass Tests … prüfen können, ohne ein echtes Terminal zu brauchen").
+
+    (Befund 1, Durchsicht e537273): Gefangen wird neben `OSError` (eine umgeleitete Datei
+    ohne echtes Konsolen-Handle) auch `AttributeError` — ein Strom, der `isatty()` bejaht,
+    aber gar kein `fileno()` hat (etwa ein Test-Double), warf sonst beim Aufruf von
+    `stream.fileno()` durch, entgegen dem Versprechen oben. `cli.main.main` wertet
+    `detect_style()` außerhalb seines eigenen `try`-Blocks aus — eine hier nicht gefangene
+    Ausnahme liefe dort als englischer Traceback durch, an allen drei Fängen vorbei."""
     if sys.platform != "win32":
         return True
     try:
@@ -197,7 +211,7 @@ def _enable_windows_console_color(stream: TextIO) -> bool:
         if not kernel32.GetConsoleMode(ctypes.c_void_p(handle), ctypes.byref(mode)):
             return False
         return bool(kernel32.SetConsoleMode(ctypes.c_void_p(handle), mode.value | 0x0004))
-    except OSError:
+    except (AttributeError, OSError):
         return False
 
 
@@ -205,7 +219,14 @@ def detect_style(stream: TextIO | None = None) -> Style:
     """Ermittelt `Style` für `stream` (Vorgabe `sys.stdout`) — **einmal** je Lauf
     aufzurufen, nicht je Zeile. `stream` ist austauschbar, damit Tests beide Spielarten
     (mit/ohne Farbe, mit/ohne Sonderzeichen) prüfen können, ohne ein echtes Terminal zu
-    brauchen — die Ermittlung geschieht ausschließlich an diesem übergebenen Strom."""
+    brauchen — `supports_color` und `supports_unicode` werden ausschließlich an diesem
+    übergebenen Strom ermittelt.
+
+    `width` dagegen nicht (Befund 4, Durchsicht e537273): Es kommt aus
+    `shutil.get_terminal_size()` (`$COLUMNS` beziehungsweise `sys.__stdout__`) und ist
+    damit bewusst eine Eigenschaft des Terminals selbst, nicht des übergebenen Stroms —
+    ein Test, der die Breite prüfen will, gibt `style.width` deshalb selbst vor, statt
+    `stream` dafür zu präparieren."""
     target = stream if stream is not None else sys.stdout
     supports_color = _stream_is_a_terminal(target) and _enable_windows_console_color(target)
     return Style(
@@ -259,9 +280,14 @@ def dot(style: Style) -> str:
 
 
 def quote(text: str, style: Style) -> str:
-    """Setzt `text` (den Belegsatz) in Anführungszeichen — typografisch (`„…“`, wie
-    `cli.main._choose_chapter` es für den Buchtitel bereits tut) auf einem fähigen Ziel,
-    sonst gerade ASCII-Anführungszeichen."""
+    """Setzt `text` (den Belegsatz) in Anführungszeichen — typografisch (`„…“`) auf einem
+    fähigen Ziel, sonst gerade ASCII-Anführungszeichen.
+
+    (Befund 2, Durchsicht e537273): `cli.main._choose_chapter` schreibt für den Buchtitel
+    dieselben typografischen Zeichen fest in den Quelltext, aber **ungeschützt** — ohne
+    Rücksicht auf `Style` und ohne den ASCII-Ersatz. Das ist kein Vorbild für dieses
+    Verhalten, nur derselbe Zeichensatz; die frühere Fassung dieses Docstrings behauptete
+    das Gegenteil."""
     if style.supports_unicode:
         return f"„{text}“"
     return f'"{text}"'
@@ -293,6 +319,43 @@ def cover(title: str, style: Style) -> list[str]:
     char = "═" if style.supports_unicode else "="
     line = char * style.width
     return [line, f"  {bold(title, style)}", line]
+
+
+def headline(word_form: str, translation: str, style: Style) -> list[str]:
+    """Kopfzeile eines Triage-Eintrags — Wortform und Übersetzung, umgebrochen **und**
+    eingefärbt in einem Baustein (Befund 3, Durchsicht e537273).
+
+    Vor dieser Behebung war die Kopfzeile die einzige Zeile eines Eintrags, die nicht
+    umbrach — Angabenzeile und Belegsatz liefen bereits durch `wrap_indented`, die
+    Kopfzeile nicht, obwohl sie die längste Angabe trägt (`Sense.translation` ist die
+    ganze `wikdict_trans_list`). Gemessen an `tools/en-de.sqlite3` über 110.868
+    Kandidatenzeilen: 3,1 % der Kopfzeilen sind länger als 80 Spalten, die längste 245
+    Zeichen — in etwa jedem Block lief eine Kopfzeile über den Rand.
+
+    Die Kopfzeile mischt Fettdruck (Wortform) und Hervorhebung (Übersetzung) in **einer**
+    Zeile; nach dem Umbrechen lässt sich das nicht mehr nachträglich einfärben, weil
+    `textwrap` die ANSI-Steuersequenzen sonst als Breite mitzählte. Umbruch und Einfärbung
+    laufen deshalb hier zusammen: `textwrap.wrap` bekommt nur die **unverfärbte**
+    Übersetzung, mit der unverfärbten Wortform samt Pfeil als `initial_indent` (Zeile 1)
+    und derselben Einrückung wie `wrap_indented` als `subsequent_indent` (Folgezeilen) —
+    das hält die Wortform als erstes Wort der ersten Zeile fest (die ursprüngliche
+    Nutzerbeschwerde) und gibt ihr denselben Breitenvorrang wie jedem anderen Wort. Erst
+    danach wird pro Zeile eingefärbt: `bold` für die Wortform auf Zeile 1, `highlight` für
+    den jeweiligen Übersetzungsanteil auf jeder Zeile."""
+    indent = "  "
+    prefix = f"{indent}{word_form}{arrow(style)}"
+    wrapped = textwrap.wrap(
+        translation, width=style.width, initial_indent=prefix, subsequent_indent=indent
+    ) or [prefix]
+    lines = []
+    for index, line in enumerate(wrapped):
+        if index == 0:
+            body = line[len(prefix) :]
+            lines.append(f"{indent}{bold(word_form, style)}{arrow(style)}{highlight(body, style)}")
+        else:
+            body = line[len(indent) :]
+            lines.append(f"{indent}{highlight(body, style)}")
+    return lines
 
 
 def wrap_indented(text: str, style: Style, *, indent: str = "  ") -> list[str]:

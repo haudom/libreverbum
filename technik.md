@@ -2953,8 +2953,8 @@ Baustein in `cli.interaction` einen Farbcode von Hand schreibt, sondern jeder ü
   eines echten Konsolen-Handles (etwa ein Test-Double oder eine umgeleitete Datei) liefert
   `False`, nicht eine durchgereichte Ausnahme: Farbe ist eine Fähigkeit des Ziels, keine
   Voraussetzung für den Lauf.
-- **Die umgeleitete Ausgabe, deren Kodierung die Sonderzeichen nicht trägt.** `─`, `→`,
-  `·` und die typografischen Anführungszeichen überleben eine Umleitung in eine Datei
+- **Die umgeleitete Ausgabe, deren Kodierung die Sonderzeichen nicht trägt.** `─`, `═`,
+  `→`, `·` und die typografischen Anführungszeichen überleben eine Umleitung in eine Datei
   unter Windows nicht zwingend: Die Zielkodierung ist dann oft nicht UTF-8, und ein
   bloßes `safe_print` machte daraus erst hinterher `?` — eine Trennlinie würde zu einer
   Reihe Fragezeichen. `detect_style` prüft deshalb **vorab**, ob die Kodierung des Ziels

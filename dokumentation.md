@@ -99,7 +99,10 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | hervorgehoben (farbig) | `highlight` |
 | Trennlinie (vor einem Eintrag, mit Zähler) | `rule` (`entry_rule`) |
 | Deckel-Banner | `cover` |
+| Kopfzeile (Wortform + Übersetzung eines Eintrags, umgebrochen und eingefärbt) | `headline` |
 | Umbrechen mit gleichbleibender Einrückung | `wrap_indented` |
+| Lernzähler (wie viele Einträge in diesem Kapitel bereits „lernen" bekommen haben, Stand **vor** der anstehenden Entscheidung) | `chosen`, `chosen_before` (`display.entry_rule`, `cli.interaction`) — **nicht** `learning`: das ist der Kenntnisstand einer einzelnen Bedeutung, `chosen`/`chosen_before` zählen, wie oft dieser Zustand in diesem Kapitel bereits vergeben wurde (Befund 6, Durchsicht e537273) |
+| Blockbilanz (was ein Block bei seinem Ende gebracht hat: gelernt / bekannt gebucht / übersprungen, dazu der Kapitelstand) | `_write_block_summary` (Befund 6, Durchsicht e537273) |
 | Gegenstand des Kernablaufs | `entity` |
 | Durchlauf, Verkettung der Schritte | `pipeline` |
 | Etappe (eines `run_chapter`-Durchlaufs: Buch lesen, Buch analysieren, Wortschatz ermitteln, nachschlagen) | `stage` (`ChapterStage`) — **nicht** „Phase", das ist die Phase des Phasenplans (konzept.md), und **nicht** „Schritt", das sind die sechs Schritte des Kernablaufs |

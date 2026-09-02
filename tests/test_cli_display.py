@@ -8,7 +8,9 @@ from __future__ import annotations
 import io
 
 from cli.display import (
+    _SPECIAL_CHARS,
     Style,
+    _enable_windows_console_color,
     arrow,
     bold,
     cover,
@@ -17,6 +19,7 @@ from cli.display import (
     dot,
     entry_rule,
     finish_progress_line,
+    headline,
     highlight,
     quote,
     safe_print,
@@ -164,6 +167,55 @@ def test_detect_style_treats_a_missing_encoding_as_unable_to_render_special_char
     assert style.supports_unicode is False
 
 
+class _TTYWithoutFileno:
+    """Bejaht `isatty()` wie ein echtes Terminal, hat aber kein `fileno()` — das
+    Test-Double, das der eigene Docstring von `_enable_windows_console_color` ausdrücklich
+    als Beispiel nennt („kein `fileno()` … etwa ein Test-Double")."""
+
+    def __init__(self, *, encoding: str = "utf-8") -> None:
+        self.encoding = encoding
+
+    def isatty(self) -> bool:
+        return True
+
+
+def test_enable_windows_console_color_returns_false_for_a_tty_without_fileno() -> None:
+    """Befund 1 (Durchsicht e537273): Der Docstring von `_enable_windows_console_color`
+    versprach, jeder Fehlschlag beim Ermitteln des Konsolen-Handles liefere `False` statt
+    einer durchgereichten Ausnahme — gefangen wurde aber nur `OSError`, nicht
+    `AttributeError`. Ein Ziel, das `isatty()` bejaht und kein `fileno()` hat, brach damit
+    mit `AttributeError` ab. Vor dieser Behebung gab es dafür **keinen** Test: In
+    `tests/` rief nichts `_enable_windows_console_color` auf, und `_FakeStream` wurde nur
+    mit `isatty=False` benutzt — die conhost-Falle aus technik.md §13 war unbelegt.
+
+    Verfälschungsprobe: `except OSError` statt `except (AttributeError, OSError)` (der
+    Stand vor dieser Behebung) lässt diesen Test mit einer durchgereichten
+    `AttributeError` statt einem Rückgabewert fehlschlagen — siehe Bericht."""
+    assert _enable_windows_console_color(_TTYWithoutFileno()) is False  # type: ignore[arg-type]
+
+
+def test_detect_style_does_not_crash_for_a_terminal_like_double_without_fileno() -> None:
+    """Dieselbe Zusicherung wie oben, über den vollen Weg (`detect_style` statt der
+    privaten Funktion direkt) — `cli.main.main` wertet `detect_style()` außerhalb seines
+    eigenen `try`-Blocks aus (Befund 1), eine hier durchgereichte Ausnahme liefe also als
+    englischer Traceback durch, an allen drei Fängen vorbei."""
+    style = detect_style(_TTYWithoutFileno())  # type: ignore[arg-type]
+
+    assert style.supports_color is False
+
+
+def test_special_chars_probe_covers_the_double_rule_drawn_by_cover() -> None:
+    """Befund 2 (Durchsicht e537273): `cover` zeichnet die doppelte Trennlinie `═`
+    (U+2550) — vor dieser Behebung stand sie nicht in `_SPECIAL_CHARS`, die Probe deckte
+    also nicht ab, was `cli.interaction` über `cover` tatsächlich auf den Bildschirm
+    bringt. Folgenlos an jeder der 14 Standard-Codecs, die die übrigen vier Zeichen
+    tragen (sie tragen auch `═`), aber die Absicherung war unvollständig.
+
+    Verfälschungsprobe: `═` wieder aus `_SPECIAL_CHARS` entfernt lässt diesen Test rot
+    werden."""
+    assert "═" in _SPECIAL_CHARS
+
+
 # --------------------------------------------------------- Textbausteine (Style-Funktionen)
 
 _COLOR = Style(supports_color=True, supports_unicode=True, width=80)
@@ -251,6 +303,59 @@ def test_cover_returns_a_bold_title_between_two_double_rules() -> None:
     assert lines[0] == lines[2]
     assert set(lines[0]) == {"="}
     assert lines[1] == "  Wörter"
+
+
+def test_headline_matches_the_previous_single_line_format_when_it_fits() -> None:
+    """Befund 3 (Durchsicht e537273): Für den häufigen Fall, dass Wortform und Übersetzung
+    zusammen auf eine Zeile passen, muss `headline` denselben Wortlaut wie die frühere,
+    von Hand gebaute Kopfzeile liefern (`  {bold(word_form)}{arrow}{highlight(translation)}`)
+    — der Auftrag verlangt nur den Umbruch der langen Fälle, nicht ein neues Format."""
+    style = Style(supports_color=True, supports_unicode=True, width=80)
+
+    lines = headline("bank", "Ufer", style)
+
+    assert lines == [f"  {bold('bank', style)}{arrow(style)}{highlight('Ufer', style)}"]
+
+
+def test_headline_wraps_a_long_translation_and_keeps_the_word_form_first() -> None:
+    """Befund 3 (Durchsicht e537273): Vor dieser Behebung war die Kopfzeile die einzige
+    Zeile eines Eintrags, die nicht umbrach — gemessen an `tools/en-de.sqlite3` liefen
+    3,1 % der Kopfzeilen über 80 Spalten, die längste über 245 Zeichen. `headline`
+    umbricht wie `wrap_indented`, hält aber die Wortform als erstes Wort der ersten Zeile
+    fest (die ursprüngliche Nutzerbeschwerde) und rückt Folgezeilen gleich ein.
+
+    Verfälschungsprobe: `headline` durch eine Fassung ersetzt, die nur
+    `[f"  {bold(word_form)}{arrow}{highlight(translation)}"]` liefert (der Stand vor
+    dieser Behebung, unverändert für lange Übersetzungen) — `len(lines) > 1` schlägt fehl,
+    dieser Test war daran rot."""
+    style = Style(supports_color=False, supports_unicode=False, width=40)
+    translation = " | ".join(f"variante{i}" for i in range(12))
+
+    lines = headline("reproachfully", translation, style)
+
+    assert len(lines) > 1
+    assert lines[0].startswith("  reproachfully")
+    assert all(len(line) <= style.width for line in lines)
+    assert all(line.startswith("  ") for line in lines[1:])
+
+
+def test_headline_colors_the_word_form_and_the_translation_on_every_line() -> None:
+    """Die Kopfzeile mischt Fettdruck (Wortform) und Hervorhebung (Übersetzung) — nach dem
+    Umbrechen lässt sich das nicht mehr nachträglich einfärben (`textwrap` zählte
+    Steuersequenzen sonst als Breite mit), `headline` färbt deshalb **vor** dem Zählen der
+    Breite pro Zeile ein: Zeile 1 trägt `bold` für die Wortform, jede Zeile (auch die
+    erste) `highlight` für ihren Übersetzungsanteil.
+
+    Verfälschungsprobe: `highlight` nur auf die erste Zeile angewandt (Folgezeilen
+    unverfärbt) lässt die zweite Zusicherung unten rot werden."""
+    style = Style(supports_color=True, supports_unicode=False, width=30)
+    translation = " ".join(f"wort{i}" for i in range(10))
+
+    lines = headline("word", translation, style)
+
+    assert len(lines) > 1
+    assert lines[0].startswith(f"  {bold('word', style)}")
+    assert all("\x1b[36m" in line for line in lines)  # highlight-Code auf jeder Zeile
 
 
 def test_wrap_indented_keeps_the_indent_on_every_continuation_line() -> None:

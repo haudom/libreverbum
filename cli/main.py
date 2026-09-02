@@ -402,6 +402,25 @@ def _run_chapter_with_progress(
             finish_progress_line()
 
 
+# (Befund 7, Durchsicht e537273): Ankündigung und Zählzeilen-Vorlage aus einer geteilten
+# Quelle statt zweier von Hand gepflegter Literale — nur so lässt sich die Zusicherung
+# unten (`safe_print_progress` darf den Text nur wachsen lassen, nie kürzen, siehe dessen
+# Docstring) gegen den tatsächlichen Text führen, statt zwei Kopien nebeneinanderzustellen,
+# die stillschweigend auseinanderlaufen könnten.
+_RESOLVE_ANNOUNCEMENT = "Bedeutungen werden aufgelöst …"
+
+
+def _resolve_progress_text(examined: int, total: int, kept: int, limit: int) -> str:
+    # (Befund leicht 4, Durchsicht T16/T17): total ist die Obergrenze der Einträge
+    # (Vorfilter aus resolve_triage_entries, Schritt 1, hat schon abgezogen), nicht die
+    # Zahl der tatsächlich geprüften — der Lauf endet spätestens bei `limit` Treffern,
+    # meist weit vor total. „möglichen" macht das im Nenner sichtbar.
+    return (
+        f"Bedeutungen werden aufgelöst: {examined} von {total} möglichen geprüft, "
+        f"{kept} von {limit} behalten."
+    )
+
+
 def _resolve_with_progress(
     *,
     con: sqlite3.Connection,
@@ -430,22 +449,21 @@ def _resolve_with_progress(
     Deckelüberschrift. Derselbe stille Halt wie vor der Triage (technik.md §13,
     „Konsolenausgabe"), nur eine Ebene tiefer. Der Wagenrücklauf überschreibt sie mit der
     ersten Zählung; sie ist kürzer als jede Zählzeile und hinterlässt deshalb keinen
-    Rest (siehe `display.safe_print_progress`, „nur wachsen lassen, nie kürzen")."""
+    Rest (siehe `display.safe_print_progress`, „nur wachsen lassen, nie kürzen") — geprüft
+    in `tests/test_cli_main.py`,
+    `test_resolve_progress_announcement_is_never_longer_than_the_shortest_count_line`
+    (Befund 7, Durchsicht e537273): Vor dieser Behebung stand diese Zusicherung nirgends,
+    nur die Reihenfolge (Ankündigung vor erster Zählzeile) war geprüft."""
     started = bool(entries)
     if started:
-        safe_print_progress("Bedeutungen werden aufgelöst …")
+        safe_print_progress(_RESOLVE_ANNOUNCEMENT)
 
     def _on_progress(examined: int, total: int, kept: int, limit_: int) -> None:
-        nonlocal started
-        started = True
-        # (Befund leicht 4, Durchsicht T16/T17): total ist die Obergrenze der Einträge
-        # (Vorfilter aus resolve_triage_entries, Schritt 1, hat schon abgezogen), nicht die
-        # Zahl der tatsächlich geprüften — der Lauf endet spätestens bei `limit` Treffern,
-        # meist weit vor total. „möglichen" macht das im Nenner sichtbar.
-        safe_print_progress(
-            f"Bedeutungen werden aufgelöst: {examined} von {total} möglichen geprüft, "
-            f"{kept} von {limit_} behalten."
-        )
+        # (Befund 7, Durchsicht e537273): Kein `nonlocal started; started = True` mehr —
+        # tot seit `started = bool(entries)` oben: `on_progress` läuft nur innerhalb der
+        # Schleife über `ordered` in `pipeline.resolve_triage_entries`, und die ist leer,
+        # sobald `entries` es ist. `started` ist an dieser Stelle also immer schon `True`.
+        safe_print_progress(_resolve_progress_text(examined, total, kept, limit_))
 
     try:
         resolution = pipeline.resolve_triage_entries(
@@ -755,6 +773,15 @@ def main(
     deterministische, plattformunabhängige Form), geben ihn stattdessen selbst vor.
     """
     args = _parse_args(argv)
+    # (Befund 1, Durchsicht e537273): `detect_style()` steht bewusst außerhalb des
+    # folgenden `try` — geprüft und entschieden, nicht übersehen. Ihr einziger dort
+    # bekannter Fehlschlag (ein Ziel, das `isatty()` bejaht, aber kein `fileno()` hat) ist
+    # an der Quelle behoben (`display._enable_windows_console_color` fängt jetzt auch
+    # `AttributeError`) und liefert seither immer einen `Style`, nie eine Ausnahme. Eine
+    # andere, hier nicht vorgesehene Ausnahme wäre ohnehin kein Kernfehlschlag mit
+    # deutscher Meldung (die beiden `except`-Zweige unten fangen nur `EOFError` und
+    # `ValueError`/`FileNotFoundError`) und liefe innerhalb wie außerhalb des `try`
+    # gleichermaßen unabgefangen durch — die Verschiebung änderte also nichts.
     resolved_style = style if style is not None else display.detect_style()
     try:
         return _run(args, read_line=read_line, write_line=write_line, style=resolved_style)
