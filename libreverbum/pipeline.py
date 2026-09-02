@@ -113,6 +113,7 @@ Wörterbucheintrag auch hier.
 
 from __future__ import annotations
 
+import enum
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -210,6 +211,38 @@ def _drop_prefix_dominated_expressions(
     return [pair for index, pair in enumerate(pairs) if index not in dominated]
 
 
+class ChapterStage(enum.Enum):
+    """Die Phasen eines `run_chapter`-Durchlaufs, in Ablaufreihenfolge — Ablaufzustand
+    **dieser einen Funktion**, kein Gegenstand der Fachlichkeit, deshalb hier und nicht in
+    `entities` (Auftragstext vom 02.09.2026, Bauschritt 1/2 der Konsolenausgabe).
+
+    `READING_BOOK`: das Buch wird gelesen, Kapitel für Kapitel, für die buchweite
+    Eigennamenstatistik (siehe `ANALYZING_BOOK` und den Moduldocstring, Absatz „`run_chapter`
+    bleibt der netzlose Teil"). `ANALYZING_BOOK`: dieselben Kapitel laufen durch spaCy,
+    weitergereicht aus `extraction.book_proper_noun_ratios`. `EXTRACTING_VOCABULARY`: der
+    Wortschatz des gewählten Kapitels selbst wird ermittelt. `LOOKING_UP_DICTIONARY`: die
+    Auswahllisten werden im Wörterbuch nachgeschlagen. Die deutsche Anzeige je Phase ist
+    Sache von `cli.main`, nicht dieses Moduls (technik.md §7)."""
+
+    READING_BOOK = enum.auto()
+    ANALYZING_BOOK = enum.auto()
+    EXTRACTING_VOCABULARY = enum.auto()
+    LOOKING_UP_DICTIONARY = enum.auto()
+
+
+@dataclass(frozen=True)
+class ChapterProgress:
+    """Ein Fortschrittsschritt aus `run_chapter`, an `on_progress` gemeldet: welche Phase
+    (`stage`) und wie weit sie ist. Bei `ChapterStage.READING_BOOK` und `ANALYZING_BOOK`
+    zählen `done`/`total` Kapitel des Buchs; bei `EXTRACTING_VOCABULARY` und
+    `LOOKING_UP_DICTIONARY` sagt kein Zähler etwas aus — beide laufen als ein einzelner
+    Aufruf ohne Zwischenstand —, dort stehen `done` und `total` fest auf 0."""
+
+    stage: ChapterStage
+    done: int
+    total: int
+
+
 def run_chapter(
     *,
     epub_path: Path,
@@ -217,6 +250,7 @@ def run_chapter(
     dictionary_path: Path,
     profile_path: Path,
     nlp: Language,
+    on_progress: Callable[[ChapterProgress], None] | None = None,
 ) -> ChapterVocabulary:
     """Ein Durchlauf für ein Kapitel (bauplan.md T15): Wörterbuchdatei vorab prüfen (Befund
     3, Review T15), EPUB-Struktur lesen, das Kapitel mit `chapter_number` auswählen und
@@ -234,7 +268,14 @@ def run_chapter(
     eine Wörterbuchdatei, die zwar existiert, aber nicht im erwarteten Schema steht)
     stammen aus den verketteten Schrittmodulen selbst und werden hier nicht abgefangen,
     sondern reichen durch (Regel 13: kein `except`, das nur protokolliert und
-    weiterläuft)."""
+    weiterläuft).
+
+    `on_progress`, falls übergeben, wird mit einer `ChapterProgress` je Phase aufgerufen —
+    Vorgabe `None` heißt keine Meldung, unverändertes Verhalten. Genau der stumme
+    Abschnitt zwischen Modell-Laden und Triage (`READING_BOOK`/`ANALYZING_BOOK`, rund 22
+    bis 29 s je Buch, siehe oben) war der stille Fehlschlag, gegen den Regel 13 (technik.md
+    §13) hier meldet. Der Kern gibt selbst keinen deutschen Text aus (technik.md §7) —
+    `cli.main` bedient den Rückruf über `cli.display.safe_print_progress`."""
     if not dictionary_path.is_file():
         raise FileNotFoundError(f"Wörterbuch nicht lesbar: {dictionary_path}")
 
@@ -259,28 +300,46 @@ def run_chapter(
     # rund 22 respektive 29 s für die beiden tools/-EPUBs) — der Preis dafür, dass ein
     # Tagger-Fehler in drei Vorkommen eines einzelnen Kapitels („Sibyl dead!", „Sibyl!")
     # den je Kapitel berechneten Anteil nicht mehr verfälschen kann.
-    all_chapters = [chapter]
-    for other_reference in structure.chapters:
+    total_chapters = len(structure.chapters)
+    all_chapters: list[Chapter] = []
+    for done, other_reference in enumerate(structure.chapters, start=1):
         if other_reference.number == chapter_number:
-            continue
-        try:
-            all_chapters.append(epub.read_chapter(epub_path, structure.book, other_reference))
-        except ValueError as error:
-            # Vorspann-/Impressum- und reine Bildband-Kapitel (epub.read_chapter, „Bricht
-            # mit einer deutschen Meldung ab") tragen keinen Wortschatz bei und dürfen bei
-            # der buchweiten Zählung fehlen — jeder andere ValueError (kaputtes Archiv,
-            # falsche Kodierung, fehlendes Dokument im Archiv) bleibt dagegen sichtbar
-            # (Regel 13) statt die Statistik lautlos zu verfälschen.
-            message = str(error)
-            if "besteht nur aus Vorspann bzw. Impressum" not in message and (
-                "Bildband ohne Text" not in message
-            ):
-                raise
-    book_proper_noun_ratios = extraction.book_proper_noun_ratios(all_chapters, nlp)
+            all_chapters.append(chapter)
+        else:
+            try:
+                all_chapters.append(epub.read_chapter(epub_path, structure.book, other_reference))
+            except ValueError as error:
+                # Vorspann-/Impressum- und reine Bildband-Kapitel (epub.read_chapter, „Bricht
+                # mit einer deutschen Meldung ab") tragen keinen Wortschatz bei und dürfen bei
+                # der buchweiten Zählung fehlen — jeder andere ValueError (kaputtes Archiv,
+                # falsche Kodierung, fehlendes Dokument im Archiv) bleibt dagegen sichtbar
+                # (Regel 13) statt die Statistik lautlos zu verfälschen.
+                message = str(error)
+                if "besteht nur aus Vorspann bzw. Impressum" not in message and (
+                    "Bildband ohne Text" not in message
+                ):
+                    raise
+        if on_progress is not None:
+            on_progress(
+                ChapterProgress(stage=ChapterStage.READING_BOOK, done=done, total=total_chapters)
+            )
 
+    def _report_analysis_progress(done: int, total: int) -> None:
+        if on_progress is not None:
+            on_progress(ChapterProgress(stage=ChapterStage.ANALYZING_BOOK, done=done, total=total))
+
+    book_proper_noun_ratios = extraction.book_proper_noun_ratios(
+        all_chapters, nlp, on_progress=_report_analysis_progress if on_progress else None
+    )
+
+    if on_progress is not None:
+        on_progress(ChapterProgress(stage=ChapterStage.EXTRACTING_VOCABULARY, done=0, total=0))
     occurrences = extraction.extract_vocabulary(
         chapter, nlp, book_proper_noun_ratios=book_proper_noun_ratios
     )
+
+    if on_progress is not None:
+        on_progress(ChapterProgress(stage=ChapterStage.LOOKING_UP_DICTIONARY, done=0, total=0))
     single_word_candidates = dictionary.candidate_lists(
         dictionary_path, [occurrence.lemma for occurrence in occurrences]
     )

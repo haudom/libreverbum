@@ -325,6 +325,64 @@ def test_run_chapter_keeps_the_saw_case_from_scoring_a_saw_meaning(
     assert not any(e.occurrence.lemma.text == "saw" for e in result.entries)
 
 
+def test_run_chapter_reports_progress_phases_in_order(
+    pipeline_epub: Path, mini_dictionary_db: Path, profile_path: Path, nlp: Language
+) -> None:
+    """Auftragstext vom 02.09.2026, Bauschritt 1/2 der Konsolenausgabe: `run_chapter`
+    meldet die vier Phasen aus `pipeline.ChapterStage` in Ablaufreihenfolge — je Kapitel
+    des Buchs (`pipeline_epub` hat zwei) einmal `READING_BOOK`, danach einmal
+    `ANALYZING_BOOK`, zuletzt je einmal `EXTRACTING_VOCABULARY` und
+    `LOOKING_UP_DICTIONARY` mit `done == total == 0`. Der Zähler der Analysephase nennt
+    dabei die Kapitelzahl des **Buchs** (2), nicht die des gewählten Kapitels.
+
+    Verfälschungsprobe: den `on_progress`-Aufruf vor `dictionary.candidate_lists` entfernt
+    ließ die Gleichheitsprüfung der vollständigen Phasenfolge rot werden — die letzte
+    gemeldete Phase blieb `EXTRACTING_VOCABULARY`, `LOOKING_UP_DICTIONARY` fehlte ganz."""
+    reports: list[pipeline.ChapterProgress] = []
+    pipeline.run_chapter(
+        epub_path=pipeline_epub,
+        chapter_number=1,
+        dictionary_path=mini_dictionary_db,
+        profile_path=profile_path,
+        nlp=nlp,
+        on_progress=reports.append,
+    )
+    stages = [report.stage for report in reports]
+    assert stages == (
+        [pipeline.ChapterStage.READING_BOOK] * 2
+        + [pipeline.ChapterStage.ANALYZING_BOOK] * 2
+        + [pipeline.ChapterStage.EXTRACTING_VOCABULARY, pipeline.ChapterStage.LOOKING_UP_DICTIONARY]
+    )
+    analyzing_reports = [r for r in reports if r.stage is pipeline.ChapterStage.ANALYZING_BOOK]
+    assert all(r.total == 2 for r in analyzing_reports)
+    assert [r.done for r in analyzing_reports] == [1, 2]
+    reading_reports = [r for r in reports if r.stage is pipeline.ChapterStage.READING_BOOK]
+    assert all(r.total == 2 for r in reading_reports)
+    assert [r.done for r in reading_reports] == [1, 2]
+    assert reports[-2] == pipeline.ChapterProgress(
+        stage=pipeline.ChapterStage.EXTRACTING_VOCABULARY, done=0, total=0
+    )
+    assert reports[-1] == pipeline.ChapterProgress(
+        stage=pipeline.ChapterStage.LOOKING_UP_DICTIONARY, done=0, total=0
+    )
+
+
+def test_run_chapter_without_on_progress_behaves_as_before(
+    pipeline_epub: Path, mini_dictionary_db: Path, profile_path: Path, nlp: Language
+) -> None:
+    """Auftragstext vom 02.09.2026: Ein Aufruf ohne `on_progress` verhält sich
+    unverändert — Vorgabe `None` heißt kein Rückruf, kein Fehler."""
+    result = pipeline.run_chapter(
+        epub_path=pipeline_epub,
+        chapter_number=1,
+        dictionary_path=mini_dictionary_db,
+        profile_path=profile_path,
+        nlp=nlp,
+    )
+    assert result.chapter.number == 1
+    assert _entry(result, "bank").candidates
+
+
 def test_run_chapter_marks_every_candidate_unknown_against_a_fresh_profile(
     pipeline_epub: Path, mini_dictionary_db: Path, profile_path: Path, nlp: Language
 ) -> None:

@@ -1037,11 +1037,98 @@ def test_full_run_reports_progress_through_cli_display(
 
     assert exit_code == 0, "\n".join(console.log)
     assert progress_calls, "Fortschritts-Rückruf wurde nie über cli.display bedient."
-    assert all(text.startswith("Bedeutungen werden aufgelöst: ") for text in progress_calls)
+    # Seit Bauschritt 1/2 der Konsolenausgabe (02.09.2026) meldet auch
+    # `_run_chapter_with_progress` über dieselbe Funktion — die beiden zählenden Phasen aus
+    # `pipeline.run_chapter` stehen deshalb neben den resolve_triage_entries-Zeilen, statt
+    # sie allein zu füllen.
+    resolve_calls = [
+        text for text in progress_calls if text.startswith("Bedeutungen werden aufgelöst: ")
+    ]
+    chapter_calls = [
+        text
+        for text in progress_calls
+        if text.startswith(("Buch wird gelesen:", "Wortschatz des Buchs wird analysiert:"))
+    ]
+    assert resolve_calls, "Fortschritts-Rückruf aus resolve_triage_entries wurde nie bedient."
+    assert chapter_calls, "Fortschritts-Rückruf aus run_chapter wurde nie bedient."
+    assert len(resolve_calls) + len(chapter_calls) == len(progress_calls)
     # Befund leicht 4 (Durchsicht T16/T17): der Nenner ist eine Obergrenze, nicht die Zahl
     # der tatsächlich zu prüfenden Einträge — "möglichen" macht das im Text sichtbar.
-    assert all("möglichen geprüft" in text for text in progress_calls)
+    assert all("möglichen geprüft" in text for text in resolve_calls)
     assert finish_calls, "finish_progress_line wurde nie aufgerufen."
+
+
+def test_full_run_prints_at_least_one_line_naming_the_running_analysis_before_triage(
+    tmp_path: Path,
+    book_epub: Path,
+    mini_dictionary_db: Path,
+    model_server_double: ModelServerDouble,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Die ursprüngliche Beschwerde (Auftragstext vom 02.09.2026): Auf dem Bildschirm stand
+    „Lade Sprachmodell …", während `pipeline.run_chapter` tatsächlich 22 bis 29 s lang
+    stumm das ganze Buch analysierte (`extraction.book_proper_noun_ratios`, technik.md
+    §5/§13) — der stille Fehlschlag aus Regel 13. Hier über den vollen Einstiegspunkt
+    geprüft: Zwischen der Zeile „Sprachmodell geladen." und dem Beginn der Wörter-Triage
+    („== Wörter ==") steht mindestens eine Zeile, die die laufende Analyse benennt.
+
+    `safe_print_progress` wird — anders als in
+    `test_full_run_reports_progress_through_cli_display` — auf dieselbe Konsole umgeleitet
+    wie `write_line`, damit die sich fortschreibenden Phasenzeilen in der tatsächlichen
+    Aufrufreihenfolge im Log erscheinen; `learn_words` bleibt leer, weil die
+    Triage-Antworten hier nicht geprüft werden.
+
+    Verfälschungsprobe: `on_progress=None` fest an den `pipeline.run_chapter`-Aufruf in
+    `_run_chapter_with_progress` übergeben (statt `_on_progress`) ließ diesen Test zunächst
+    nicht rot werden — die neue Abschlusszeile „Kapitel N: … Wörter, … Wendungen." steht
+    ebenfalls zwischen den beiden geprüften Zeilen und füllte `between`. Erst die
+    Stichwortprüfung unten, die gezielt nach einer Phasenzeile sucht, wurde bei derselben
+    Verfälschung rot — `analysis_lines` blieb dann leer."""
+    data_dir = tmp_path / "data"
+    _write_config(
+        data_dir,
+        model_url=model_server_double.url,
+        model_name=model_server_double.model_name,
+        dictionary_path=mini_dictionary_db,
+    )
+    model_server_double.choice = 1
+    console = _ScriptedConsole(learn_words=set())
+
+    monkeypatch.setattr("cli.main.safe_print_progress", lambda text, **_kwargs: console.write(text))
+    monkeypatch.setattr("cli.main.finish_progress_line", lambda **_kwargs: None)
+
+    exit_code = main(
+        [
+            str(book_epub),
+            "--chapter",
+            "1",
+            "--data-dir",
+            str(data_dir),
+            "--output-dir",
+            str(tmp_path / "export"),
+        ],
+        read_line=console.read,
+        write_line=console.write,
+    )
+
+    assert exit_code == 0, "\n".join(console.log)
+    loaded_index = console.log.index("Sprachmodell geladen.")
+    triage_index = console.log.index("== Wörter ==")
+    between = console.log[loaded_index + 1 : triage_index]
+    # Stichwörter der vier Phasen aus `_run_chapter_with_progress` — nicht bloß irgendeine
+    # Zeile: Die Abschlusszeile „Kapitel N: … Wörter, … Wendungen." steht ebenfalls in
+    # `between`, sagt aber nichts über die *laufende* Analyse (siehe Verfälschungsprobe).
+    analysis_lines = [
+        line
+        for line in between
+        if any(
+            keyword in line
+            for keyword in ("wird gelesen", "wird analysiert", "wird ermittelt", "nachgeschlagen")
+        )
+    ]
+    assert analysis_lines, (
+        "Zwischen Modell-Laden und Triage fehlt eine Zeile zur laufenden Analyse."
+    )
 
 
 def test_resolve_with_progress_closes_the_line_even_when_the_model_server_fails(

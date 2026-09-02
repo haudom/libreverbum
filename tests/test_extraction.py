@@ -217,6 +217,34 @@ def test_rule_12_book_wide_ratio_excludes_sibyl_in_chapter_10_but_keeps_an_addre
     assert lady.frequency == 6
 
 
+def test_book_proper_noun_ratios_reports_progress_once_per_chapter_with_a_fixed_total(
+    nlp: Language,
+) -> None:
+    """Auftragstext vom 02.09.2026, Bauschritt 1/2 der Konsolenausgabe: `on_progress` wird
+    nach jedem verarbeiteten Kapitel genau einmal mit (fertig, gesamt) aufgerufen — `done`
+    wächst dabei aufsteigend von 1 bis `total`, `total` bleibt über den ganzen Lauf fest bei
+    der Kapitelzahl des Buchs.
+
+    Verfälschungsprobe: `on_progress` in die Token-Schleife statt in die Kapitel-Schleife
+    verlegt (also je Token statt je Kapitel aufgerufen) ließ `len(reports) ==
+    len(chapters)` rot werden — `reports` hatte danach die Zahl der Token, nicht die der
+    Kapitel (mehrere hundert statt drei)."""
+    chapters = [
+        make_chapter("A quiet street at dusk.", number=1),
+        make_chapter("Another calm street nearby.", number=2),
+        make_chapter("A third street scene unfolds.", number=3),
+    ]
+    reports: list[tuple[int, int]] = []
+
+    book_proper_noun_ratios(
+        chapters, nlp, on_progress=lambda done, total: reports.append((done, total))
+    )
+
+    assert len(reports) == len(chapters)
+    assert [done for done, _ in reports] == list(range(1, len(chapters) + 1))
+    assert all(total == len(chapters) for _, total in reports)
+
+
 def test_mittel_1_frequency_excludes_proper_noun_occurrences_and_reorders_the_ranking(
     nlp: Language,
 ) -> None:

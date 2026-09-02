@@ -25,6 +25,7 @@ am saubersten auf:
 | 10 | Lizenz des eigenen Codes | **entschieden** (26.08.2026) |
 | 11 | Vorbelegung des Grundwortschatzes | **entschieden** (31.08.2026) |
 | 12 | Blockweise Triage mit Vorladen | **entschieden** (01.09.2026) |
+| 13 | Konsolenausgabe während des Kapiteldurchlaufs | **entschieden** (02.09.2026) |
 
 Frage 5 stand anfangs nicht auf der Liste. Sie ist aus Frage 2 entstanden, deren Messung
 mit der Folgerung endete, nicht die Datenquelle sei der Engpass, sondern die
@@ -59,6 +60,12 @@ Frage 12 stammt wie Frage 11 aus der Abnahme und ist deren Fortsetzung: Die Vorb
 hat die erste Hälfte des T17-Befunds gelöst, nicht die zweite (Abschnitt 11, „Was die
 Vorbelegung nicht löst"). Was übrig blieb, ist ein Rangproblem — und das löst keine
 Datenquelle, sondern nur der Verzicht auf die harte Wortobergrenze. Siehe Abschnitt 12.
+
+Frage 13 stammt wie 11 und 12 nicht aus der Konzeption, sondern aus einer Nutzermeldung:
+Zwischen dem Laden des Sprachmodells und dem ersten sichtbaren Triage-Eintrag blieb die
+Bildschirmausgabe bis zum 02.09.2026 unverändert bei „Lade Sprachmodell …" stehen, während
+`run_chapter` 22 bis 29 s lang das ganze Buch analysierte (Abschnitt 5) — der stille
+Fehlschlag aus Regel 13. Siehe Abschnitt 13.
 
 Frage 2 stand bewusst weit oben, weil sie das Konzept hätte kippen können: Ein freies,
 offline nutzbares EN→DE-Wörterbuch mit sauberer Lizenz **und** Bedeutungsangaben ist
@@ -2856,6 +2863,53 @@ dort gerechnete Zahl hielt beim echten Druck nicht.
   Modellaufrufe. Aufgefallen bei der Durchsicht von 1cfb1e4. Das ist eine inhaltliche Frage
   („exportiert ein abgebrochener Lauf, was er hat?"), keine Bauentscheidung — sie gehört
   besprochen, bevor sie nebenbei beantwortet wird
+
+---
+
+## 13. Konsolenausgabe — entschieden
+
+> Bauschritt 1 entschieden am 02.09.2026 (Auftragstext vom 02.09.2026, Nutzermeldung).
+
+### Ladephase: Rückruf statt Ausgabe im Kern
+
+`cli/main.py:517` schrieb bis dahin „Lade Sprachmodell …" unmittelbar vor
+`extraction.load_nlp()` — rund eine Sekunde, danach lief `pipeline.run_chapter` 22 bis 29 s
+lang stumm weiter, weil der Eigennamenfilter das ganze Buch durch spaCy schickt (Abschnitt
+5, „Kosten: Der buchweite Wert braucht einen vollen spaCy-Lauf über jedes Kapitel"). Auf dem
+Bildschirm stand die ganze Zeit eine Meldung, die längst nicht mehr zutraf — der stumme
+Abschnitt war der stille Fehlschlag aus Regel 13, nur als Laufzeit statt als falschem
+Ergebnis (derselbe Mechanismus wie beim fehlenden Wörterbuchindex, Abschnitt 2, Nachtrag
+27.08.2026). Deshalb wird überhaupt gemeldet.
+
+Der Kern gibt trotzdem nichts selbst aus: Die Architekturregel aus Abschnitt 1 verbietet
+einen deutschen Text in `libreverbum/`, und `resolve_triage_entries` macht mit seinem
+`on_progress`-Rückruf (Abschnitt 12, „Vorladen: der nächste Block entsteht") bereits vor,
+wie das geht. `run_chapter` bekommt denselben Mechanismus — ein Rückruf mit dem
+Ablaufzustand der Funktion (`pipeline.ChapterStage`, `ChapterProgress`), nicht mit einem
+fertigen Satz —, `cli.main` bedient ihn und entscheidet allein, welcher deutsche Text zu
+welcher Phase gehört. Das hält die Importregel unangetastet: Ein Ablaufzustand, der nur
+diese eine Funktion betrifft, ist keine Fachlichkeit und gehört deshalb nach `pipeline.py`,
+nicht nach `entities.py`.
+
+Gemeldet wird mit Zähler, wo einer etwas aussagt — Buch lesen und Buch analysieren laufen
+je Kapitel des Buchs, „18 von 24 Kapiteln" sagt dem Nutzer, dass tatsächlich Fortschritt
+entsteht, statt nur, dass irgendetwas läuft. Eine Zeile, die minutenlang unverändert
+„wird analysiert …" zeigt, ist vom stillen Fehlschlag, den sie beheben soll, kaum zu
+unterscheiden. Die beiden übrigen Phasen (Kapitelwortschatz ermitteln, im Wörterbuch
+nachschlagen) laufen dagegen als ein einzelner Aufruf ohne Zwischenstand — ein erfundener
+Zähler behauptete dort einen Fortschritt, den es nicht gibt; `ChapterProgress` führt für sie
+`done == total == 0`, und `cli.main` zeigt für sie eine einmalige statt einer sich
+fortschreibenden Zeile.
+
+### Offene Punkte
+
+- **Ob die Zählung nach Kapiteln bei einem sehr ungleich verteilten Buch noch etwas
+  aussagt** — ein einzelnes sehr langes Kapitel ließe die Zeile lange auf einem Stand
+  stehen, obwohl spaCy tatsächlich arbeitet. Kein gemessener Anlass für eine feinere
+  Zählung (Regel 14)
+- **Bei einem Buch mit nur einem Kapitel** zeigen `READING_BOOK` und `ANALYZING_BOOK` je
+  genau eine Zeile mit „1 von 1" — ob das noch als Fortschritt wahrgenommen wird oder nur
+  als Ruckeln, ist nicht an einem echten Nutzer geprüft
 
 ---
 

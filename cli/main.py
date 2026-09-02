@@ -47,6 +47,8 @@ if TYPE_CHECKING:
     import sqlite3
     from collections.abc import Callable
 
+    from spacy.language import Language
+
 
 def _build_parser() -> argparse.ArgumentParser:
     # (Befund mittel 3, Durchsicht T16): argparse.print_help()/format_help() schreiben
@@ -322,6 +324,76 @@ def _choose_chapter(
         write_line("Diese Kapitelnummer gibt es nicht.")
 
 
+_CHAPTER_STAGE_MESSAGES: dict[pipeline.ChapterStage, str] = {
+    pipeline.ChapterStage.EXTRACTING_VOCABULARY: "Wortschatz des Kapitels wird ermittelt …",
+    pipeline.ChapterStage.LOOKING_UP_DICTIONARY: (
+        "Bedeutungen werden im Wörterbuch nachgeschlagen …"
+    ),
+}
+
+
+def _run_chapter_with_progress(
+    *,
+    epub_path: Path,
+    chapter_number: int,
+    dictionary_path: Path,
+    profile_path: Path,
+    nlp: Language,
+    write_line: WriteLine,
+) -> pipeline.ChapterVocabulary:
+    """Ruft `pipeline.run_chapter` mit einer Fortschrittsanzeige auf (Auftragstext vom
+    02.09.2026, Bauschritt 1/2 der Konsolenausgabe): Ohne sie stand auf dem Bildschirm die
+    ganze Zeit noch „Lade Sprachmodell …", während `run_chapter` tatsächlich 22 bis 29 s
+    stumm das ganze Buch durch spaCy schickte (`extraction.book_proper_noun_ratios`,
+    technik.md §5) — der stille Fehlschlag, den Regel 13 (dokumentation.md §4) verbietet.
+    Der Kern gibt selbst keinen deutschen Text aus (technik.md §7); die Zuordnung
+    Phase → Satz macht allein diese Funktion.
+
+    Die beiden zählenden Phasen (`READING_BOOK`, `ANALYZING_BOOK`) schreiben sich über
+    `cli.display.safe_print_progress` per Wagenrücklauf fort, wie `_resolve_with_progress`
+    es für die Bedeutungsauflösung schon tut. Vor jedem Phasenwechsel steht
+    `finish_progress_line()`, sonst blieben Reste der vorigen, längeren Zeile stehen — der
+    Wechsel wird an `progress.stage` erkannt, nicht an `done`, weil ein Buch mit nur einem
+    Kapitel sonst keinen verlässlichen Umschlagpunkt hätte. Die beiden Phasen ohne Zähler
+    (`EXTRACTING_VOCABULARY`, `LOOKING_UP_DICTIONARY`, `done == total == 0`) bekommen je
+    eine einmalige Zeile aus `_CHAPTER_STAGE_MESSAGES`, keine sich fortschreibende."""
+    progress_open = False
+    last_stage: pipeline.ChapterStage | None = None
+
+    def _on_progress(progress: pipeline.ChapterProgress) -> None:
+        nonlocal progress_open, last_stage
+        if progress.stage != last_stage and progress_open:
+            finish_progress_line()
+            progress_open = False
+        last_stage = progress.stage
+        if progress.stage is pipeline.ChapterStage.READING_BOOK:
+            safe_print_progress(
+                f"Buch wird gelesen: {progress.done} von {progress.total} Kapiteln."
+            )
+            progress_open = True
+        elif progress.stage is pipeline.ChapterStage.ANALYZING_BOOK:
+            safe_print_progress(
+                f"Wortschatz des Buchs wird analysiert: {progress.done} von "
+                f"{progress.total} Kapiteln …"
+            )
+            progress_open = True
+        else:
+            write_line(_CHAPTER_STAGE_MESSAGES[progress.stage])
+
+    try:
+        return pipeline.run_chapter(
+            epub_path=epub_path,
+            chapter_number=chapter_number,
+            dictionary_path=dictionary_path,
+            profile_path=profile_path,
+            nlp=nlp,
+            on_progress=_on_progress,
+        )
+    finally:
+        if progress_open:
+            finish_progress_line()
+
+
 def _resolve_with_progress(
     *,
     con: sqlite3.Connection,
@@ -514,15 +586,21 @@ def _run(args: argparse.Namespace, *, read_line: ReadLine, write_line: WriteLine
         else _choose_chapter(args.epub_path, structure, read_line, write_line)
     )
 
-    write_line("Lade Sprachmodell …")
+    write_line("Sprachmodell wird geladen …")
     nlp = extraction.load_nlp()
+    write_line("Sprachmodell geladen.")
 
-    result = pipeline.run_chapter(
+    result = _run_chapter_with_progress(
         epub_path=args.epub_path,
         chapter_number=chapter_number,
         dictionary_path=cfg.dictionary_path,
         profile_path=cfg.profile_path,
         nlp=nlp,
+        write_line=write_line,
+    )
+    write_line(
+        f"Kapitel {result.chapter.number}: {_format_count(len(result.entries))} Wörter, "
+        f"{_format_count(len(result.expressions))} Wendungen."
     )
     if result.notice:
         write_line(result.notice)

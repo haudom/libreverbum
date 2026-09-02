@@ -76,7 +76,7 @@ from typing import TYPE_CHECKING, NamedTuple
 from libreverbum.entities import Chapter, Lemma, Occurrence
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping, Sequence
+    from collections.abc import Callable, Iterator, Mapping, Sequence
 
     from spacy.language import Language
     from spacy.tokens import Span, Token
@@ -175,7 +175,12 @@ def _collapse_whitespace(text: str) -> str:
     return _WHITESPACE.sub(" ", text).strip()
 
 
-def book_proper_noun_ratios(chapters: Sequence[Chapter], nlp: Language) -> dict[str, float]:
+def book_proper_noun_ratios(
+    chapters: Sequence[Chapter],
+    nlp: Language,
+    *,
+    on_progress: Callable[[int, int], None] | None = None,
+) -> dict[str, float]:
     """Anteil eigennamiger Belege am Gesamtvorkommen je Grundform, gezählt über **alle**
     übergebenen Kapitel hinweg (T17-Nachbesserung, schwer 1, zweiter Anlauf, 26.08.2026 —
     siehe die REGEL bei `_PROPER_NOUN_RATIO_THRESHOLD`). `chapters` ist üblicherweise das
@@ -198,11 +203,19 @@ def book_proper_noun_ratios(chapters: Sequence[Chapter], nlp: Language) -> dict[
     `tools/sherlock.epub` (13 Kapitel mit Fließtext): rund 22 s beziehungsweise 29 s. Das
     ist der Preis der buchweiten Betrachtung — mit ihm entfällt der stille Fehlschlag aus
     dem ersten Anlauf, ohne ihn ließe sich der `Sibyl`-Fall aus Kapitel 10 nicht auflösen
-    (siehe Bericht zur Abnahme)."""
+    (siehe Bericht zur Abnahme).
+
+    `on_progress`, falls übergeben, wird nach **jedem** verarbeiteten Kapitel mit (fertig,
+    gesamt) aufgerufen — Vorgabe `None` heißt keine Meldung, unverändertes Verhalten. Genau
+    dieser stumme Abschnitt war bislang der stille Fehlschlag aus Regel 13: Die
+    Kommandozeile zeigte noch „Lade Sprachmodell …", während hier tatsächlich 22 bis 29 s
+    ohne jede Rückmeldung vergingen (technik.md §13). Der Kern gibt selbst nichts aus
+    (technik.md §7) — die Textzuordnung bleibt Sache des Aufrufers."""
     _require_lemmatizer(nlp)
 
     counts: dict[str, list[int]] = collections.defaultdict(lambda: [0, 0])
-    for chapter in chapters:
+    total_chapters = len(chapters)
+    for done, chapter in enumerate(chapters, start=1):
         doc = nlp(chapter.text)
         for token in doc:
             if not token.is_alpha:
@@ -214,6 +227,8 @@ def book_proper_noun_ratios(chapters: Sequence[Chapter], nlp: Language) -> dict[
             entry[1] += 1
             if pos == _PROPER_NOUN_POS:
                 entry[0] += 1
+        if on_progress is not None:
+            on_progress(done, total_chapters)
 
     return {lemma: proper / total for lemma, (proper, total) in counts.items()}
 
