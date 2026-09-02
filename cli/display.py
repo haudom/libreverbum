@@ -267,12 +267,19 @@ def quote(text: str, style: Style) -> str:
     return f'"{text}"'
 
 
-def entry_rule(position: int, total: int, style: Style) -> str:
+def entry_rule(position: int, total: int, chosen: int, style: Style) -> str:
     """Trennlinie vor jedem Eintrag der Einzelabfrage, mit rechtsbündigem Zähler „N von M"
     (Auftragstext vom 02.09.2026, Format „kompakte Kopfzeile" — die ursprüngliche
     Beschwerde: „Man sieht klar, wo die vorherige Ausgabe aufhört, die nächste beginnt").
-    Gedimmt wie die übrigen Nebendaten."""
-    label = f"{position} von {total}"
+    Gedimmt wie die übrigen Nebendaten.
+
+    `chosen` ist, wie viele Einträge im laufenden Kapitel bereits „lernen" bekommen haben —
+    die Zahl **vor** der Entscheidung, die gerade ansteht (zweite Nutzermeldung vom
+    02.09.2026: „Was mir irgendwie noch fehlt ist eine Anzeige, wie viele Vokabeln man bis
+    jetzt zum Lernen ausgewählt hat"). Sie steht hier und nicht in einer eigenen Zeile,
+    weil das Auge beim Blättern ohnehin auf die Trennlinie fällt: keine zusätzliche Zeile
+    je Eintrag, und der Zähler wächst dort, wo auch der Positionszähler steht."""
+    label = f"{position} von {total}{dot(style)}{chosen} zum Lernen"
     char = "─" if style.supports_unicode else "-"
     fill_width = max(style.width - len(label) - 2, 10)
     return dim(f"{char * fill_width}  {label}", style)

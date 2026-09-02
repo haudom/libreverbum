@@ -180,10 +180,11 @@ EXPRESSION_BLOCK_SIZE = 11
 
 # (Befund B, Durchsicht 5fda1b9): `label` ist stets ein Plural ("Wörter"/"Wendungen",
 # `cli.main`) — bei genau einem Eintrag liest „1 Wörter noch nicht geprüft." grammatisch
-# falsch. Nur diese beiden Werte kommen als `label` vor; eine zweistellige
+# falsch. Nur diese Werte kommen als `label` vor — seit der Kapitelbilanz (`run_triage_pass`)
+# zusätzlich „Vokabeln", das Wörter und Wendungen zusammenfasst; eine dreistellige
 # Übersetzungstabelle für den Singularfall genügt dafür, keine allgemeine
 # Pluralmaschinerie (dokumentation.md §4 Regel 14).
-_SINGULAR_LABEL = {"Wörter": "Wort", "Wendungen": "Wendung"}
+_SINGULAR_LABEL = {"Wörter": "Wort", "Wendungen": "Wendung", "Vokabeln": "Vokabel"}
 
 
 def _count_label(count: int, label: str) -> str:
@@ -209,11 +210,19 @@ class TriagePass:
     `run_triage_blocks` braucht diese Zahl, weil `resolution.remaining` allein nur den
     Rest für den *nächsten* Block zählt: Bricht der Nutzer mitten im laufenden Block ab,
     bleiben dessen eigene, noch nicht gestellte Einträge sonst ungezählt (Befund 9) — im
-    Auftragsbeispiel „1310 Wörter noch nicht geprüft" statt tatsächlich 1334."""
+    Auftragsbeispiel „1310 Wörter noch nicht geprüft" statt tatsächlich 1334.
+
+    `known` und `deferred` zählen die Entscheidungen dieses Blocks für die Blockbilanz
+    (zweite Nutzermeldung vom 02.09.2026, siehe `run_triage_pass`): wie viele Einträge
+    „kenne ich" beziehungsweise „überspringen" bekommen haben. Die Sammelaktion zählt
+    **nicht** mit — sie meldet ihre eigene Zahl, und `run_triage_pass` zählt beide
+    zusammen. Wie viele „lernen" bekamen, steht bereits in `len(cards)`."""
 
     cards: list[Card]
     aborted: bool
     unasked: int = 0
+    known: int = 0
+    deferred: int = 0
 
 
 def ensure_chapter_row(
@@ -258,7 +267,7 @@ def _record(
 
 
 def _entry_lines(
-    entry: pipeline.ResolvedEntry, position: int, total: int, style: display.Style
+    entry: pipeline.ResolvedEntry, position: int, total: int, chosen: int, style: display.Style
 ) -> list[str]:
     """Anzeige eines Eintrags im Format „kompakte Kopfzeile" (Auftragstext vom 02.09.2026,
     Nutzermeldung: „Man muss immer das Wort … zwischen dem Zitat … und der Ausgabe aus dem
@@ -277,7 +286,7 @@ def _entry_lines(
     pos_display = anki.pos_display(occurrence.lemma.pos)
     translation_text = entry.sense.translation or entry.sense.wikdict_trans_list or "?"
 
-    lines = [display.entry_rule(position, total, style)]
+    lines = [display.entry_rule(position, total, chosen, style)]
     lines.append(
         f"  {display.bold(occurrence.word_form, style)}"
         f"{display.arrow(style)}{display.highlight(translation_text, style)}"
@@ -400,10 +409,11 @@ def _individual_phase(
     to_ask: list[Occurrence],
     entries_by_occurrence: dict[Occurrence, pipeline.ResolvedEntry],
     card_direction: CardDirection,
+    chosen_before: int,
     style: display.Style,
     read_line: ReadLine,
     write_line: WriteLine,
-) -> tuple[list[Card], bool, int]:
+) -> TriagePass:
     """Fragt `to_ask` einzeln ab, in der übergebenen (nach Häufigkeit sortierten)
     Reihenfolge. `q` bricht die restliche Liste ab (Abnahmekriterium 7: „man kann
     jederzeit abbrechen, ohne das Wichtigste zu verpassen") — bereits getroffene
@@ -416,9 +426,10 @@ def _individual_phase(
     buchen und verkarten alle dieselbe eine Bedeutung, statt „kenne ich"/„überspringen" auf
     einer geratenen ersten und nur „will ich lernen" auf der vom Modell gewählten.
 
-    Liefert die Karten, als zweites Element, ob mit `q` abgebrochen wurde (Bauschritt
+    Liefert einen `TriagePass`: die Karten, ob mit `q` abgebrochen wurde (Bauschritt
     2/4, blockweise Triage) — `run_triage_blocks` braucht das, um nach einem Abbruch die
-    Fortsetzungsfrage zu unterlassen — und, als drittes Element, wie viele Einträge von
+    Fortsetzungsfrage zu unterlassen —, die Zahl der „kenne ich"- und „überspringen"-
+    Entscheidungen für die Blockbilanz, und wie viele Einträge von
     `to_ask` dabei **nicht mehr entschieden** wurden (0, wenn nicht abgebrochen wurde;
     Befund 1/9, Durchsicht 1cfb1e4): der Eintrag, bei dem `q` fiel, zählt mit, weil auch er
     kein `Event` erhalten hat und beim nächsten Durchlauf erneut gestellt wird. `remaining`
@@ -434,10 +445,15 @@ def _individual_phase(
     was in der Einzelabfrage tatsächlich noch zu entscheiden ist, nicht auf den ganzen
     Block vor der Sammelaktion."""
     cards: list[Card] = []
+    known = 0
+    deferred = 0
     total = len(to_ask)
     for index, occurrence in enumerate(to_ask):
         entry = entries_by_occurrence[occurrence]
-        for line in _entry_lines(entry, index + 1, total, style):
+        # `chosen_before + len(cards)` ist der Stand **vor** der Entscheidung, die gleich
+        # ansteht — die Zahl wächst also erst mit der nächsten Trennlinie (zweite
+        # Nutzermeldung vom 02.09.2026, siehe `display.entry_rule`).
+        for line in _entry_lines(entry, index + 1, total, chosen_before + len(cards), style):
             write_line(line)
         while True:
             action = _ask_action(read_line, write_line)
@@ -462,8 +478,15 @@ def _individual_phase(
             # (Befund 9, Durchsicht 1cfb1e4): `to_ask[index]` (der gerade angezeigte
             # Eintrag) zählt zu den nicht entschiedenen mit — er hat kein `Event`
             # bekommen, genau wie jeder folgende.
-            return cards, True, len(to_ask) - index
+            return TriagePass(
+                cards=cards,
+                aborted=True,
+                unasked=len(to_ask) - index,
+                known=known,
+                deferred=deferred,
+            )
         if action == "known":
+            known += 1
             _record(con, entry.sense, KnowledgeState.KNOWN, Origin.TRIAGE, book, chapter_number)
         elif action == "learn":
             guid = anki.new_card_guid(occurrence, entry.sense, card_direction)
@@ -477,8 +500,9 @@ def _individual_phase(
             )
             _record(con, entry.sense, KnowledgeState.LEARNING, Origin.TRIAGE, book, chapter_number)
         else:  # "skip"
+            deferred += 1
             _record(con, entry.sense, KnowledgeState.DEFERRED, Origin.TRIAGE, book, chapter_number)
-    return cards, False, 0
+    return TriagePass(cards=cards, aborted=False, known=known, deferred=deferred)
 
 
 def run_triage_pass(
@@ -492,6 +516,7 @@ def run_triage_pass(
     read_line: ReadLine,
     write_line: WriteLine,
     block_number: int = 1,
+    chosen_before: int = 0,
     style: display.Style = display.PLAIN_STYLE,
 ) -> TriagePass:
     """Ein vollständiger Triage-Deckel für **einen Block**: Meldungen, Sammelaktion,
@@ -566,18 +591,47 @@ def run_triage_pass(
         write_line=write_line,
     )
     to_ask = [occurrence for occurrence in ordered if occurrence not in bulk_marked]
-    cards, aborted, unasked = _individual_phase(
+    triage_pass = _individual_phase(
         con=con,
         book=book,
         chapter_number=chapter_number,
         to_ask=to_ask,
         entries_by_occurrence=entries_by_occurrence,
         card_direction=card_direction,
+        chosen_before=chosen_before,
         style=style,
         read_line=read_line,
         write_line=write_line,
     )
-    return TriagePass(cards=cards, aborted=aborted, unasked=unasked)
+    _write_block_summary(triage_pass, len(bulk_marked), chosen_before, write_line)
+    return triage_pass
+
+
+def _write_block_summary(
+    triage_pass: TriagePass, bulk_marked: int, chosen_before: int, write_line: WriteLine
+) -> None:
+    """Bilanz am Blockende (zweite Nutzermeldung vom 02.09.2026): was dieser Block
+    gebracht hat, und — sobald schon ein Block oder der Wörter-Deckel davorliegt — der
+    Kapitelstand.
+
+    Die als bekannt gebuchten zählen die Sammelaktion mit: Für den Nutzer ist „als bekannt
+    gebucht" eine Zahl, nicht zwei Wege dorthin (`bulk_mark` und die Einzelabfrage buchen
+    beide `KnowledgeState.KNOWN`, nur mit anderer `Origin`).
+
+    Die Kapitelzeile erscheint nur, wenn `chosen_before` etwas beiträgt — beim allerersten
+    Block stünde sonst zweimal dieselbe Zahl untereinander."""
+    chosen_now = len(triage_pass.cards)
+    write_line("")
+    write_line(
+        f"  Block beendet: {chosen_now} zum Lernen, "
+        f"{triage_pass.known + bulk_marked} als bekannt gebucht, "
+        f"{triage_pass.deferred} übersprungen."
+    )
+    if chosen_before:
+        write_line(
+            f"  Insgesamt {_count_label(chosen_before + chosen_now, 'Vokabeln')} "
+            "zum Lernen in diesem Kapitel."
+        )
 
 
 def _ask_continue(read_line: ReadLine, write_line: WriteLine, remaining_count: int) -> bool:
@@ -715,6 +769,7 @@ def run_triage_blocks(
     card_direction: CardDirection,
     read_line: ReadLine,
     write_line: WriteLine,
+    chosen_before: int = 0,
     style: display.Style = display.PLAIN_STYLE,
 ) -> list[Card]:
     """Die Blockschleife (technik.md §12, „Blockweise Triage mit Vorladen — entschieden"):
@@ -800,6 +855,7 @@ def run_triage_blocks(
             read_line=read_line,
             write_line=write_line,
             block_number=block_number,
+            chosen_before=chosen_before + len(cards),
             style=style,
         )
         cards.extend(triage_pass.cards)

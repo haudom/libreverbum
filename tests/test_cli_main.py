@@ -1124,9 +1124,17 @@ def test_full_run_reports_progress_through_cli_display(
         for text in progress_calls
         if text.startswith(("Buch wird gelesen:", "Wortschatz des Buchs wird analysiert:"))
     ]
+    # Seit der zweiten Nutzermeldung (02.09.2026) kündigt `_resolve_with_progress` je
+    # Deckel **vor** dem ersten Modellaufruf an, dass aufgelöst wird — die Sekunden, in
+    # denen der Modellserver das Modell in den Grafikspeicher lädt, sind sonst stumm.
+    announce_calls = [text for text in progress_calls if text == "Bedeutungen werden aufgelöst …"]
     assert resolve_calls, "Fortschritts-Rückruf aus resolve_triage_entries wurde nie bedient."
     assert chapter_calls, "Fortschritts-Rückruf aus run_chapter wurde nie bedient."
-    assert len(resolve_calls) + len(chapter_calls) == len(progress_calls)
+    assert announce_calls, "Der Deckel meldet den ersten Modellaufruf nicht an."
+    assert len(resolve_calls) + len(chapter_calls) + len(announce_calls) == len(progress_calls)
+    assert progress_calls.index(announce_calls[0]) < progress_calls.index(resolve_calls[0]), (
+        "Die Ankündigung steht hinter der ersten Zählzeile — dann deckt sie die Ladezeit nicht."
+    )
     # Befund leicht 4 (Durchsicht T16/T17): der Nenner ist eine Obergrenze, nicht die Zahl
     # der tatsächlich zu prüfenden Einträge — "möglichen" macht das im Text sichtbar.
     assert all("möglichen geprüft" in text for text in resolve_calls)

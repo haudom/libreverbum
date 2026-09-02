@@ -635,6 +635,115 @@ def test_two_consecutive_entries_are_separated_by_a_divider(
     )
 
 
+def _rules(written: list[str]) -> list[str]:
+    """Die Trennlinien aus `display.entry_rule` unter den geschriebenen Zeilen — sie tragen
+    beide Zähler (`display.PLAIN_STYLE`, also `-` und `|`)."""
+    return [line for line in written if line.strip().startswith("-") and " von " in line]
+
+
+def test_the_learning_counter_grows_with_every_entry_chosen_for_learning(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """Zweite Nutzermeldung vom 02.09.2026: „Was mir irgendwie noch fehlt ist eine Anzeige,
+    wie viele Vokabeln man bis jetzt zum Lernen ausgewählt hat." Die Zahl steht in der
+    Trennlinie jedes Eintrags und ist der Stand **vor** der anstehenden Entscheidung: Der
+    erste Eintrag zeigt 0, und nachdem er „lernen" bekommen hat, zeigt der zweite 1.
+
+    Verfälschungsprobe: `chosen_before + len(cards)` in `_individual_phase` durch
+    `chosen_before` ersetzt (der Zähler bleibt also stehen) — die zweite Zusicherung wurde
+    rot, die erste blieb grün."""
+    resolution = pipeline.TriageResolution(
+        entries=_entries(2), known=0, resolved_known=0, skipped=0, remaining=[]
+    )
+    written: list[str] = []
+    answers = iter(["", "l", "s"])
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(answers),
+        write_line=written.append,
+        style=display.PLAIN_STYLE,
+    )
+
+    rules = _rules(written)
+    assert rules[0].endswith("1 von 2 | 0 zum Lernen")
+    assert rules[1].endswith("2 von 2 | 1 zum Lernen")
+
+
+def test_the_learning_counter_continues_where_the_previous_deck_stopped(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """Zweite Nutzermeldung vom 02.09.2026, Festlegung des Nutzers: Wörter und Wendungen
+    zählen **fortlaufend**, nicht je Deckel neu — die Zahl in der Trennlinie ist damit das,
+    was am Ende tatsächlich ins Anki-Deck geht. `chosen_before` trägt den Stand des vorigen
+    Deckels (in `cli.main` `len(word_cards)`) herein, und die Kapitelbilanz am Blockende
+    nennt die Summe.
+
+    Verfälschungsprobe: `chosen_before` in `run_triage_pass` nicht an `_individual_phase`
+    weitergereicht (fest 0) — beide Zusicherungen unten wurden rot."""
+    resolution = pipeline.TriageResolution(
+        entries=_entries(1), known=0, resolved_known=0, skipped=0, remaining=[]
+    )
+    written: list[str] = []
+    answers = iter(["", "l"])
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wendungen",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(answers),
+        write_line=written.append,
+        chosen_before=6,
+        style=display.PLAIN_STYLE,
+    )
+
+    assert _rules(written)[0].endswith("1 von 1 | 6 zum Lernen")
+    assert any("Insgesamt 7 Vokabeln zum Lernen" in line for line in written)
+
+
+def test_every_block_ends_with_a_summary_of_its_decisions(profile_con: sqlite3.Connection) -> None:
+    """Zweite Nutzermeldung vom 02.09.2026: Am Blockende steht, was der Block gebracht hat.
+    Die als bekannt gebuchten zählen die Sammelaktion mit — für den Nutzer ist das eine
+    Zahl, nicht zwei Wege dorthin (`Origin.BULK_MARK` und `Origin.TRIAGE` buchen beide
+    `KnowledgeState.KNOWN`).
+
+    Hier: vier Einträge, die Sammelaktion bucht die ersten zwei, danach je einmal „lernen"
+    und „überspringen".
+
+    Verfälschungsprobe: `len(bulk_marked)` in `_write_block_summary` weggelassen — die
+    Bilanz meldete dann „0 als bekannt gebucht", die Zusicherung unten wurde rot."""
+    resolution = pipeline.TriageResolution(
+        entries=_entries(4), known=0, resolved_known=0, skipped=0, remaining=[]
+    )
+    written: list[str] = []
+    answers = iter(["2", "l", "s"])
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(answers),
+        write_line=written.append,
+        style=display.PLAIN_STYLE,
+    )
+
+    assert any(
+        "Block beendet: 1 zum Lernen, 2 als bekannt gebucht, 1 übersprungen." in line
+        for line in written
+    ), written
+
+
 def test_entries_use_ascii_fallback_characters_without_unicode_support(
     profile_con: sqlite3.Connection,
 ) -> None:

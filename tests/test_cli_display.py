@@ -222,10 +222,22 @@ def test_entry_rule_right_aligns_the_counter() -> None:
     """Die Trennlinie vor einem Eintrag endet rechtsbündig mit „N von M" — die
     ursprüngliche Beschwerde: „Man sieht klar, wo die vorherige Ausgabe aufhört, die
     nächste beginnt"."""
-    line = entry_rule(3, 13, _PLAIN)
+    line = entry_rule(3, 13, 5, _PLAIN)
 
-    assert line.endswith("3 von 13")
+    assert line.endswith("3 von 13 | 5 zum Lernen")
     assert line.startswith("-" * 10)  # Trennlinie füllt den Rest der Breite
+
+
+def test_entry_rule_names_how_many_are_already_chosen_for_learning() -> None:
+    """Zweite Nutzermeldung vom 02.09.2026: „Was mir irgendwie noch fehlt ist eine Anzeige,
+    wie viele Vokabeln man bis jetzt zum Lernen ausgewählt hat." Die Zahl steht in der
+    Trennlinie, hinter dem Positionszähler, und ist der Stand **vor** der anstehenden
+    Entscheidung.
+
+    Verfälschungsprobe: `chosen` in `entry_rule` ignoriert (nur „N von M" gebaut) — beide
+    Zusicherungen unten wurden rot."""
+    assert entry_rule(1, 13, 0, _PLAIN).endswith("0 zum Lernen")
+    assert entry_rule(9, 13, 7, _PLAIN).endswith("7 zum Lernen")
 
 
 def test_cover_returns_a_bold_title_between_two_double_rules() -> None:

@@ -2967,6 +2967,39 @@ Beide Fähigkeiten werden **einmal** je Lauf ermittelt, an einem übergebenen St
 `sys.stdout`) — das hält `detect_style` selbst ohne echtes Terminal prüfbar und vermeidet
 den Aufwand, sie bei jeder einzelnen Zeile neu zu bestimmen.
 
+### Nachtrag 02.09.2026: der Lernzähler und die zweite stille Lücke
+
+Beides kam aus dem ersten echten Durchlauf des Nutzers mit der neuen Anzeige, am selben
+Tag — der Grund, warum es hier steht und nicht oben: Es sind keine Korrekturen an den
+Entscheidungen, sondern zwei Dinge, die erst beim Benutzen sichtbar wurden.
+
+**Der Zähler „N zum Lernen" steht in der Trennlinie**, hinter dem Positionszähler
+(`cli.display.entry_rule`), nicht in einer eigenen Zeile und nicht im Eingabeprompt. Die
+Trennlinie ist die Stelle, auf die das Auge beim Blättern ohnehin fällt; eine eigene Zeile
+je Eintrag kostete bei 25 Einträgen 25 Zeilen für eine einzige Zahl, und im Prompt stünde
+sie in einer Zeile, die sich bei jeder ungültigen Eingabe wiederholt. Gezeigt wird der
+Stand **vor** der anstehenden Entscheidung: Die Zahl wächst mit der nächsten Trennlinie,
+nicht rückwirkend in der schon gedruckten.
+
+**Gezählt wird fortlaufend über beide Deckel** — der Wendungsdurchgang setzt dort an, wo
+der Wörterdurchgang aufhörte (`cli.main` reicht dafür `len(word_cards)` als
+`chosen_before` herein). Begründung: Die Zahl soll das sein, was am Ende im Anki-Deck und
+auf der Druckseite landet. Ein je Deckel neu beginnender Zähler beantwortete eine Frage,
+die niemand stellt („wie viele Wendungen waren es allein?"), und verschwiege die, die der
+Nutzer gestellt hat. Am Blockende steht zusätzlich eine Bilanz (zum Lernen / als bekannt
+gebucht / übersprungen); die Sammelaktion zählt dabei in „als bekannt gebucht" mit, weil
+für den Nutzer eine Zahl gemeint ist und nicht zwei Wege zu `KnowledgeState.KNOWN`.
+
+**Die zweite stille Lücke lag zwischen Deckelüberschrift und erster Zählzeile.** Der
+Nutzer hat sie richtig diagnostiziert: Dort lädt der Modellserver das Modell in den
+Grafikspeicher, und `_resolve_with_progress` schrieb seine erste Zeile erst **nach** dem
+ersten aufgelösten Eintrag — die Ladezeit fiel vollständig in dieses Loch. Derselbe Fehler
+wie bei „Lade Sprachmodell …" oben, nur eine Ebene tiefer und aus derselben Ursache: Eine
+Fortschrittsanzeige, die erst nach dem ersten Ergebnis beginnt, deckt den teuersten
+Abschnitt nicht ab, nämlich den vor dem ersten Ergebnis. Die Ankündigung steht deshalb vor
+dem Aufruf; der Wagenrücklauf überschreibt sie mit der ersten Zählung, und ein Deckel ohne
+Einträge schweigt weiter.
+
 ### Offene Punkte
 
 - **Ob die Zählung nach Kapiteln bei einem sehr ungleich verteilten Buch noch etwas

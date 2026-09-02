@@ -416,13 +416,24 @@ def _resolve_with_progress(
     order = "frequency"` und reifem Profil minutenlang stumm — der stille Fehlschlag, den
     Regel 13 (dokumentation.md §4) verbietet. Der Kern gibt selbst nichts aus (technik.md
     §7); die Zeile schreibt sich über `cli.display.safe_print_progress` per Wagenrücklauf
-    fort und wird nur dann abgeschlossen (`finish_progress_line`), wenn tatsächlich
-    mindestens einmal berichtet wurde — ein Decksel ohne zu prüfende Einträge (etwa
-    „Wendungen" in einem Kapitel ohne Wendungen) soll keine leere Zeile hinterlassen.
+    fort und wird nur dann abgeschlossen (`finish_progress_line`), wenn überhaupt etwas zu
+    prüfen war — ein Decksel ohne Einträge (etwa „Wendungen" in einem Kapitel ohne
+    Wendungen) soll keine leere Zeile hinterlassen.
     Der Abschluss läuft in `finally` (Befund leicht 1, Durchsicht T16/T17): Bricht der
     Modellserver mitten im Kapitel ab, klebte die Fehlermeldung sonst an der noch
-    offenen Statuszeile, statt in einer eigenen Zeile zu erscheinen."""
-    started = False
+    offenen Statuszeile, statt in einer eigenen Zeile zu erscheinen.
+
+    Die erste Zeile steht **vor** dem ersten Modellaufruf, nicht erst nach dem ersten
+    aufgelösten Eintrag (zweite Nutzermeldung vom 02.09.2026): Genau davor liegt beim
+    ersten Block der längste Halt, weil der Modellserver das Modell erst in den
+    Grafikspeicher lädt — auf dem Bildschirm stand dort einige Sekunden nichts als die
+    Deckelüberschrift. Derselbe stille Halt wie vor der Triage (technik.md §13,
+    „Konsolenausgabe"), nur eine Ebene tiefer. Der Wagenrücklauf überschreibt sie mit der
+    ersten Zählung; sie ist kürzer als jede Zählzeile und hinterlässt deshalb keinen
+    Rest (siehe `display.safe_print_progress`, „nur wachsen lassen, nie kürzen")."""
+    started = bool(entries)
+    if started:
+        safe_print_progress("Bedeutungen werden aufgelöst …")
 
     def _on_progress(examined: int, total: int, kept: int, limit_: int) -> None:
         nonlocal started
@@ -691,6 +702,11 @@ def _run(
             ),
             label="Wendungen",
             card_direction=card_direction,
+            # (Zweite Nutzermeldung vom 02.09.2026): Der Wendungs-Deckel zählt dort weiter,
+            # wo der Wörter-Deckel aufgehört hat — die Zahl in der Trennlinie ist damit das,
+            # was am Ende tatsächlich ins Anki-Deck und auf die Druckseite geht, nicht der
+            # Stand eines einzelnen Deckels.
+            chosen_before=len(word_cards),
             style=style,
             read_line=read_line,
             write_line=write_line,
