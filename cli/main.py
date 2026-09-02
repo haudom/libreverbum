@@ -35,7 +35,7 @@ import threading
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, assert_never
 
 from cli import config, display, export, interaction, model
 from cli.display import finish_progress_line, safe_print, safe_print_progress
@@ -324,14 +324,6 @@ def _choose_chapter(
         write_line("Diese Kapitelnummer gibt es nicht.")
 
 
-_CHAPTER_STAGE_MESSAGES: dict[pipeline.ChapterStage, str] = {
-    pipeline.ChapterStage.EXTRACTING_VOCABULARY: "Wortschatz des Kapitels wird ermittelt …",
-    pipeline.ChapterStage.LOOKING_UP_DICTIONARY: (
-        "Bedeutungen werden im Wörterbuch nachgeschlagen …"
-    ),
-}
-
-
 def _run_chapter_with_progress(
     *,
     epub_path: Path,
@@ -347,16 +339,27 @@ def _run_chapter_with_progress(
     stumm das ganze Buch durch spaCy schickte (`extraction.book_proper_noun_ratios`,
     technik.md §5) — der stille Fehlschlag, den Regel 13 (dokumentation.md §4) verbietet.
     Der Kern gibt selbst keinen deutschen Text aus (technik.md §7); die Zuordnung
-    Phase → Satz macht allein diese Funktion.
+    Etappe → Satz macht allein diese Funktion.
 
-    Die beiden zählenden Phasen (`READING_BOOK`, `ANALYZING_BOOK`) schreiben sich über
+    Die beiden zählenden Etappen (`READING_BOOK`, `ANALYZING_BOOK`) schreiben sich über
     `cli.display.safe_print_progress` per Wagenrücklauf fort, wie `_resolve_with_progress`
-    es für die Bedeutungsauflösung schon tut. Vor jedem Phasenwechsel steht
+    es für die Bedeutungsauflösung schon tut. Vor jedem Etappenwechsel steht
     `finish_progress_line()`, sonst blieben Reste der vorigen, längeren Zeile stehen — der
     Wechsel wird an `progress.stage` erkannt, nicht an `done`, weil ein Buch mit nur einem
-    Kapitel sonst keinen verlässlichen Umschlagpunkt hätte. Die beiden Phasen ohne Zähler
+    Kapitel sonst keinen verlässlichen Umschlagpunkt hätte. Die beiden Etappen ohne Zähler
     (`EXTRACTING_VOCABULARY`, `LOOKING_UP_DICTIONARY`, `done == total == 0`) bekommen je
-    eine einmalige Zeile aus `_CHAPTER_STAGE_MESSAGES`, keine sich fortschreibende."""
+    eine einmalige Zeile, keine sich fortschreibende.
+
+    Die Zuordnung läuft über ein `match` mit `assert_never` statt über eine Tabelle
+    (Befund 8, Durchsicht cf09744): Eine fünfte `ChapterStage` ohne Satz fiel vorher erst
+    zur Laufzeit auf — mit `KeyError` und englischem Traceback, nach den 22 bis 29 s
+    Arbeit. So prüft `mypy` die Vollständigkeit, bevor der Lauf beginnt.
+
+    Der Nenner der Analyse-Etappe ist kleiner als der der Lese-Etappe, sobald ein Kapitel
+    ohne Fließtext übersprungen wurde (`pipeline.run_chapter`, Vorspann und Impressum) —
+    bei `tools/sherlock.epub` 13 gegen 14. Die Zeile nennt ihn deshalb ausdrücklich als
+    Kapitel **mit Text** (Befund 6, Durchsicht cf09744): Eine Zahl, die zwischen zwei
+    aufeinanderfolgenden Zeilen unerklärt schrumpft, liest sich wie ein Fehler."""
     progress_open = False
     last_stage: pipeline.ChapterStage | None = None
 
@@ -366,19 +369,24 @@ def _run_chapter_with_progress(
             finish_progress_line()
             progress_open = False
         last_stage = progress.stage
-        if progress.stage is pipeline.ChapterStage.READING_BOOK:
-            safe_print_progress(
-                f"Buch wird gelesen: {progress.done} von {progress.total} Kapiteln."
-            )
-            progress_open = True
-        elif progress.stage is pipeline.ChapterStage.ANALYZING_BOOK:
-            safe_print_progress(
-                f"Wortschatz des Buchs wird analysiert: {progress.done} von "
-                f"{progress.total} Kapiteln …"
-            )
-            progress_open = True
-        else:
-            write_line(_CHAPTER_STAGE_MESSAGES[progress.stage])
+        match progress.stage:
+            case pipeline.ChapterStage.READING_BOOK:
+                safe_print_progress(
+                    f"Buch wird gelesen: {progress.done} von {progress.total} Kapiteln."
+                )
+                progress_open = True
+            case pipeline.ChapterStage.ANALYZING_BOOK:
+                safe_print_progress(
+                    f"Wortschatz des Buchs wird analysiert: {progress.done} von "
+                    f"{progress.total} Kapiteln mit Text …"
+                )
+                progress_open = True
+            case pipeline.ChapterStage.EXTRACTING_VOCABULARY:
+                write_line("Wortschatz des Kapitels wird ermittelt …")
+            case pipeline.ChapterStage.LOOKING_UP_DICTIONARY:
+                write_line("Bedeutungen werden im Wörterbuch nachgeschlagen …")
+            case _:
+                assert_never(progress.stage)
 
     try:
         return pipeline.run_chapter(

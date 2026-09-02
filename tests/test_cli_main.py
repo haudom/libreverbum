@@ -14,7 +14,7 @@ import sqlite3
 import threading
 import zipfile
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
@@ -22,12 +22,23 @@ from cli import display
 from cli import main as cli_main
 from cli.main import _build_parser, main
 from libreverbum import dictionary, epub, pipeline, profile
-from libreverbum.entities import Book, CefrLevel
+from libreverbum.entities import Book, CefrLevel, Chapter
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
     from conftest import ModelServerDouble
+    from spacy.language import Language
+
+# Ein Kapitel, das nur als Rückgabewert einer `pipeline.run_chapter`-Attrappe dient
+# (`test_run_chapter_with_progress_*` unten) — die Attrappe rechnet nichts, sie meldet nur
+# eine feste Etappenfolge, und `_run_chapter_with_progress` reicht ihr Ergebnis durch.
+_STUB_CHAPTER = Chapter(
+    book=Book(title="Testbuch", author="Testautorin"),
+    number=1,
+    title="Kapitel 1",
+    text="Ein kurzer Text.",
+)
 
 # ------------------------------------------------------------------------- Mini-EPUB
 #
@@ -1102,7 +1113,7 @@ def test_full_run_reports_progress_through_cli_display(
     assert exit_code == 0, "\n".join(console.log)
     assert progress_calls, "Fortschritts-Rückruf wurde nie über cli.display bedient."
     # Seit Bauschritt 1/2 der Konsolenausgabe (02.09.2026) meldet auch
-    # `_run_chapter_with_progress` über dieselbe Funktion — die beiden zählenden Phasen aus
+    # `_run_chapter_with_progress` über dieselbe Funktion — die beiden zählenden Etappen aus
     # `pipeline.run_chapter` stehen deshalb neben den resolve_triage_entries-Zeilen, statt
     # sie allein zu füllen.
     resolve_calls = [
@@ -1140,7 +1151,7 @@ def test_full_run_prints_at_least_one_line_naming_the_running_analysis_before_tr
 
     `safe_print_progress` wird — anders als in
     `test_full_run_reports_progress_through_cli_display` — auf dieselbe Konsole umgeleitet
-    wie `write_line`, damit die sich fortschreibenden Phasenzeilen in der tatsächlichen
+    wie `write_line`, damit die sich fortschreibenden Etappenzeilen in der tatsächlichen
     Aufrufreihenfolge im Log erscheinen; `learn_words` bleibt leer, weil die
     Triage-Antworten hier nicht geprüft werden.
 
@@ -1148,8 +1159,14 @@ def test_full_run_prints_at_least_one_line_naming_the_running_analysis_before_tr
     `_run_chapter_with_progress` übergeben (statt `_on_progress`) ließ diesen Test zunächst
     nicht rot werden — die neue Abschlusszeile „Kapitel N: … Wörter, … Wendungen." steht
     ebenfalls zwischen den beiden geprüften Zeilen und füllte `between`. Erst die
-    Stichwortprüfung unten, die gezielt nach einer Phasenzeile sucht, wurde bei derselben
-    Verfälschung rot — `analysis_lines` blieb dann leer."""
+    Stichwortprüfung unten, die gezielt nach einer Etappenzeile sucht, wurde bei derselben
+    Verfälschung rot — `analysis_lines` blieb dann leer.
+
+    Zweite Verfälschungsprobe (Befund 1, Durchsicht cf09744): allein die Meldungen der
+    beiden zählenden Etappen unterdrückt, die beiden einmaligen stehengelassen. Das ist die
+    Verfälschung, um die es hier geht — der stumme 22-bis-29-Sekunden-Abschnitt kehrt
+    zurück, die kurzen Zeilen dahinter bleiben. Mit der ursprünglichen, vier Stichwörter
+    langen Liste blieb der Test dabei grün; mit den beiden unten wird er rot."""
     data_dir = tmp_path / "data"
     _write_config(
         data_dir,
@@ -1182,16 +1199,16 @@ def test_full_run_prints_at_least_one_line_naming_the_running_analysis_before_tr
     loaded_index = console.log.index("Sprachmodell geladen.")
     triage_index = console.log.index("  Wörter")  # Deckel-Banner, cli.display.cover
     between = console.log[loaded_index + 1 : triage_index]
-    # Stichwörter der vier Phasen aus `_run_chapter_with_progress` — nicht bloß irgendeine
-    # Zeile: Die Abschlusszeile „Kapitel N: … Wörter, … Wendungen." steht ebenfalls in
-    # `between`, sagt aber nichts über die *laufende* Analyse (siehe Verfälschungsprobe).
+    # Stichwörter der beiden **zählenden** Etappen, und nur dieser (Befund 1, Durchsicht
+    # cf09744): Die Beschwerde galt dem stummen Abschnitt, in dem das ganze Buch durch
+    # spaCy läuft. „Wortschatz des Kapitels wird ermittelt …" und „… nachgeschlagen" stehen
+    # zwar ebenfalls in `between`, liegen aber **hinter** diesem Abschnitt — nimmt man sie
+    # in die Liste auf, füllen sie sie auch dann, wenn die Buchanalyse wieder stumm ist,
+    # und der Test bliebe bei genau der Verfälschung grün, gegen die er schützen soll.
     analysis_lines = [
         line
         for line in between
-        if any(
-            keyword in line
-            for keyword in ("wird gelesen", "wird analysiert", "wird ermittelt", "nachgeschlagen")
-        )
+        if any(keyword in line for keyword in ("wird gelesen", "wird analysiert"))
     ]
     assert analysis_lines, (
         "Zwischen Modell-Laden und Triage fehlt eine Zeile zur laufenden Analyse."
@@ -1243,6 +1260,129 @@ def test_resolve_with_progress_closes_the_line_even_when_the_model_server_fails(
             )
     finally:
         con.close()
+
+    assert finish_calls, "finish_progress_line lief nicht, obwohl bereits berichtet wurde."
+
+
+def _stub_vocabulary() -> pipeline.ChapterVocabulary:
+    return pipeline.ChapterVocabulary(
+        chapter=_STUB_CHAPTER, notice=None, entries=[], expressions=[]
+    )
+
+
+def test_run_chapter_with_progress_closes_the_progress_line_at_every_stage_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Befund 2, Durchsicht cf09744: Beim Wechsel von einer zählenden Etappe zur nächsten
+    steht genau ein `finish_progress_line()`. Fehlt er, schreibt die neue Etappe per
+    Wagenrücklauf in die noch offene Zeile der vorigen — auf dem Bildschirm steht dann
+    „…13 von 13 Kapiteln …Wortschatz des Kapitels wird ermittelt …", und die Zeile „Buch
+    wird gelesen: …" verschwindet ganz, weil ein Wagenrücklauf nichts löscht.
+
+    Geprüft wird die **Reihenfolge** von Fortschritts- und Abschlussaufrufen, nicht ihre
+    Anzahl: Ein bloßer Zähler bliebe grün, solange die Abschlüsse irgendwo fallen.
+
+    Verfälschungsprobe: den Abschluss beim Etappenwechsel in `_run_chapter_with_progress`
+    entfernt — das Protokoll enthält dann keinen „abschluss"-Eintrag mehr zwischen den
+    Etappen und der Vergleich unten wird rot. Vor dieser Behebung blieb bei genau dieser
+    Verfälschung jeder Test dieser Datei grün."""
+    log: list[str] = []
+    monkeypatch.setattr(
+        "cli.main.safe_print_progress", lambda text, **_kwargs: log.append(f"fortschritt: {text}")
+    )
+    monkeypatch.setattr("cli.main.finish_progress_line", lambda **_kwargs: log.append("abschluss"))
+
+    reported = [
+        (pipeline.ChapterStage.READING_BOOK, 1, 2),
+        (pipeline.ChapterStage.READING_BOOK, 2, 2),
+        (pipeline.ChapterStage.ANALYZING_BOOK, 1, 2),
+        (pipeline.ChapterStage.ANALYZING_BOOK, 2, 2),
+        (pipeline.ChapterStage.EXTRACTING_VOCABULARY, 0, 0),
+        (pipeline.ChapterStage.LOOKING_UP_DICTIONARY, 0, 0),
+    ]
+
+    def _fake_run_chapter(
+        *,
+        epub_path: Path,
+        chapter_number: int,
+        dictionary_path: Path,
+        profile_path: Path,
+        nlp: Language,
+        on_progress: Callable[[pipeline.ChapterProgress], None] | None = None,
+    ) -> pipeline.ChapterVocabulary:
+        assert on_progress is not None
+        for stage, done, total in reported:
+            on_progress(pipeline.ChapterProgress(stage=stage, done=done, total=total))
+        return _stub_vocabulary()
+
+    monkeypatch.setattr("cli.main.pipeline.run_chapter", _fake_run_chapter)
+
+    result = cli_main._run_chapter_with_progress(
+        epub_path=Path("buch.epub"),
+        chapter_number=1,
+        dictionary_path=Path("en-de.sqlite3"),
+        profile_path=Path("profil.sqlite3"),
+        nlp=cast("Language", None),
+        write_line=lambda text: log.append(f"zeile: {text}"),
+    )
+
+    assert result.chapter is _STUB_CHAPTER
+    assert [entry.split(":")[0] for entry in log] == [
+        "fortschritt",
+        "fortschritt",
+        "abschluss",
+        "fortschritt",
+        "fortschritt",
+        "abschluss",
+        "zeile",
+        "zeile",
+    ]
+
+
+def test_run_chapter_with_progress_closes_the_line_even_when_the_run_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Befund 2, Durchsicht cf09744 — dieselbe Zusicherung wie
+    `test_resolve_with_progress_closes_the_line_even_when_the_model_server_fails`, nur für
+    die Etappen vor der Triage: Bricht `pipeline.run_chapter` mitten in einer zählenden
+    Etappe ab (kaputtes Archiv, fehlendes Dokument), muss die offene Statuszeile trotzdem
+    geschlossen werden — sonst klebt die Fehlermeldung aus `main` an ihr.
+
+    Verfälschungsprobe: den Abschluss aus dem `finally` von `_run_chapter_with_progress`
+    hinter den `return` verlegt ließ `finish_calls` leer bleiben — die Ausnahme verließ die
+    Funktion, bevor die Zeile schloss."""
+    finish_calls: list[None] = []
+    monkeypatch.setattr("cli.main.safe_print_progress", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "cli.main.finish_progress_line", lambda **_kwargs: finish_calls.append(None)
+    )
+
+    def _raising_run_chapter(
+        *,
+        epub_path: Path,
+        chapter_number: int,
+        dictionary_path: Path,
+        profile_path: Path,
+        nlp: Language,
+        on_progress: Callable[[pipeline.ChapterProgress], None] | None = None,
+    ) -> pipeline.ChapterVocabulary:
+        assert on_progress is not None
+        on_progress(
+            pipeline.ChapterProgress(stage=pipeline.ChapterStage.ANALYZING_BOOK, done=3, total=22)
+        )
+        raise ValueError("Kapitel 4 fehlt im Archiv.")
+
+    monkeypatch.setattr("cli.main.pipeline.run_chapter", _raising_run_chapter)
+
+    with pytest.raises(ValueError, match="fehlt im Archiv"):
+        cli_main._run_chapter_with_progress(
+            epub_path=Path("buch.epub"),
+            chapter_number=1,
+            dictionary_path=Path("en-de.sqlite3"),
+            profile_path=Path("profil.sqlite3"),
+            nlp=cast("Language", None),
+            write_line=lambda _text: None,
+        )
 
     assert finish_calls, "finish_progress_line lief nicht, obwohl bereits berichtet wurde."
 

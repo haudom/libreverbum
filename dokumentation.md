@@ -102,6 +102,8 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | Umbrechen mit gleichbleibender Einrückung | `wrap_indented` |
 | Gegenstand des Kernablaufs | `entity` |
 | Durchlauf, Verkettung der Schritte | `pipeline` |
+| Etappe (eines `run_chapter`-Durchlaufs: Buch lesen, Buch analysieren, Wortschatz ermitteln, nachschlagen) | `stage` (`ChapterStage`) — **nicht** „Phase", das ist die Phase des Phasenplans (konzept.md), und **nicht** „Schritt", das sind die sechs Schritte des Kernablaufs |
+| Fortschritt (Rückruf aus einem langen Lauf an die Oberfläche) | `progress`, `on_progress` |
 | Lesereihenfolge, Manifest (EPUB) | `spine`, `manifest` |
 | Inhaltsverzeichnis einer Datei | `navigation` |
 | Gliederungsebene (in der Navigation) | `level` |

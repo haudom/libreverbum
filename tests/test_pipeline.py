@@ -17,6 +17,7 @@ from libreverbum.entities import (
     Book,
     CardDirection,
     CefrLevel,
+    Chapter,
     Event,
     KnowledgeState,
     Lemma,
@@ -325,19 +326,19 @@ def test_run_chapter_keeps_the_saw_case_from_scoring_a_saw_meaning(
     assert not any(e.occurrence.lemma.text == "saw" for e in result.entries)
 
 
-def test_run_chapter_reports_progress_phases_in_order(
+def test_run_chapter_reports_progress_stages_in_order(
     pipeline_epub: Path, mini_dictionary_db: Path, profile_path: Path, nlp: Language
 ) -> None:
     """Auftragstext vom 02.09.2026, Bauschritt 1/2 der Konsolenausgabe: `run_chapter`
-    meldet die vier Phasen aus `pipeline.ChapterStage` in Ablaufreihenfolge — je Kapitel
+    meldet die vier Etappen aus `pipeline.ChapterStage` in Ablaufreihenfolge — je Kapitel
     des Buchs (`pipeline_epub` hat zwei) einmal `READING_BOOK`, danach einmal
     `ANALYZING_BOOK`, zuletzt je einmal `EXTRACTING_VOCABULARY` und
-    `LOOKING_UP_DICTIONARY` mit `done == total == 0`. Der Zähler der Analysephase nennt
+    `LOOKING_UP_DICTIONARY` mit `done == total == 0`. Der Zähler der Analyse-Etappe nennt
     dabei die Kapitelzahl des **Buchs** (2), nicht die des gewählten Kapitels.
 
     Verfälschungsprobe: den `on_progress`-Aufruf vor `dictionary.candidate_lists` entfernt
-    ließ die Gleichheitsprüfung der vollständigen Phasenfolge rot werden — die letzte
-    gemeldete Phase blieb `EXTRACTING_VOCABULARY`, `LOOKING_UP_DICTIONARY` fehlte ganz."""
+    ließ die Gleichheitsprüfung der vollständigen Etappenfolge rot werden — die letzte
+    gemeldete Etappe blieb `EXTRACTING_VOCABULARY`, `LOOKING_UP_DICTIONARY` fehlte ganz."""
     reports: list[pipeline.ChapterProgress] = []
     pipeline.run_chapter(
         epub_path=pipeline_epub,
@@ -365,6 +366,55 @@ def test_run_chapter_reports_progress_phases_in_order(
     assert reports[-1] == pipeline.ChapterProgress(
         stage=pipeline.ChapterStage.LOOKING_UP_DICTIONARY, done=0, total=0
     )
+
+
+def test_run_chapter_counts_only_chapters_with_text_when_reporting_the_analysis(
+    pipeline_epub: Path,
+    mini_dictionary_db: Path,
+    profile_path: Path,
+    nlp: Language,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Befund 6, Durchsicht cf09744: Ein Kapitel ohne Fließtext (Vorspann, Impressum) wird
+    beim Lesen übersprungen (`epub.read_chapter` bricht für es ab). `READING_BOOK` zählt es
+    trotzdem mit — es steht im Inhaltsverzeichnis und wird angefasst —, `ANALYZING_BOOK`
+    nicht mehr, weil es gar nicht erst in `all_chapters` landet. Die beiden Nenner sind
+    deshalb verschieden; `cli.main` benennt den kleineren dafür ausdrücklich als Kapitel
+    mit Text, damit die schrumpfende Zahl sich selbst erklärt.
+
+    Geprüft an `tools/sherlock.epub` fällt genau ein Kapitel so weg (14 gegen 13); hier
+    wird derselbe Fall am kleinen Test-EPUB erzwungen, statt eine Fremdquelle vorauszusetzen.
+
+    Verfälschungsprobe: `ANALYZING_BOOK` mit `total_chapters` statt der Länge von
+    `all_chapters` gemeldet (der Zustand, den Befund 6 für die Anzeige beschreibt) ließ die
+    Zusicherung auf `[1]` rot werden — gemeldet wurde dann `[2]`, also auch das
+    übersprungene Kapitel."""
+    real_read_chapter = epub.read_chapter
+
+    def _skip_the_second_chapter(path: Path, book: Book, chapter: epub.ChapterReference) -> Chapter:
+        if chapter.number == 2:
+            raise ValueError(
+                f"{path}: Kapitel {chapter.number} besteht nur aus Vorspann bzw. Impressum."
+            )
+        return real_read_chapter(path, book, chapter)
+
+    monkeypatch.setattr("libreverbum.pipeline.epub.read_chapter", _skip_the_second_chapter)
+
+    reports: list[pipeline.ChapterProgress] = []
+    pipeline.run_chapter(
+        epub_path=pipeline_epub,
+        chapter_number=1,
+        dictionary_path=mini_dictionary_db,
+        profile_path=profile_path,
+        nlp=nlp,
+        on_progress=reports.append,
+    )
+
+    reading = [r for r in reports if r.stage is pipeline.ChapterStage.READING_BOOK]
+    analyzing = [r for r in reports if r.stage is pipeline.ChapterStage.ANALYZING_BOOK]
+    assert [r.total for r in reading] == [2, 2], "Die Lese-Etappe zählt jedes Kapitel mit."
+    assert [r.total for r in analyzing] == [1], "Die Analyse-Etappe zählt nur Kapitel mit Text."
+    assert [r.done for r in analyzing] == [1]
 
 
 def test_run_chapter_without_on_progress_behaves_as_before(

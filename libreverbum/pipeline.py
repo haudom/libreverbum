@@ -212,7 +212,7 @@ def _drop_prefix_dominated_expressions(
 
 
 class ChapterStage(enum.Enum):
-    """Die Phasen eines `run_chapter`-Durchlaufs, in Ablaufreihenfolge — Ablaufzustand
+    """Die Etappen eines `run_chapter`-Durchlaufs, in Ablaufreihenfolge — Ablaufzustand
     **dieser einen Funktion**, kein Gegenstand der Fachlichkeit, deshalb hier und nicht in
     `entities` (Auftragstext vom 02.09.2026, Bauschritt 1/2 der Konsolenausgabe).
 
@@ -221,7 +221,7 @@ class ChapterStage(enum.Enum):
     bleibt der netzlose Teil"). `ANALYZING_BOOK`: dieselben Kapitel laufen durch spaCy,
     weitergereicht aus `extraction.book_proper_noun_ratios`. `EXTRACTING_VOCABULARY`: der
     Wortschatz des gewählten Kapitels selbst wird ermittelt. `LOOKING_UP_DICTIONARY`: die
-    Auswahllisten werden im Wörterbuch nachgeschlagen. Die deutsche Anzeige je Phase ist
+    Auswahllisten werden im Wörterbuch nachgeschlagen. Die deutsche Anzeige je Etappe ist
     Sache von `cli.main`, nicht dieses Moduls (technik.md §7)."""
 
     READING_BOOK = enum.auto()
@@ -232,7 +232,7 @@ class ChapterStage(enum.Enum):
 
 @dataclass(frozen=True)
 class ChapterProgress:
-    """Ein Fortschrittsschritt aus `run_chapter`, an `on_progress` gemeldet: welche Phase
+    """Ein Fortschrittsschritt aus `run_chapter`, an `on_progress` gemeldet: welche Etappe
     (`stage`) und wie weit sie ist. Bei `ChapterStage.READING_BOOK` und `ANALYZING_BOOK`
     zählen `done`/`total` Kapitel des Buchs; bei `EXTRACTING_VOCABULARY` und
     `LOOKING_UP_DICTIONARY` sagt kein Zähler etwas aus — beide laufen als ein einzelner
@@ -270,11 +270,12 @@ def run_chapter(
     sondern reichen durch (Regel 13: kein `except`, das nur protokolliert und
     weiterläuft).
 
-    `on_progress`, falls übergeben, wird mit einer `ChapterProgress` je Phase aufgerufen —
+    `on_progress`, falls übergeben, wird mit einer `ChapterProgress` je Etappe aufgerufen —
     Vorgabe `None` heißt keine Meldung, unverändertes Verhalten. Genau der stumme
     Abschnitt zwischen Modell-Laden und Triage (`READING_BOOK`/`ANALYZING_BOOK`, rund 22
-    bis 29 s je Buch, siehe oben) war der stille Fehlschlag, gegen den Regel 13 (technik.md
-    §13) hier meldet. Der Kern gibt selbst keinen deutschen Text aus (technik.md §7) —
+    bis 29 s je Buch, siehe oben) war der stille Fehlschlag aus Regel 13 (dokumentation.md
+    §4); die Entscheidung, deshalb überhaupt zu melden, steht in technik.md §13,
+    „Konsolenausgabe". Der Kern gibt selbst keinen deutschen Text aus (technik.md §7) —
     `cli.main` bedient den Rückruf über `cli.display.safe_print_progress`."""
     if not dictionary_path.is_file():
         raise FileNotFoundError(f"Wörterbuch nicht lesbar: {dictionary_path}")
@@ -329,7 +330,9 @@ def run_chapter(
             on_progress(ChapterProgress(stage=ChapterStage.ANALYZING_BOOK, done=done, total=total))
 
     book_proper_noun_ratios = extraction.book_proper_noun_ratios(
-        all_chapters, nlp, on_progress=_report_analysis_progress if on_progress else None
+        all_chapters,
+        nlp,
+        on_progress=_report_analysis_progress if on_progress is not None else None,
     )
 
     if on_progress is not None:

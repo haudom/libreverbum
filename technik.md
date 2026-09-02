@@ -2868,11 +2868,12 @@ dort gerechnete Zahl hielt beim echten Druck nicht.
 
 ## 13. Konsolenausgabe — entschieden
 
-> Bauschritt 1 entschieden am 02.09.2026 (Auftragstext vom 02.09.2026, Nutzermeldung).
+> Entschieden am 02.09.2026 in zwei Schritten — erst die Meldungen vor der Triage, dann
+> die Triage-Anzeige selbst (Auftragstext vom 02.09.2026, Nutzermeldung).
 
-### Ladephase: Rückruf statt Ausgabe im Kern
+### Vor der Triage: Rückruf statt Ausgabe im Kern
 
-`cli/main.py:517` schrieb bis dahin „Lade Sprachmodell …" unmittelbar vor
+`cli.main._run` schrieb bis dahin „Lade Sprachmodell …" unmittelbar vor
 `extraction.load_nlp()` — rund eine Sekunde, danach lief `pipeline.run_chapter` 22 bis 29 s
 lang stumm weiter, weil der Eigennamenfilter das ganze Buch durch spaCy schickt (Abschnitt
 5, „Kosten: Der buchweite Wert braucht einen vollen spaCy-Lauf über jedes Kapitel"). Auf dem
@@ -2887,33 +2888,26 @@ einen deutschen Text in `libreverbum/`, und `resolve_triage_entries` macht mit s
 wie das geht. `run_chapter` bekommt denselben Mechanismus — ein Rückruf mit dem
 Ablaufzustand der Funktion (`pipeline.ChapterStage`, `ChapterProgress`), nicht mit einem
 fertigen Satz —, `cli.main` bedient ihn und entscheidet allein, welcher deutsche Text zu
-welcher Phase gehört. Das hält die Importregel unangetastet: Ein Ablaufzustand, der nur
+welcher Etappe gehört. Das hält die Importregel unangetastet: Ein Ablaufzustand, der nur
 diese eine Funktion betrifft, ist keine Fachlichkeit und gehört deshalb nach `pipeline.py`,
 nicht nach `entities.py`.
 
-Gemeldet wird mit Zähler, wo einer etwas aussagt — Buch lesen und Buch analysieren laufen
-je Kapitel des Buchs, „18 von 24 Kapiteln" sagt dem Nutzer, dass tatsächlich Fortschritt
+Gemeldet wird mit Zähler, wo einer etwas aussagt — Buch lesen läuft über jedes Kapitel des
+Inhaltsverzeichnisses, Buch analysieren über die Kapitel **mit Fließtext**; Vorspann und
+Impressum fallen zwischen beiden weg (`epub.read_chapter` bricht für sie ab, `run_chapter`
+überspringt sie). Der Nenner schrumpft dadurch von einer Zeile zur nächsten — bei
+`tools/sherlock.epub` von 14 auf 13 —, und deshalb nennt die zweite Zeile ihn ausdrücklich
+als Kapitel mit Text: Eine unerklärt kleinere Zahl liest sich wie ein Fehler, nicht wie ein
+übersprungenes Impressum. „18 von 24 Kapiteln" sagt dem Nutzer, dass tatsächlich Fortschritt
 entsteht, statt nur, dass irgendetwas läuft. Eine Zeile, die minutenlang unverändert
 „wird analysiert …" zeigt, ist vom stillen Fehlschlag, den sie beheben soll, kaum zu
-unterscheiden. Die beiden übrigen Phasen (Kapitelwortschatz ermitteln, im Wörterbuch
+unterscheiden. Die beiden übrigen Etappen (Kapitelwortschatz ermitteln, im Wörterbuch
 nachschlagen) laufen dagegen als ein einzelner Aufruf ohne Zwischenstand — ein erfundener
 Zähler behauptete dort einen Fortschritt, den es nicht gibt; `ChapterProgress` führt für sie
 `done == total == 0`, und `cli.main` zeigt für sie eine einmalige statt einer sich
 fortschreibenden Zeile.
 
-### Offene Punkte
-
-- **Ob die Zählung nach Kapiteln bei einem sehr ungleich verteilten Buch noch etwas
-  aussagt** — ein einzelnes sehr langes Kapitel ließe die Zeile lange auf einem Stand
-  stehen, obwohl spaCy tatsächlich arbeitet. Kein gemessener Anlass für eine feinere
-  Zählung (Regel 14)
-- **Bei einem Buch mit nur einem Kapitel** zeigen `READING_BOOK` und `ANALYZING_BOOK` je
-  genau eine Zeile mit „1 von 1" — ob das noch als Fortschritt wahrgenommen wird oder nur
-  als Ruckeln, ist nicht an einem echten Nutzer geprüft
-
-### Triage-Anzeige — entschieden
-
-> Bauschritt 2 entschieden am 02.09.2026 (Auftragstext vom 02.09.2026, Nutzermeldung).
+### Triage-Anzeige: das Wort zuerst, der Trenner davor
 
 Die Beschwerde, wörtlich:
 
@@ -2926,7 +2920,7 @@ Die Beschwerde, wörtlich:
 `cli.interaction._entry_lines` druckte drei Zeilen ohne Leerzeile und ohne Trenner davor —
 die Eingabezeile eines Eintrags klebte direkt über der Wortform des nächsten, und die
 Wortform selbst stand am Zeilenanfang der ersten Zeile, während die deutsche Übersetzung am
-Ende der dritten stand. Beides ist derselbe Fehler wie bei der Ladephase oben: kein stiller
+Ende der dritten stand. Beides ist derselbe Fehler wie oben vor der Triage: kein stiller
 Fehlschlag im Sinn von Regel 13, aber eine Anzeige, die ihren eigentlichen Zweck — dem
 Nutzer in Sekunden zu sagen, worum es geht — nicht erfüllt.
 
@@ -2972,6 +2966,16 @@ Baustein in `cli.interaction` einen Farbcode von Hand schreibt, sondern jeder ü
 Beide Fähigkeiten werden **einmal** je Lauf ermittelt, an einem übergebenen Strom (Vorgabe
 `sys.stdout`) — das hält `detect_style` selbst ohne echtes Terminal prüfbar und vermeidet
 den Aufwand, sie bei jeder einzelnen Zeile neu zu bestimmen.
+
+### Offene Punkte
+
+- **Ob die Zählung nach Kapiteln bei einem sehr ungleich verteilten Buch noch etwas
+  aussagt** — ein einzelnes sehr langes Kapitel ließe die Zeile lange auf einem Stand
+  stehen, obwohl spaCy tatsächlich arbeitet. Kein gemessener Anlass für eine feinere
+  Zählung (Regel 14)
+- **Bei einem Buch mit nur einem Kapitel** zeigen `READING_BOOK` und `ANALYZING_BOOK` je
+  genau eine Zeile mit „1 von 1" — ob das noch als Fortschritt wahrgenommen wird oder nur
+  als Ruckeln, ist nicht an einem echten Nutzer geprüft
 
 ---
 
