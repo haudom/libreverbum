@@ -1,4 +1,5 @@
-"""Bildschirmausgabe, die eine eingeschränkte Konsolenkodierung übersteht.
+"""Bildschirmausgabe, die eine eingeschränkte Konsolenkodierung übersteht, und der
+Ausgabestil der Triage-Anzeige.
 
 Aufgabe
 -------
@@ -8,6 +9,14 @@ kann solche Zeichen nicht darstellen — ein bloßes `print()` bräche die Triag
 einem `UnicodeEncodeError` ab. CLAUDE.md verlangt `encoding="utf-8"` nur ausdrücklich für
 Dateien; dieselbe Gefahr gilt aber für die Bildschirmausgabe, und Regel 13
 (dokumentation.md §4) verbietet ohnehin einen stillen Absturz mitten in der Triage.
+
+Seit Bauschritt 2/2 der Konsolenausgabe (Auftragstext vom 02.09.2026, technik.md §13,
+„Triage-Anzeige") liegt hier zusätzlich der **Ausgabestil**: eine einmal je Lauf ermittelte
+Beschreibung dessen, was das Ausgabeziel kann (Farbe, die in `cli.interaction` verwendeten
+Sonderzeichen, Breite), dazu Textbausteine, die sich danach richten. Alle Bausteine
+**liefern Zeichenketten** und drucken selbst nichts — gedruckt wird weiterhin nur über
+`safe_print`/den injizierten `write_line`, sonst wäre `cli.interaction` nicht mehr ohne
+echtes Terminal zu prüfen (dokumentation.md §5).
 
 Voraussetzungen
 ---------------
@@ -27,11 +36,25 @@ order = "frequency"` und reifem Profil —, ist der stille Fehlschlag, den Regel
 verbietet. Der Kern selbst gibt nichts aus (technik.md §7, „Kern ohne Bezug zur
 Oberfläche"); `resolve_triage_entries` bekommt dafür nur einen Rückruf, den `cli.main`
 über diese beiden Funktionen bedient.
+
+`detect_style` ermittelt `Style` aus einem Strom (Vorgabe `sys.stdout`) — Farbe nur bei
+einem echten Terminal, unter Windows zusätzlich nur bei eingeschaltetem VT-Modus;
+Sonderzeichen nur, wenn die Zielkodierung sie trägt. `bold`/`dim`/`highlight` sind
+Fettdruck, Dimmen und farbige Hervorhebung als Funktion von `Style` — ohne Farbfähigkeit
+unverändert. `arrow`/`dot`/`quote` liefern die in `cli.interaction` verwendeten
+Sonderzeichen samt ASCII-Ersatz. `entry_rule` ist die Trennlinie mit rechtsbündigem
+Zähler vor jedem Triage-Eintrag, `cover` das Deckel-Banner für „Wörter"/„Wendungen".
+`wrap_indented` bricht eine lange Zeile auf `Style.width` um, Folgezeilen mit derselben
+Einrückung. `PLAIN_STYLE` ist die farb- und sonderzeichenlose Vorgabe für Aufrufer, denen
+der Ausgabestil gleichgültig ist (etwa die meisten Tests von `cli.interaction`).
 """
 
 from __future__ import annotations
 
+import shutil
 import sys
+import textwrap
+from dataclasses import dataclass
 from typing import TextIO
 
 
@@ -83,3 +106,193 @@ def finish_progress_line(*, stream: TextIO | None = None) -> None:
     ab — aufzurufen, sobald mindestens eine Statuszeile geschrieben wurde, bevor die
     nächste reguläre Ausgabe (etwa die erste Triage-Frage) folgt."""
     _write_raw("", stream=stream, end="\n")
+
+
+# --------------------------------------------------------------------- Ausgabestil
+#
+# technik.md §13, „Triage-Anzeige": Format „kompakte Kopfzeile", Farbe sparsam und nur bei
+# einem Ausgabeziel, das sie trägt. Zwei Fähigkeiten werden je Lauf **einmal** ermittelt
+# (`detect_style`), nicht je Zeile — die Textbausteine unten richten sich danach.
+
+_MIN_WIDTH = 40
+_MAX_WIDTH = 100
+
+
+def _terminal_width() -> int:
+    """Breite für Trennlinien und Zeilenumbruch — `shutil.get_terminal_size(fallback=
+    (80, 24))`, gedeckelt auf [40, 100]: Eine sehr schmale Konsole soll noch lesbar
+    bleiben, eine sehr breite keine kilometerlangen Trennlinien ziehen."""
+    columns = shutil.get_terminal_size(fallback=(80, 24)).columns
+    return max(_MIN_WIDTH, min(columns, _MAX_WIDTH))
+
+
+@dataclass(frozen=True)
+class Style:
+    """Ausgabefähigkeit eines Ziels, einmal je Lauf ermittelt (`detect_style`) — ob es
+    ANSI-Farbe trägt und ob seine Kodierung die in `cli.interaction` verwendeten
+    Sonderzeichen (`─`, `→`, `·`, typografische Anführungszeichen) darstellen kann. Kein
+    Konfigurationsschalter (dokumentation.md §4 Regel 14) — eine zur Laufzeit feststellbare
+    Fähigkeit des Ziels, keine Einstellung."""
+
+    supports_color: bool
+    supports_unicode: bool
+    width: int
+
+
+PLAIN_STYLE = Style(supports_color=False, supports_unicode=False, width=80)
+# Vorgabe für Aufrufer, denen der Ausgabestil gleichgültig ist — die meisten Tests von
+# `cli.interaction` prüfen Entscheidungen, nicht die Bildschirmausgabe (dokumentation.md
+# §5), und bekommen mit dieser Vorgabe eine deterministische, plattformunabhängige Form.
+
+# Trennlinie, Pfeil, Trennpunkt, deutsche Anführungszeichen (öffnend U+201E, schließend
+# U+201C — dieselben Zeichen wie in cli/main.py, `_choose_chapter`).
+_SPECIAL_CHARS = "─→·„“"
+
+
+def _stream_supports_unicode(stream: TextIO) -> bool:
+    """Prüft, ob die Kodierung von `stream` die oben genannten Sonderzeichen darstellen
+    kann — nicht ob sie UTF-8 ist: `cp1252` etwa stellt „ “ und den Gedankenstrich bereits
+    dar, aber nicht `─`/`→`/`·` (Auftragstext vom 02.09.2026). Eine fehlende oder
+    unbekannte Kodierung gilt als unfähig — der sichere Fehlschlag ist der ASCII-Ersatz,
+    nicht ein Bildschirm voller `?` (`safe_print`s eigentliche Gefahr, hier von vornherein
+    vermieden statt erst hinterher ausgewichen)."""
+    encoding = getattr(stream, "encoding", None) or "ascii"
+    try:
+        _SPECIAL_CHARS.encode(encoding)
+    except (LookupError, UnicodeEncodeError):
+        return False
+    return True
+
+
+def _stream_is_a_terminal(stream: TextIO) -> bool:
+    try:
+        return bool(stream.isatty())
+    except (AttributeError, ValueError):
+        return False
+
+
+def _enable_windows_console_color(stream: TextIO) -> bool:
+    """Schaltet unter Windows `ENABLE_VIRTUAL_TERMINAL_PROCESSING` (0x0004) auf dem
+    Konsolen-Handle von `stream` ein — ohne das zeigt die alte conhost-Konsole `\\x1b[1m`
+    wörtlich statt Fettdruck, `isatty()` allein genügt unter Windows also **nicht**
+    (Auftragstext vom 02.09.2026). Auf anderen Systemen ist hier nichts zu tun, `isatty()`
+    genügt dort bereits. Standardbibliothek (`ctypes`, `msvcrt`) — kein `colorama`, keine
+    neue Abhängigkeit ohne Lizenzprüfung (Regel 15).
+
+    Jeder Fehlschlag beim Ermitteln des echten Konsolen-Handles (kein `fileno()`, kein
+    reales Konsolen-Handle dahinter — etwa ein Test-Double oder eine umgeleitete Datei)
+    liefert `False`, statt die Ausnahme durchzureichen: Farbe ist hier eine Fähigkeit des
+    Ziels, keine Voraussetzung für den Lauf. Das macht diese Funktion zugleich mit einem
+    beliebigen Strom prüfbar, ohne ein echtes Terminal zu brauchen (Auftragstext, „Sorg
+    dafür, dass Tests … prüfen können, ohne ein echtes Terminal zu brauchen")."""
+    if sys.platform != "win32":
+        return True
+    try:
+        import ctypes
+        import msvcrt
+
+        handle = msvcrt.get_osfhandle(stream.fileno())
+        kernel32 = ctypes.windll.kernel32
+        mode = ctypes.c_uint32()
+        if not kernel32.GetConsoleMode(ctypes.c_void_p(handle), ctypes.byref(mode)):
+            return False
+        return bool(kernel32.SetConsoleMode(ctypes.c_void_p(handle), mode.value | 0x0004))
+    except OSError:
+        return False
+
+
+def detect_style(stream: TextIO | None = None) -> Style:
+    """Ermittelt `Style` für `stream` (Vorgabe `sys.stdout`) — **einmal** je Lauf
+    aufzurufen, nicht je Zeile. `stream` ist austauschbar, damit Tests beide Spielarten
+    (mit/ohne Farbe, mit/ohne Sonderzeichen) prüfen können, ohne ein echtes Terminal zu
+    brauchen — die Ermittlung geschieht ausschließlich an diesem übergebenen Strom."""
+    target = stream if stream is not None else sys.stdout
+    supports_color = _stream_is_a_terminal(target) and _enable_windows_console_color(target)
+    return Style(
+        supports_color=supports_color,
+        supports_unicode=_stream_supports_unicode(target),
+        width=_terminal_width(),
+    )
+
+
+_BOLD = "\x1b[1m"
+_DIM = "\x1b[2m"
+_HIGHLIGHT = "\x1b[36m"  # Cyan — für die deutsche Übersetzung und die Markierung „neue
+# Bedeutung eines bekannten Wortes" (Auftragstext: „Farbe: ja, sparsam")
+_RESET = "\x1b[0m"
+
+
+def _decorate(text: str, code: str, style: Style) -> str:
+    if not style.supports_color or not text:
+        return text
+    return f"{code}{text}{_RESET}"
+
+
+def bold(text: str, style: Style) -> str:
+    """Fettdruck — für die Wortform in der Kopfzeile eines Triage-Eintrags. Ohne
+    Farbfähigkeit unverändert."""
+    return _decorate(text, _BOLD, style)
+
+
+def dim(text: str, style: Style) -> str:
+    """Gedimmt — für Trennlinien und Nebendaten (Auftragstext: „Trennlinie und Nebendaten
+    gedimmt")."""
+    return _decorate(text, _DIM, style)
+
+
+def highlight(text: str, style: Style) -> str:
+    """Hervorgehoben — für die deutsche Übersetzung und die eigene Zeile „neue Bedeutung
+    eines bekannten Wortes" (Auftragstext: „deutsche Bedeutung farbig")."""
+    return _decorate(text, _HIGHLIGHT, style)
+
+
+def arrow(style: Style) -> str:
+    """Trennt Wortform und Übersetzung in der Kopfzeile eines Triage-Eintrags — `→` auf
+    einem fähigen Ziel, sonst der ASCII-Ersatz `->`."""
+    return "  →  " if style.supports_unicode else "  ->  "
+
+
+def dot(style: Style) -> str:
+    """Trennt die drei Angaben der Nebendaten-Zeile (Wortart, Häufigkeit,
+    Bedeutungsangabe) — `·` oder der ASCII-Ersatz `|`."""
+    return " · " if style.supports_unicode else " | "
+
+
+def quote(text: str, style: Style) -> str:
+    """Setzt `text` (den Belegsatz) in Anführungszeichen — typografisch (`„…“`, wie
+    `cli.main._choose_chapter` es für den Buchtitel bereits tut) auf einem fähigen Ziel,
+    sonst gerade ASCII-Anführungszeichen."""
+    if style.supports_unicode:
+        return f"„{text}“"
+    return f'"{text}"'
+
+
+def entry_rule(position: int, total: int, style: Style) -> str:
+    """Trennlinie vor jedem Eintrag der Einzelabfrage, mit rechtsbündigem Zähler „N von M"
+    (Auftragstext vom 02.09.2026, Format „kompakte Kopfzeile" — die ursprüngliche
+    Beschwerde: „Man sieht klar, wo die vorherige Ausgabe aufhört, die nächste beginnt").
+    Gedimmt wie die übrigen Nebendaten."""
+    label = f"{position} von {total}"
+    char = "─" if style.supports_unicode else "-"
+    fill_width = max(style.width - len(label) - 2, 10)
+    return dim(f"{char * fill_width}  {label}", style)
+
+
+def cover(title: str, style: Style) -> list[str]:
+    """Deckel-Banner — die stärkste der drei Anzeigeebenen der Triage (Auftragstext:
+    „der Deckel … am stärksten"), ersetzt das bisherige `== Wörter ==`/`== Wendungen ==`
+    in `cli.main`. Doppelte Trennlinie (`═`/`=`), damit sie sich von der einfachen
+    Trennlinie vor jedem einzelnen Eintrag (`entry_rule`) klar unterscheidet."""
+    char = "═" if style.supports_unicode else "="
+    line = char * style.width
+    return [line, f"  {bold(title, style)}", line]
+
+
+def wrap_indented(text: str, style: Style, *, indent: str = "  ") -> list[str]:
+    """Bricht `text` auf `style.width` um, Folgezeilen mit derselben Einrückung wie die
+    erste (Auftragstext: „Lange Zeilen brechen um, statt über den Bildschirmrand zu
+    laufen" — für Belegsatz und Angabenzeile in `cli.interaction`). Ein leerer Text ergibt
+    eine einzelne, nur eingerückte Zeile statt einer leeren Liste."""
+    width = max(style.width - len(indent), 20)
+    wrapped = textwrap.wrap(text, width=width) or [""]
+    return [f"{indent}{line}" for line in wrapped]

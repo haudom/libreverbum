@@ -25,6 +25,15 @@ der Nutzer entscheidet") — `run_triage_blocks` nimmt dafür zwei Rückrufe ent
 Nutzer wirklich abwartet) und `resolve_silent_block` (ohne jede Ausgabe, für jeden
 vorgeladenen Folgeblock — siehe `_BlockPrefetch` unten).
 
+Anzeigeform (Bauschritt 2/2 der Konsolenausgabe, Auftragstext vom 02.09.2026, technik.md
+§13, „Triage-Anzeige"): Trennlinie mit Zähler, Wortform und Bedeutung in einer Kopfzeile,
+Nebendaten und Belegsatz eingerückt darunter (`_entry_lines`) — der Grund steht dort, nicht
+hier. Sämtliche Textbausteine kommen aus `cli.display` (`Style`, `bold`/`dim`/`highlight`,
+`entry_rule`, `cover`, `wrap_indented`); dieses Modul schreibt keinen Farbcode und keine
+Sonderzeichen von Hand, damit die farb- und sonderzeichenlose Spielart (`cli.display.
+PLAIN_STYLE`, Vorgabe für `run_triage_pass`/`run_triage_blocks` unten) automatisch dieselbe
+Struktur trägt.
+
 Warum die Auflösung nicht mehr hier liegt (Befund schwer 1, zweite T16-Durchsicht)
 ------------------------------------------------------------------------------------
 Vor dieser Behebung bucht(e) dieses Modul „kenne ich" auf `candidates[0]`
@@ -137,6 +146,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from cli import display
 from libreverbum import anki, dictionary, pipeline, profile, triage
 from libreverbum.entities import (
     Book,
@@ -247,26 +257,40 @@ def _record(
     )
 
 
-def _entry_lines(entry: pipeline.ResolvedEntry) -> list[str]:
-    """Anzeige eines Eintrags: Wortform, Wortart, Häufigkeit, Belegsatz und die **eine**
-    im Belegsatz gemeinte Bedeutung, wie `pipeline.resolve_triage_entries` sie aufgelöst
-    hat (technik.md §3, Nachtrag 18.08.2026: „Die gewählte Bedeutung samt Belegsatz gehört
-    also in die Anzeige — das ist Darstellung, keine zweite Entscheidung"). Vor der
-    zweiten T16-Durchsicht stand hier stattdessen die volle Auswahlliste des Wörterbuchs,
-    ohne Modell-Markierung.
+def _entry_lines(
+    entry: pipeline.ResolvedEntry, position: int, total: int, style: display.Style
+) -> list[str]:
+    """Anzeige eines Eintrags im Format „kompakte Kopfzeile" (Auftragstext vom 02.09.2026,
+    Nutzermeldung: „Man muss immer das Wort … zwischen dem Zitat … und der Ausgabe aus dem
+    vorherigen Wort suchen"; Begründung technik.md §13, „Triage-Anzeige"): eine Trennlinie
+    mit Zähler `position`/`total` (`display.entry_rule`), Wortform und Übersetzung in
+    einer Kopfzeile, Nebendaten (Wortart, Häufigkeit, Bedeutungsangabe) und Belegsatz
+    eingerückt darunter. Kein Inhalt geht dabei verloren, nur die Anordnung ändert sich —
+    Regel 1 (dokumentation.md §4): `dictionary.label` liefert weiterhin `NO_SENSE_LABEL`
+    beziehungsweise `UNCERTAIN_LABEL`, wenn `entry.sense` keinen `sense`-Text trägt, statt
+    dass diese Zeilen wegfielen.
 
-    `VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD` trägt zusätzlich die Kennzeichnung „neue
-    Bedeutung eines bekannten Wortes" (konzept.md §5, „Mehrdeutigkeit") — ohne sie sähe
-    dieser Eintrag wie ein bereits bekanntes Wort aus, das grundlos erneut auftaucht."""
+    `VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD` bekommt seit dieser Umstellung eine
+    **eigene, hervorgehobene Zeile** (konzept.md §5, „Mehrdeutigkeit") statt an die
+    Bedeutungszeile angehängt zu werden, wo sie am Zeilenende unterging (Auftragstext)."""
     occurrence = entry.occurrence
     pos_display = anki.pos_display(occurrence.lemma.pos)
-    lines = [f"{occurrence.word_form} ({pos_display}), {occurrence.frequency}x im Kapitel"]
-    lines.append(f"  {occurrence.example_sentence}")
     translation_text = entry.sense.translation or entry.sense.wikdict_trans_list or "?"
-    line = f"  {dictionary.label(entry.sense)} -> {translation_text}"
+
+    lines = [display.entry_rule(position, total, style)]
+    lines.append(
+        f"  {display.bold(occurrence.word_form, style)}"
+        f"{display.arrow(style)}{display.highlight(translation_text, style)}"
+    )
     if entry.status is VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD:
-        line += " [neue Bedeutung eines bekannten Wortes]"
-    lines.append(line)
+        lines.append(f"  {display.highlight('[neue Bedeutung eines bekannten Wortes]', style)}")
+
+    info = (
+        f"{pos_display}{display.dot(style)}{occurrence.frequency}x im Kapitel"
+        f"{display.dot(style)}{dictionary.label(entry.sense)}"
+    )
+    lines.extend(display.dim(line, style) for line in display.wrap_indented(info, style))
+    lines.extend(display.wrap_indented(display.quote(occurrence.example_sentence, style), style))
     return lines
 
 
@@ -279,6 +303,7 @@ def _bulk_phase(
     entries_by_occurrence: dict[Occurrence, pipeline.ResolvedEntry],
     label: str,
     block_number: int,
+    style: display.Style,
     read_line: ReadLine,
     write_line: WriteLine,
 ) -> set[Occurrence]:
@@ -292,18 +317,28 @@ def _bulk_phase(
 
     Die Kopfzeile nennt ab dem zweiten Block dessen Nummer (`block_number`) — sonst
     verliert ein Nutzer nach der dritten Fortsetzungsfrage die Orientierung. Beim ersten
-    Block bleibt sie unverändert: Eine Gesamtzahl an Blöcken steht ohnehin nie fest."""
+    Block bleibt sie unverändert: Eine Gesamtzahl an Blöcken steht ohnehin nie fest.
+
+    Die nummerierte Liste (Auftragstext vom 02.09.2026, Bauschritt 2/2 der
+    Konsolenausgabe): rechtsbündige Nummern und eine ausgerichtete Wortartspalte, damit sie
+    überfliegbar ist — dieselbe Spaltenrechnung wie `cli.main._choose_chapter` für die
+    Kapitelliste, hier über die maximale Länge von Nummer und Wortartangabe."""
     if not ordered:
         return set()
 
     heading = f"{label} (Block {block_number})" if block_number > 1 else label
-    write_line(f"-- {heading}: {len(ordered)} --")
-    for number, occurrence in enumerate(ordered, start=1):
-        pos_display = anki.pos_display(occurrence.lemma.pos)
-        write_line(f"  {number}. {occurrence.word_form} ({pos_display})")
+    write_line(f"  {display.bold(heading, style)}{display.dim(f': {len(ordered)}', style)}")
+    number_width = len(str(len(ordered)))
+    pos_labels = [anki.pos_display(occurrence.lemma.pos) for occurrence in ordered]
+    pos_width = max(len(value) for value in pos_labels)
+    for number, (occurrence, pos_label) in enumerate(
+        zip(ordered, pos_labels, strict=True), start=1
+    ):
+        write_line(f"  {number:>{number_width}}. {pos_label:<{pos_width}}  {occurrence.word_form}")
 
     answer = read_line(
-        f"Sammelaktion — bis zu welcher Nummer kennst du alles? (1-{len(ordered)}, Enter = keine) "
+        f"  Sammelaktion — bis zu welcher Nummer kennst du alles? "
+        f"(1-{len(ordered)}, Enter = keine) "
     ).strip()
     if not answer:
         return set()
@@ -311,10 +346,10 @@ def _bulk_phase(
     try:
         position = int(answer)
     except ValueError:
-        write_line("Keine Zahl erkannt — Sammelaktion übersprungen.")
+        write_line("  Keine Zahl erkannt — Sammelaktion übersprungen.")
         return set()
     if not 1 <= position <= len(ordered):
-        write_line("Außerhalb der Liste — Sammelaktion übersprungen.")
+        write_line("  Außerhalb der Liste — Sammelaktion übersprungen.")
         return set()
 
     selected = ordered[position - 1]
@@ -322,7 +357,7 @@ def _bulk_phase(
     for occurrence in bulk:
         entry = entries_by_occurrence[occurrence]
         _record(con, entry.sense, KnowledgeState.KNOWN, Origin.BULK_MARK, book, chapter_number)
-    write_line(f"{len(bulk)} als bekannt gebucht.")
+    write_line(f"  {len(bulk)} als bekannt gebucht.")
     return set(bulk)
 
 
@@ -342,13 +377,19 @@ _ACTIONS = {
 def _ask_action(read_line: ReadLine, write_line: WriteLine) -> str:
     """Fragt so lange nach, bis eine gültige Antwort steht — eine unbekannte Eingabe
     verwirft keine Entscheidung stillschweigend als „skip" (Regel 13), sondern führt zu
-    einer erneuten Frage."""
+    einer erneuten Frage.
+
+    Die Leerzeile vor jedem Prompt setzt die Eingabezeile vom Eintrag darüber ab
+    (Auftragstext vom 02.09.2026, „Man sieht klar, wo die vorherige Ausgabe aufhört") —
+    `tests/test_cli_main.py` erkennt die Frage weiterhin am Wortlaut `[k]enne ich`, die
+    Einrückung ändert daran nichts."""
     while True:
-        raw = read_line("[k]enne ich  [l]ernen  [s]kip  [q]uit > ").strip().lower()
+        write_line("")
+        raw = read_line("  [k]enne ich  [l]ernen  [s]kip  [q]uit > ").strip().lower()
         action = _ACTIONS.get(raw)
         if action is not None:
             return action
-        write_line("Ungültige Eingabe — k, l, s oder q erwartet.")
+        write_line("  Ungültige Eingabe — k, l, s oder q erwartet.")
 
 
 def _individual_phase(
@@ -359,6 +400,7 @@ def _individual_phase(
     to_ask: list[Occurrence],
     entries_by_occurrence: dict[Occurrence, pipeline.ResolvedEntry],
     card_direction: CardDirection,
+    style: display.Style,
     read_line: ReadLine,
     write_line: WriteLine,
 ) -> tuple[list[Card], bool, int]:
@@ -383,11 +425,19 @@ def _individual_phase(
     hieß der `to_ask`-Parameter bis Befund 5, Durchsicht d4f10fc — derselbe Name wie
     `TriageResolution.remaining` (dokumentation.md §2), aber eine andere Bedeutung: dort
     der Rest nach der Blockgrenze, hier der Rest innerhalb des laufenden Blocks nach der
-    Sammelaktion."""
+    Sammelaktion.
+
+    Die Leerzeile nach jeder abgeschlossenen Entscheidung ist der Trenner zur nächsten
+    Trennlinie (`_entry_lines`, `display.entry_rule`) — Auftragstext vom 02.09.2026: „Zwei
+    aufeinanderfolgende Einträge sind durch einen Trenner geschieden". `position`/`total`
+    für `_entry_lines` sind `index + 1`/`len(to_ask)` — die Zählung bezieht sich auf das,
+    was in der Einzelabfrage tatsächlich noch zu entscheiden ist, nicht auf den ganzen
+    Block vor der Sammelaktion."""
     cards: list[Card] = []
+    total = len(to_ask)
     for index, occurrence in enumerate(to_ask):
         entry = entries_by_occurrence[occurrence]
-        for line in _entry_lines(entry):
+        for line in _entry_lines(entry, index + 1, total, style):
             write_line(line)
         while True:
             action = _ask_action(read_line, write_line)
@@ -404,10 +454,11 @@ def _individual_phase(
             # Kartenvorlage welches Feld auf die Vorderseite nimmt, weiß der Kern — diese
             # Stelle gäbe sonst für den zweiten Fall (Lückentext ohne Lücke) eine falsche
             # Begründung aus, und vor jener Durchsicht kannte sie ihn überhaupt nicht.
-            write_line(obstacle)
+            write_line(f"  {obstacle}")
+        write_line("")  # Trenner zum nächsten Eintrag, siehe Docstring oben
 
         if action == "quit":
-            write_line("Abgebrochen.")
+            write_line("  Abgebrochen.")
             # (Befund 9, Durchsicht 1cfb1e4): `to_ask[index]` (der gerade angezeigte
             # Eintrag) zählt zu den nicht entschiedenen mit — er hat kein `Event`
             # bekommen, genau wie jeder folgende.
@@ -441,6 +492,7 @@ def run_triage_pass(
     read_line: ReadLine,
     write_line: WriteLine,
     block_number: int = 1,
+    style: display.Style = display.PLAIN_STYLE,
 ) -> TriagePass:
     """Ein vollständiger Triage-Deckel für **einen Block**: Meldungen, Sammelaktion,
     Einzelabfrage — für **eine** der beiden Listen aus `pipeline.ChapterVocabulary` (siehe
@@ -475,16 +527,22 @@ def run_triage_pass(
     Durchsicht d4f10fc): Vor dieser Behebung stand die Meldung „N noch nicht geprüft" hier
     und erschien nach **jedem** Block, obwohl die Einträge sehr wohl geprüft werden, sobald
     der Nutzer fortsetzt. Sie gehört ausschließlich an das Ende der Blockschleife
-    (`run_triage_blocks`), dorthin, wo tatsächlich feststeht, dass sie ungeprüft bleiben."""
+    (`run_triage_blocks`), dorthin, wo tatsächlich feststeht, dass sie ungeprüft bleiben.
+
+    `style` (Vorgabe `display.PLAIN_STYLE`, Auftragstext vom 02.09.2026, Bauschritt 2/2):
+    reicht bis in `_bulk_phase`/`_individual_phase`/`_entry_lines` durch — diese Funktion
+    wählt selbst keine Farbe, sie fügt nur ihre eigenen Meldungen in dieselbe Einrückung
+    wie die übrige Anzeige ein („Auch … die Zusammenfassungszeilen aus run_triage_pass
+    fügen sich in die Einrückung ein")."""
     if resolution.known or resolution.resolved_known:
         write_line(
-            f"{_count_label(resolution.known + resolution.resolved_known, label)} laut "
+            f"  {_count_label(resolution.known + resolution.resolved_known, label)} laut "
             f"Profil bereits bekannt ({resolution.resolved_known} davon erst nach Auflösen "
             "der Bedeutung) — nicht erneut abgefragt."
         )
     if resolution.skipped:
         write_line(
-            f"{_count_label(resolution.skipped, label)} übersprungen: keine der "
+            f"  {_count_label(resolution.skipped, label)} übersprungen: keine der "
             "Wörterbuchbedeutungen war zuzuordnen."
         )
 
@@ -503,6 +561,7 @@ def run_triage_pass(
         entries_by_occurrence=entries_by_occurrence,
         label=label,
         block_number=block_number,
+        style=style,
         read_line=read_line,
         write_line=write_line,
     )
@@ -514,6 +573,7 @@ def run_triage_pass(
         to_ask=to_ask,
         entries_by_occurrence=entries_by_occurrence,
         card_direction=card_direction,
+        style=style,
         read_line=read_line,
         write_line=write_line,
     )
@@ -528,9 +588,10 @@ def _ask_continue(read_line: ReadLine, write_line: WriteLine, remaining_count: i
     Sammelaktion (`_bulk_phase`, Enter = keine). Eine unbekannte Eingabe führt zu einer
     erneuten Frage statt zu einer stillschweigenden Annahme (Regel 13, wie `_ask_action`)."""
     while True:
+        write_line("")
         answer = (
             read_line(
-                f"{remaining_count} weitere Einträge stehen aus — weitermachen? "
+                f"  {remaining_count} weitere Einträge stehen aus — weitermachen? "
                 "[j]a/[n]ein (Enter = nein) "
             )
             .strip()
@@ -540,7 +601,7 @@ def _ask_continue(read_line: ReadLine, write_line: WriteLine, remaining_count: i
             return False
         if answer in ("j", "ja"):
             return True
-        write_line("Ungültige Eingabe — j oder n erwartet.")
+        write_line("  Ungültige Eingabe — j oder n erwartet.")
 
 
 _ResolveBlock = Callable[[Sequence[pipeline.VocabularyEntry]], pipeline.TriageResolution]
@@ -654,6 +715,7 @@ def run_triage_blocks(
     card_direction: CardDirection,
     read_line: ReadLine,
     write_line: WriteLine,
+    style: display.Style = display.PLAIN_STYLE,
 ) -> list[Card]:
     """Die Blockschleife (technik.md §12, „Blockweise Triage mit Vorladen — entschieden"):
     löst einen Block auf, schickt ihn durch `run_triage_pass`, und macht mit
@@ -707,7 +769,11 @@ def run_triage_blocks(
     `len(entries)`, die Kapitelmenge, mit der dieser Aufruf begonnen hat. Ohne diesen
     Hinweis hat ein Prüfer der Durchsicht von 5fda1b9 erst gegen eine um `known` und
     `skipped` zu kurze Formel gerechnet und einen Fehlbetrag von 934 Einträgen eine Weile
-    für einen eigenen Befund gehalten."""
+    für einen eigenen Befund gehalten.
+
+    `style` (Vorgabe `display.PLAIN_STYLE`, Auftragstext vom 02.09.2026, Bauschritt 2/2)
+    reicht bis in `run_triage_pass` durch; die eigenen Meldungen dieser Funktion (Blockende,
+    Fortsetzungsfrage) fügen sich in dieselbe Einrückung ein wie die übrige Anzeige."""
     cards: list[Card] = []
     resolution = resolve_visible_block(entries)
     block_number = 1
@@ -734,6 +800,7 @@ def run_triage_blocks(
             read_line=read_line,
             write_line=write_line,
             block_number=block_number,
+            style=style,
         )
         cards.extend(triage_pass.cards)
         current = resolution.remaining
@@ -746,16 +813,16 @@ def run_triage_blocks(
             # `triage_pass.unasked` — die im laufenden Block selbst noch nicht
             # entschiedenen Einträge, die `len(current)` allein nicht sieht.
             write_line(
-                f"{_count_label(len(current) + triage_pass.unasked, label)} noch nicht geprüft."
+                f"  {_count_label(len(current) + triage_pass.unasked, label)} noch nicht geprüft."
             )
             if prefetch is not None:
                 prefetch.cancel()
             return cards
         if not current:
-            write_line(f"Alle {label} für dieses Kapitel durchgesehen.")
+            write_line(f"  Alle {label} für dieses Kapitel durchgesehen.")
             return cards
         if not _ask_continue(read_line, write_line, len(current)):
-            write_line(f"{_count_label(len(current), label)} noch nicht geprüft.")
+            write_line(f"  {_count_label(len(current), label)} noch nicht geprüft.")
             assert (
                 prefetch is not None
             )  # current ist nicht leer, siehe oben — also wurde vorgeladen
@@ -764,6 +831,6 @@ def run_triage_blocks(
 
         assert prefetch is not None  # current ist nicht leer, siehe oben — also wurde vorgeladen
         if not prefetch.is_done():
-            write_line("Der nächste Block wird noch aufgelöst — bitte einen Moment …")
+            write_line("  Der nächste Block wird noch aufgelöst — bitte einen Moment …")
         resolution = prefetch.join()
         block_number += 1

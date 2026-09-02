@@ -37,7 +37,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from cli import config, export, interaction, model
+from cli import config, display, export, interaction, model
 from cli.display import finish_progress_line, safe_print, safe_print_progress
 from cli.interaction import ReadLine, WriteLine
 from libreverbum import dictionary, epub, extraction, pipeline, profile
@@ -526,7 +526,9 @@ def _resolve_silently(
         con.close()
 
 
-def _run(args: argparse.Namespace, *, read_line: ReadLine, write_line: WriteLine) -> int:
+def _run(
+    args: argparse.Namespace, *, read_line: ReadLine, write_line: WriteLine, style: display.Style
+) -> int:
     data_dir = args.data_dir or config.default_data_dir()
     # Jeder Lauf nennt sein Datenverzeichnis: Wo Profil, Wörterbuch und config.toml
     # liegen, soll niemand suchen müssen (technik.md §9, „Wohin die Dateien gehören").
@@ -625,7 +627,8 @@ def _run(args: argparse.Namespace, *, read_line: ReadLine, write_line: WriteLine
         # nur für den ersten Block, `resolve_silent_block` (eigene Profilverbindung, keine
         # Ausgabe) für jeden vorgeladenen — siehe `_resolve_with_progress`/`_resolve_silently`
         # oben.
-        write_line("== Wörter ==")
+        for line in display.cover("Wörter", style):
+            write_line(line)
         word_cards = interaction.run_triage_blocks(
             con=con,
             book=result.chapter.book,
@@ -650,10 +653,12 @@ def _run(args: argparse.Namespace, *, read_line: ReadLine, write_line: WriteLine
             ),
             label="Wörter",
             card_direction=card_direction,
+            style=style,
             read_line=read_line,
             write_line=write_line,
         )
-        write_line("== Wendungen ==")
+        for line in display.cover("Wendungen", style):
+            write_line(line)
         expression_cards = interaction.run_triage_blocks(
             con=con,
             book=result.chapter.book,
@@ -678,6 +683,7 @@ def _run(args: argparse.Namespace, *, read_line: ReadLine, write_line: WriteLine
             ),
             label="Wendungen",
             card_direction=card_direction,
+            style=style,
             read_line=read_line,
             write_line=write_line,
         )
@@ -711,16 +717,23 @@ def main(
     *,
     read_line: ReadLine = input,
     write_line: WriteLine = safe_print,
+    style: display.Style | None = None,
 ) -> int:
     """Ein vollständiger Kapiteldurchlauf (bauplan.md T16) — der Bericht zu T16 nennt die
     Aufrufreihenfolge im Einzelnen unter „Wie ein vollständiger Durchlauf aussieht".
 
     `read_line`/`write_line` sind austauschbar (Vorgabe `input`/`cli.display.safe_print`):
-    Tests ersetzen beide, statt eine echte Konsole zu bedienen.
+    Tests ersetzen beide, statt eine echte Konsole zu bedienen. `style` folgt derselben
+    Idee (Auftragstext vom 02.09.2026, Bauschritt 2/2 der Konsolenausgabe): fehlt er,
+    ermittelt `display.detect_style()` ihn **einmal** an `sys.stdout` — dem tatsächlichen
+    Ausgabeziel, unabhängig von einem in Tests injizierten `write_line`. Tests, denen der
+    Ausgabestil nicht gleichgültig ist (etwa `cli.display.PLAIN_STYLE` für eine
+    deterministische, plattformunabhängige Form), geben ihn stattdessen selbst vor.
     """
     args = _parse_args(argv)
+    resolved_style = style if style is not None else display.detect_style()
     try:
-        return _run(args, read_line=read_line, write_line=write_line)
+        return _run(args, read_line=read_line, write_line=write_line, style=resolved_style)
     except EOFError:
         # (Befund leicht a, Durchsicht ee34796): Eine abgeschnittene Eingabe (Pipe-Ende,
         # umgeleitetes /dev/null) lässt `input()` — und damit jedes `read_line` der fünf

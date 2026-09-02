@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from cli import display
 from cli import main as cli_main
 from cli.main import _build_parser, main
 from libreverbum import dictionary, epub, pipeline, profile
@@ -98,6 +99,20 @@ def book_epub(tmp_path: Path) -> Path:
         archive.writestr("OEBPS/chapter1.xhtml", _chapter_xhtml("Erstes Kapitel", _CHAPTER_TEXT))
         archive.writestr("OEBPS/nav.xhtml", _NAV_XHTML)
     return path
+
+
+def _entry_word(pending: list[str]) -> str:
+    """Extrahiert die Wortform aus der Kopfzeile eines Triage-Eintrags (Bauschritt 2/2 der
+    Konsolenausgabe, 02.09.2026: `cli.interaction._entry_lines`, Format „kompakte
+    Kopfzeile") — gesucht wird die Zeile mit dem ASCII-Pfeil, den `display.PLAIN_STYLE`
+    liefert (die drei Testkonsolen unten geben diesen Stil über `main(..., style=…)`
+    ausdrücklich vor, damit die Form plattformunabhängig feststeht statt vom tatsächlichen
+    `sys.stdout` der Testumgebung abzuhängen)."""
+    for line in pending:
+        stripped = line.strip()
+        if "  ->  " in stripped:
+            return stripped.split("  ->  ", 1)[0]
+    return ""
 
 
 def _no_read(prompt: str) -> str:
@@ -186,9 +201,8 @@ class _ScriptedConsole:
 
     def read(self, prompt: str) -> str:
         def _on_triage(pending: list[str]) -> str:
-            first_line = pending[0] if pending else ""
+            word = _entry_word(pending)
             pending.clear()
-            word = first_line.split(" (", 1)[0]
             return "l" if word in self._learn_words else "s"
 
         return _read_common_or_triage(prompt, self._pending, on_triage=_on_triage)
@@ -210,9 +224,8 @@ class _MarkOneWordKnownConsole:
 
     def read(self, prompt: str) -> str:
         def _on_triage(pending: list[str]) -> str:
-            first_line = pending[0] if pending else ""
+            word = _entry_word(pending)
             pending.clear()
-            word = first_line.split(" (", 1)[0]
             return "k" if word == self._known_word else "s"
 
         return _read_common_or_triage(prompt, self._pending, on_triage=_on_triage)
@@ -230,7 +243,7 @@ class _RejectWordConsole:
 
     def write(self, text: str) -> None:
         self.log.append(text)
-        if f"{self._forbidden_word} (" in text:
+        if text.strip().startswith(f"{self._forbidden_word}  ->"):
             raise AssertionError(
                 f"{self._forbidden_word!r} wurde im zweiten Durchlauf erneut angezeigt — "
                 "das Profil greift nicht (Abnahmekriterium 6)."
@@ -302,9 +315,10 @@ def test_acceptance_6_a_second_run_does_not_ask_about_words_marked_known(
         [str(book_epub), "--chapter", "1", "--data-dir", str(data_dir)],
         read_line=first_console.read,
         write_line=first_console.write,
+        style=display.PLAIN_STYLE,
     )
     assert first_exit == 0, "\n".join(first_console.log)
-    assert any(line.startswith("watch (") for line in first_console.log), (
+    assert any(line.strip().startswith("watch  ->") for line in first_console.log), (
         "Testvoraussetzung verletzt: 'watch' wurde im ersten Durchlauf gar nicht gefragt."
     )
 
@@ -313,6 +327,7 @@ def test_acceptance_6_a_second_run_does_not_ask_about_words_marked_known(
         [str(book_epub), "--chapter", "1", "--data-dir", str(data_dir)],
         read_line=second_console.read,
         write_line=second_console.write,
+        style=display.PLAIN_STYLE,
     )
     assert second_exit == 0, "\n".join(second_console.log)
 
@@ -346,9 +361,10 @@ def test_acceptance_6_a_second_run_does_not_ask_about_an_ambiguous_word_marked_k
         [str(book_epub), "--chapter", "1", "--data-dir", str(data_dir)],
         read_line=first_console.read,
         write_line=first_console.write,
+        style=display.PLAIN_STYLE,
     )
     assert first_exit == 0, "\n".join(first_console.log)
-    assert any(line.startswith("bank (") for line in first_console.log), (
+    assert any(line.strip().startswith("bank  ->") for line in first_console.log), (
         "Testvoraussetzung verletzt: 'bank' wurde im ersten Durchlauf gar nicht gefragt."
     )
 
@@ -357,6 +373,7 @@ def test_acceptance_6_a_second_run_does_not_ask_about_an_ambiguous_word_marked_k
         [str(book_epub), "--chapter", "1", "--data-dir", str(data_dir)],
         read_line=second_console.read,
         write_line=second_console.write,
+        style=display.PLAIN_STYLE,
     )
     assert second_exit == 0, "\n".join(second_console.log)
 
@@ -971,6 +988,7 @@ def test_full_run_learns_a_word_and_an_expression_and_exports_them(
         ],
         read_line=console.read,
         write_line=console.write,
+        style=display.PLAIN_STYLE,
     )
 
     assert exit_code == 0, "\n".join(console.log)
@@ -985,6 +1003,51 @@ def test_full_run_learns_a_word_and_an_expression_and_exports_them(
     html = printouts[0].read_text(encoding="utf-8")
     assert "watch" in html
     assert "gave up" in html
+
+
+def test_full_run_uses_the_cover_banner_for_both_decks(
+    tmp_path: Path,
+    book_epub: Path,
+    mini_dictionary_db: Path,
+    model_server_double: ModelServerDouble,
+) -> None:
+    """Bauschritt 2/2 der Konsolenausgabe (02.09.2026): `== Wörter ==`/`== Wendungen ==`
+    sind durch das Deckel-Banner aus `cli.display.cover` ersetzt — geprüft am vollen
+    Einstiegspunkt, für beide Decksel.
+
+    Verfälschungsprobe: `display.cover(...)` durch die alte Zeile
+    `write_line(f"== {label} ==")` ersetzt ließ diesen Test rot werden — die neue
+    Bannerzeile fehlte, die alte Markerzeile stand wieder da."""
+    data_dir = tmp_path / "data"
+    _write_config(
+        data_dir,
+        model_url=model_server_double.url,
+        model_name=model_server_double.model_name,
+        dictionary_path=mini_dictionary_db,
+    )
+    model_server_double.choice = 1
+    console = _ScriptedConsole(learn_words=set())
+
+    exit_code = main(
+        [
+            str(book_epub),
+            "--chapter",
+            "1",
+            "--data-dir",
+            str(data_dir),
+            "--output-dir",
+            str(tmp_path / "export"),
+        ],
+        read_line=console.read,
+        write_line=console.write,
+        style=display.PLAIN_STYLE,
+    )
+
+    assert exit_code == 0, "\n".join(console.log)
+    assert "  Wörter" in console.log
+    assert "  Wendungen" in console.log
+    assert not any(line == "== Wörter ==" for line in console.log)
+    assert not any(line == "== Wendungen ==" for line in console.log)
 
 
 def test_full_run_reports_progress_through_cli_display(
@@ -1033,6 +1096,7 @@ def test_full_run_reports_progress_through_cli_display(
         ],
         read_line=console.read,
         write_line=console.write,
+        style=display.PLAIN_STYLE,
     )
 
     assert exit_code == 0, "\n".join(console.log)
@@ -1070,7 +1134,9 @@ def test_full_run_prints_at_least_one_line_naming_the_running_analysis_before_tr
     stumm das ganze Buch analysierte (`extraction.book_proper_noun_ratios`, technik.md
     §5/§13) — der stille Fehlschlag aus Regel 13. Hier über den vollen Einstiegspunkt
     geprüft: Zwischen der Zeile „Sprachmodell geladen." und dem Beginn der Wörter-Triage
-    („== Wörter ==") steht mindestens eine Zeile, die die laufende Analyse benennt.
+    (dem Deckel-Banner aus `cli.display.cover`, seit Bauschritt 2/2 der Konsolenausgabe an
+    die Stelle von „== Wörter ==" getreten) steht mindestens eine Zeile, die die laufende
+    Analyse benennt.
 
     `safe_print_progress` wird — anders als in
     `test_full_run_reports_progress_through_cli_display` — auf dieselbe Konsole umgeleitet
@@ -1109,11 +1175,12 @@ def test_full_run_prints_at_least_one_line_naming_the_running_analysis_before_tr
         ],
         read_line=console.read,
         write_line=console.write,
+        style=display.PLAIN_STYLE,
     )
 
     assert exit_code == 0, "\n".join(console.log)
     loaded_index = console.log.index("Sprachmodell geladen.")
-    triage_index = console.log.index("== Wörter ==")
+    triage_index = console.log.index("  Wörter")  # Deckel-Banner, cli.display.cover
     between = console.log[loaded_index + 1 : triage_index]
     # Stichwörter der vier Phasen aus `_run_chapter_with_progress` — nicht bloß irgendeine
     # Zeile: Die Abschlusszeile „Kapitel N: … Wörter, … Wendungen." steht ebenfalls in

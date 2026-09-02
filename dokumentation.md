@@ -93,6 +93,13 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | Druckausgabe | `printout` |
 | Blattzählung („Blatt n von m", nur bei mehr als einem Blatt) | `sheet_label` |
 | unsicher (markierter Eintrag) | `uncertain` |
+| Ausgabestil (Fähigkeiten des Ziels: Farbe, Sonderzeichen, Breite, einmal je Lauf ermittelt) | `style` (`Style`) |
+| Fettdruck | `bold` |
+| gedimmt | `dim` |
+| hervorgehoben (farbig) | `highlight` |
+| Trennlinie (vor einem Eintrag, mit Zähler) | `rule` (`entry_rule`) |
+| Deckel-Banner | `cover` |
+| Umbrechen mit gleichbleibender Einrückung | `wrap_indented` |
 | Gegenstand des Kernablaufs | `entity` |
 | Durchlauf, Verkettung der Schritte | `pipeline` |
 | Lesereihenfolge, Manifest (EPUB) | `spine`, `manifest` |

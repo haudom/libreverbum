@@ -20,8 +20,8 @@ from pathlib import Path
 
 import pytest
 
-from cli import interaction
-from libreverbum import pipeline, profile
+from cli import display, interaction
+from libreverbum import dictionary, pipeline, profile
 from libreverbum.entities import Book, CardDirection, Lemma, Occurrence, Sense
 from libreverbum.profile import VocabularyStatus
 
@@ -458,7 +458,249 @@ def test_new_meaning_of_a_known_word_is_marked_in_the_display(
 
     marked = [line for line in written if "neue Bedeutung eines bekannten Wortes" in line]
     assert len(marked) == 1
-    assert "Ufer" in marked[0]
+    # Bauschritt 2/2 der Konsolenausgabe (02.09.2026): Die Markierung steht seither auf
+    # einer eigenen Zeile statt an die Bedeutungszeile angehängt — "Ufer" steht deshalb
+    # nicht mehr in derselben Zeile wie die Markierung, sondern in der Kopfzeile davor.
+    heading = [line for line in written if "Ufer" in line]
+    assert len(heading) == 1
+
+
+def test_the_new_meaning_marker_appears_only_for_that_one_status(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """Gegenprobe zum vorigen Test: Ein Eintrag mit `VocabularyStatus.UNKNOWN` (der
+    häufige Fall) trägt die Markierung „neue Bedeutung eines bekannten Wortes" **nicht** —
+    sonst wäre die Kennzeichnung bedeutungslos.
+
+    Verfälschungsprobe: Die `if entry.status is VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD`
+    in `_entry_lines` durch eine Bedingung ersetzt, die immer wahr ist, ließ diesen Test
+    rot werden — der vorige Test allein hätte das nicht bemerkt, weil er nie einen
+    `UNKNOWN`-Eintrag prüft."""
+    entry = _resolved_entry("word0", "NOUN", 1, "Wort", status=VocabularyStatus.UNKNOWN)
+    resolution = pipeline.TriageResolution(
+        entries=[entry], known=0, resolved_known=0, skipped=0, remaining=[]
+    )
+    written: list[str] = []
+    answers = iter(["", "s"])
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(answers),
+        write_line=written.append,
+    )
+
+    assert not any("neue Bedeutung eines bekannten Wortes" in line for line in written)
+
+
+def test_an_entry_shows_word_form_pos_frequency_sense_label_translation_and_example(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """Ein Eintrag zeigt weiterhin sämtliche Angaben — Wortform, Wortart, Häufigkeit,
+    Bedeutungsangabe, Übersetzung, Belegsatz —, nur umgeordnet (Auftragstext vom
+    02.09.2026, „Es geht kein Inhalt verloren"). Geprüft an einem Eintrag mit
+    Platzhalter-Bedeutungsangabe (`dictionary.NO_SENSE_LABEL`, Regel 1: Zeilen ohne
+    `sense`-Text werden **nicht** weggefiltert), damit auch der häufige Fall ohne
+    `wikdict_sense`-Text gedeckt ist."""
+    sense = Sense(
+        lemma=Lemma(text="lurid", pos="ADJ"),
+        translation="grell",
+        wikdict_sense=None,
+        wikdict_trans_list="grell",
+        wikdict_lexentry="eng/lurid__Adjective__1",
+    )
+    occurrence = Occurrence(
+        book=_BOOK,
+        chapter_number=1,
+        lemma=Lemma(text="lurid", pos="ADJ"),
+        word_form="lurid",
+        example_sentence="The lurid light flickered on the wall.",
+        frequency=3,
+        proper_noun_frequency=0,
+    )
+    entry = pipeline.ResolvedEntry(
+        occurrence=occurrence, sense=sense, status=VocabularyStatus.UNKNOWN
+    )
+    resolution = pipeline.TriageResolution(
+        entries=[entry], known=0, resolved_known=0, skipped=0, remaining=[]
+    )
+    written: list[str] = []
+    answers = iter(["", "s"])
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(answers),
+        write_line=written.append,
+    )
+
+    joined = "\n".join(written)
+    assert "lurid" in joined
+    assert "grell" in joined
+    assert "ADJ" in joined
+    assert "3x im Kapitel" in joined
+    assert dictionary.NO_SENSE_LABEL in joined
+    assert "The lurid light flickered on the wall." in joined
+
+
+def test_an_uncertain_entry_without_a_dictionary_match_still_shows_its_placeholder_label(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """Regel 1 (dokumentation.md §4) am zweiten Randfall: Ein `uncertain`-Eintrag (keine
+    Wörterbuchzeile getroffen) zeigt weiterhin `dictionary.UNCERTAIN_LABEL` statt zu
+    verschwinden — dieselbe Zusicherung wie beim vorigen Test, hier für den Platzhalter
+    „unsicher" statt „keine Angabe"."""
+    placeholder = Sense(lemma=Lemma(text="obscure", pos="ADJ"), uncertain=True)
+    entry = pipeline.ResolvedEntry(
+        occurrence=_occurrence("obscure", "ADJ", 1),
+        sense=placeholder,
+        status=VocabularyStatus.UNKNOWN,
+    )
+    resolution = pipeline.TriageResolution(
+        entries=[entry], known=0, resolved_known=0, skipped=0, remaining=[]
+    )
+    written: list[str] = []
+    answers = iter(["", "s"])
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(answers),
+        write_line=written.append,
+    )
+
+    assert any(dictionary.UNCERTAIN_LABEL in line for line in written)
+
+
+def test_two_consecutive_entries_are_separated_by_a_divider(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """Die ursprüngliche Beschwerde (Auftragstext vom 02.09.2026, Nutzermeldung): „Man
+    sieht klar wo die vorherige Ausgabe aufhört, die nächste beginnt." Zwei
+    aufeinanderfolgende Einträge tragen deshalb je eine eigene Trennlinie
+    (`display.entry_rule`) — und dazwischen mindestens eine Leerzeile, der Trenner zur
+    vorigen Eingabezeile.
+
+    Verfälschungsprobe: `write_line("")` nach der Entscheidung eines Eintrags
+    (`_individual_phase`) entfernt ließ die Leerzeilen-Zusicherung unten fehlschlagen,
+    während die Trennlinien selbst (aus `_entry_lines`) unverändert blieben — dieser Test
+    prüft deshalb **beides**, nicht nur die Trennlinien allein."""
+    resolution = pipeline.TriageResolution(
+        entries=_entries(2), known=0, resolved_known=0, skipped=0, remaining=[]
+    )
+    written: list[str] = []
+    answers = iter(["", "s", "s"])
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(answers),
+        write_line=written.append,
+        style=display.PLAIN_STYLE,
+    )
+
+    rule_indices = [
+        index
+        for index, line in enumerate(written)
+        if line.strip().startswith("-") and " von " in line
+    ]
+    assert len(rule_indices) == 2, "Erwartet: eine Trennlinie je Eintrag."
+    # Zwischen den beiden Trennlinien stehen zwei Leerzeilen: die aus `_ask_action` vor
+    # dem eigenen Prompt des ersten Eintrags **und** die trennende Leerzeile danach
+    # (Auftragstext). Nur auf "mindestens eine" zu prüfen wäre zu schwach — diese eine
+    # steht auch ohne den Trenner bereits da, weil jede Einzelfrage selbst mit einer
+    # Leerzeile beginnt (dokumentation.md §5, „Bleibt der Test … grün, ist die
+    # Zusicherung zu schwach").
+    blanks_between = [
+        index for index in range(rule_indices[0] + 1, rule_indices[1]) if written[index] == ""
+    ]
+    assert len(blanks_between) == 2, (
+        "Zwischen den beiden Trennlinien fehlt die trennende Leerzeile nach der Entscheidung."
+    )
+
+
+def test_entries_use_ascii_fallback_characters_without_unicode_support(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """`display.PLAIN_STYLE` (keine Sonderzeichenfähigkeit) — der Pfeil in der Kopfzeile
+    steht als ASCII-Ersatz `->`, nicht als `→`, und kein `cli.interaction`-Baustein
+    schreibt das Unicode-Zeichen von Hand hinein."""
+    resolution = pipeline.TriageResolution(
+        entries=_entries(1), known=0, resolved_known=0, skipped=0, remaining=[]
+    )
+    written: list[str] = []
+    answers = iter(["", "s"])
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(answers),
+        write_line=written.append,
+        style=display.PLAIN_STYLE,
+    )
+
+    joined = "\n".join(written)
+    assert "  ->  " in joined
+    assert "→" not in joined
+
+
+def test_no_written_line_contains_a_control_sequence_without_ansi_support(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """Die wichtigste Zusicherung überhaupt (Auftragstext vom 02.09.2026): Ohne
+    ANSI-fähiges Ziel (`display.PLAIN_STYLE`) enthält **keine** ausgegebene Zeile eine
+    Steuersequenz (`\\x1b`) — sie betrifft jede Umleitung in eine Datei. Geprüft über
+    einen vollständigen Block mit Sammelaktion, einer neuen Bedeutung eines bekannten
+    Wortes und einer regulären Einzelabfrage, damit kein Anzeigepfad ausgelassen wird.
+
+    Verfälschungsprobe: `display._decorate` fest die ANSI-Codes anhängen lassen, ohne
+    `style.supports_color` auszuwerten (dieselbe Verfälschung wie in
+    `tests/test_cli_display.py`), ließ diesen Test rot werden."""
+    entries = [
+        _resolved_entry("word0", "NOUN", 3, "Erstens"),
+        _resolved_entry(
+            "bank", "NOUN", 2, "Ufer", status=VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD
+        ),
+    ]
+    resolution = pipeline.TriageResolution(
+        entries=entries, known=0, resolved_known=0, skipped=0, remaining=[]
+    )
+    written: list[str] = []
+    answers = iter(["1", "s"])  # Sammelaktion markiert word0, dann "skip" für bank
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(answers),
+        write_line=written.append,
+        style=display.PLAIN_STYLE,
+    )
+
+    assert not any("\x1b" in line for line in written)
 
 
 def test_a_word_without_a_dictionary_entry_keeps_its_uncertain_marker_when_learned(
@@ -1034,8 +1276,11 @@ def test_run_triage_blocks_names_the_block_number_from_the_second_block_on(
     )
 
     assert len(calls) == 2
-    headings = [line for line in written if line.startswith("-- Wörter")]
-    assert headings == ["-- Wörter: 1 --", "-- Wörter (Block 2): 1 --"]
+    # Bauschritt 2/2 der Konsolenausgabe (02.09.2026): Der Blockkopf trägt seither die
+    # Einrückung und keine Bindestrich-Umrahmung mehr ("--...--") — geprüft wird deshalb
+    # am Wortlaut, nicht an der alten Umrahmung.
+    headings = [line.strip() for line in written if line.strip().startswith("Wörter")]
+    assert headings == ["Wörter: 1", "Wörter (Block 2): 1"]
 
 
 def test_run_triage_blocks_prefetches_the_next_block_before_the_continuation_question(

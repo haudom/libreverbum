@@ -2911,6 +2911,68 @@ fortschreibenden Zeile.
   genau eine Zeile mit „1 von 1" — ob das noch als Fortschritt wahrgenommen wird oder nur
   als Ruckeln, ist nicht an einem echten Nutzer geprüft
 
+### Triage-Anzeige — entschieden
+
+> Bauschritt 2 entschieden am 02.09.2026 (Auftragstext vom 02.09.2026, Nutzermeldung).
+
+Die Beschwerde, wörtlich:
+
+> Ich finde die Triage wie sie bis jetzt ist ziemlich unübersichtlich. Man muss immer das
+> Wort um das es geht zwischen dem Zitat aus dem Buch und der Ausgabe aus dem vorherigen
+> Wort suchen. […] Man sieht klar wo die vorherige Ausgabe aufhört, die nächste beginnt.
+> Man sieht auf den ersten Blick um welches Wort es eigentlich geht und was die Bedeutung
+> von dem Wort ist.
+
+`cli.interaction._entry_lines` druckte drei Zeilen ohne Leerzeile und ohne Trenner davor —
+die Eingabezeile eines Eintrags klebte direkt über der Wortform des nächsten, und die
+Wortform selbst stand am Zeilenanfang der ersten Zeile, während die deutsche Übersetzung am
+Ende der dritten stand. Beides ist derselbe Fehler wie bei der Ladephase oben: kein stiller
+Fehlschlag im Sinn von Regel 13, aber eine Anzeige, die ihren eigentlichen Zweck — dem
+Nutzer in Sekunden zu sagen, worum es geht — nicht erfüllt.
+
+**Entschieden: Format „kompakte Kopfzeile".** Trennlinie mit Zähler, Wortform und
+Übersetzung zusammen in einer Kopfzeile, Nebendaten (Wortart, Häufigkeit,
+Bedeutungsangabe) und Belegsatz eingerückt darunter — die Trennlinie beantwortet „wo hört
+die vorige Ausgabe auf", die Kopfzeile „um welches Wort geht es und was heißt es". Drei
+Ebenen sind dabei klar unterschieden: der Deckel (`cli.display.cover`, „Wörter"/
+„Wendungen", ersetzt `== Wörter ==`) am stärksten, der Blockkopf mit der nummerierten
+Sammelaktionsliste darunter, der Einzeleintrag als dritte Ebene. Kein Inhalt geht dabei
+verloren — Regel 1 gilt unverändert, `dictionary.label` liefert weiter `NO_SENSE_LABEL`
+beziehungsweise `UNCERTAIN_LABEL`, wo `sense`-Text fehlt.
+
+**Farbe: ja, sparsam, und nur wo sie trägt.** Wortform fett, Übersetzung farbig
+hervorgehoben, Trennlinie und Nebendaten gedimmt — aber ausschließlich, wenn das
+Ausgabeziel tatsächlich ein Terminal ist, das ANSI-Steuersequenzen darstellt
+(`cli.display.detect_style`, einmal je Lauf ermittelt, nicht je Zeile). Sonst dieselbe
+Ausgabe ohne jede Steuersequenz — die Struktur trägt ohne Farbe genauso, weil kein
+Baustein in `cli.interaction` einen Farbcode von Hand schreibt, sondern jeder über
+`cli.display` geht.
+
+**Zwei Fallen haben die Umsetzung bestimmt:**
+
+- **`conhost` ohne eingeschalteten VT-Modus.** Die alte Windows-Konsole zeigt
+  `ENABLE_VIRTUAL_TERMINAL_PROCESSING` nicht von selbst an — `isatty()` allein sagt dort
+  nichts darüber, ob eine ANSI-Sequenz als Farbe erscheint oder wörtlich als `←[1mlurid←[0m`
+  auf dem Bildschirm steht. `detect_style` schaltet den Modus deshalb selbst über
+  `ctypes`/`kernel32` auf dem echten Handle des Ziels ein und nimmt Farbe nur, wenn das
+  gelingt — Standardbibliothek, kein `colorama` (Regel 15). Jeder Fehlschlag beim Ermitteln
+  eines echten Konsolen-Handles (etwa ein Test-Double oder eine umgeleitete Datei) liefert
+  `False`, nicht eine durchgereichte Ausnahme: Farbe ist eine Fähigkeit des Ziels, keine
+  Voraussetzung für den Lauf.
+- **Die umgeleitete Ausgabe, deren Kodierung die Sonderzeichen nicht trägt.** `─`, `→`,
+  `·` und die typografischen Anführungszeichen überleben eine Umleitung in eine Datei
+  unter Windows nicht zwingend: Die Zielkodierung ist dann oft nicht UTF-8, und ein
+  bloßes `safe_print` machte daraus erst hinterher `?` — eine Trennlinie würde zu einer
+  Reihe Fragezeichen. `detect_style` prüft deshalb **vorab**, ob die Kodierung des Ziels
+  diese Zeichen überhaupt darstellen kann (ein `encode`-Versuch in einem `try`), und fällt
+  sonst auf `-`, `->`, `|` und gerade Anführungszeichen zurück — derselbe Mechanismus wie
+  bei `safe_print`s Ausweichkodierung, nur der eigentlichen Ausgabe vorgeschaltet statt ihr
+  nachgestellt.
+
+Beide Fähigkeiten werden **einmal** je Lauf ermittelt, an einem übergebenen Strom (Vorgabe
+`sys.stdout`) — das hält `detect_style` selbst ohne echtes Terminal prüfbar und vermeidet
+den Aufwand, sie bei jeder einzelnen Zeile neu zu bestimmen.
+
 ---
 
 ## Warum die Reihenfolge zwingend ist
