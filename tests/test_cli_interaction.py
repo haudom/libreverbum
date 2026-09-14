@@ -305,7 +305,9 @@ def test_empty_bulk_answer_still_skips_immediately_without_booking_anything(
     profile_con: sqlite3.Connection,
 ) -> None:
     """Enter bleibt unverändert „keine Sammelaktion" (Auftragstext, Punkt 1): eine leere
-    Antwort liefert sofort `set()`, ohne Rückfrage und ohne ein Ereignis im Profil.
+    Antwort liefert sofort `set()`, ohne Rückfrage und ohne ein Ereignis für die
+    Sammelaktion selbst — die anschließende Einzelabfrage bucht ihre eigenen fünf
+    `skip`-Ereignisse, das ist hier nicht gemeint.
 
     Verfälschungsprobe: Fragte `_bulk_phase` auch bei einer Leereingabe erneut nach (statt
     sofort zurückzukehren), verbrauchte die Sammelaktion die erste individuelle Antwort
@@ -330,6 +332,68 @@ def test_empty_bulk_answer_still_skips_immediately_without_booking_anything(
 
     bulk_marked = {lemma for lemma, _, origin in _events(profile_con) if origin == "bulk_mark"}
     assert bulk_marked == set()
+
+
+def test_bulk_action_books_the_first_entry_after_invalid_answer(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """Zusicherung an den **unteren** Rand (Position 1) nach einer vorangegangenen
+    Fehleingabe — die Tests oben zur erneuten Frage prüfen nur die Mitte der Liste ("3")
+    weiter; ein Fehler, der allein einen Rand trifft, käme dort nicht durch.
+
+    Verfälschungsprobe: `ordered[position - 1]` durch `ordered[position % len(ordered)]`
+    ersetzt bucht hier `word1` statt `word0` (`1 % 5 == 1`, korrekt wäre `1 - 1 == 0`) —
+    die Zusicherung auf `{"word0"}` war daran rot."""
+    resolution = pipeline.TriageResolution(
+        entries=_entries(5), known=0, resolved_known=0, skipped=0, remaining=[]
+    )
+    # Sammelaktion: "1O" (Vertipper), dann "1" (unterer Rand). Einzelabfrage: 4x "s".
+    answers = iter(["1O", "1", "s", "s", "s", "s"])
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(answers),
+        write_line=_no_op_write,
+    )
+
+    bulk_marked = {lemma for lemma, _, origin in _events(profile_con) if origin == "bulk_mark"}
+    assert bulk_marked == {"word0"}
+
+
+def test_bulk_action_books_the_last_entry_after_invalid_answer(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """Zusicherung an den **oberen** Rand (Position `len(ordered)`) nach einer
+    vorangegangenen Fehleingabe — Gegenstück zum vorigen Test.
+
+    Verfälschungsprobe: `ordered[position - 1]` durch `ordered[position % len(ordered)]`
+    ersetzt bucht hier nur `word0` statt aller fünf Wörter (`5 % 5 == 0`, korrekt wäre
+    `5 - 1 == 4`) — die Zusicherung unten war daran rot."""
+    resolution = pipeline.TriageResolution(
+        entries=_entries(5), known=0, resolved_known=0, skipped=0, remaining=[]
+    )
+    # Sammelaktion: "1O" (Vertipper), dann "5" (oberer Rand, len(ordered)). Die
+    # Sammelaktion bucht damit bereits alle fünf Wörter — keine Einzelabfrage mehr nötig.
+    answers = iter(["1O", "5"])
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(answers),
+        write_line=_no_op_write,
+    )
+
+    bulk_marked = {lemma for lemma, _, origin in _events(profile_con) if origin == "bulk_mark"}
+    assert bulk_marked == {"word0", "word1", "word2", "word3", "word4"}
 
 
 def test_numbered_bulk_list_is_printed_exactly_once_despite_repeated_invalid_answers(
@@ -462,15 +526,25 @@ def test_invalid_nonempty_answer_to_the_triage_prompt_names_what_was_typed(
 def test_ask_action_hint_uses_typographic_quotes_on_a_unicode_capable_style() -> None:
     """Gegenprobe zum vorigen Test: Auf einem `Style` mit Unicode-Fähigkeit erscheinen die
     typografischen Anführungszeichen aus `display.quote`, nicht die ASCII-Form — der Hinweis
-    hängt also tatsächlich am übergebenen `style`, nicht an einer fest verdrahteten Form."""
+    hängt also tatsächlich am übergebenen `style`, nicht an einer fest verdrahteten Form.
+
+    (Befund 1, Durchsicht ad434b6): Die gemischt geschriebene Eingabe „Ka" ist bewusst
+    gewählt — sie sichert zusätzlich zu, dass der Hinweis die getippte Schreibung zeigt
+    (Regel 13, Entscheidung vom 14.09.2026): Gezeigt wird die Eingabe nach `.strip()`,
+    aber **vor** dem `.lower()` der Auswertung.
+
+    Verfälschungsprobe: `display.quote(typed, style)` durch
+    `display.quote(typed.lower(), style)` ersetzt zeigte „ka“ statt „Ka“ — die Zusicherung
+    auf `„Ka“` in `hint` war daran rot, obwohl die ganze Suite sonst grün blieb (493
+    bestanden)."""
     unicode_style = display.Style(supports_color=False, supports_unicode=True, width=80)
     written: list[str] = []
-    answers = iter(["ka", "s"])
+    answers = iter(["Ka", "s"])
 
     interaction._ask_action(lambda _prompt: next(answers), written.append, style=unicode_style)
 
-    hint = next(line for line in written if "ka" in line)
-    assert "„ka“" in hint
+    hint = next(line for line in written if "Ka" in line)
+    assert "„Ka“" in hint
 
 
 @pytest.mark.parametrize(

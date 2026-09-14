@@ -280,8 +280,11 @@ def dot(style: Style) -> str:
 
 
 def quote(text: str, style: Style) -> str:
-    """Setzt `text` (den Belegsatz) in Anführungszeichen — typografisch (`„…“`) auf einem
-    fähigen Ziel, sonst gerade ASCII-Anführungszeichen.
+    """Setzt `text` in Anführungszeichen — typografisch (`„…“`) auf einem fähigen Ziel,
+    sonst gerade ASCII-Anführungszeichen. Nicht nur für den Belegsatz eines
+    Triage-Eintrags: `cli.interaction` ruft dieselbe Funktion seit `ad434b6`/`776c1c9`
+    auch für die vom Nutzer eingegebene Zeichenfolge, wenn `_ask_action` oder
+    `_bulk_phase` eine ungültige Antwort zurückmelden.
 
     (Befund 2, Durchsicht e537273): `cli.main._choose_chapter` schreibt für den Buchtitel
     dieselben typografischen Zeichen fest in den Quelltext, aber **ungeschützt** — ohne
