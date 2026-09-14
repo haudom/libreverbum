@@ -2328,12 +2328,17 @@ den Fehler deshalb zuerst woanders.
   bekommt** statt der `tomllib`-Meldung aus der Falle oben. Regel 13 ist erfüllt — es bricht
   laut ab —, die Sprachregel und der Hinweis auf die Datei sind es nicht
 - **Die Eingabeprüfung der Kommandozeile fragt nicht überall nach.** Sie ist in Phase 1 die
-  einzige Oberfläche, und zwei Stellen darin sind still:
-  - Der Triage-Prompt lautet `[k]enne ich  [l]ernen  [s]kip  [q]uit >`, und `_ACTIONS` legt
+  einzige Oberfläche, und eine Stelle darin ist noch still:
+  - ~~Der Triage-Prompt lautet `[k]enne ich  [l]ernen  [s]kip  [q]uit >`, und `_ACTIONS` legt
     eine **Leereingabe als `skip`** aus. Eine Vorrichtung, die versehentlich leere Zeilen
     schickt, bucht dadurch nichts und der Lauf sieht trotzdem plausibel aus — **zwei
     Abnahmeläufe sind daran verlorengegangen**, bevor die Ursache feststand. Das ist der
-    stille Fehlschlag aus Regel 13 an der Eingabe statt an der Ausgabe
+    stille Fehlschlag aus Regel 13 an der Eingabe statt an der Ausgabe~~ — **behoben am
+    14.09.2026** (Nutzerentscheidung): `_ACTIONS` bildet die Leereingabe nicht mehr auf
+    `skip` ab, sie fällt in denselben Zweig wie jede unbekannte Eingabe. `_ask_action`
+    fragt bei einer Leereingabe wie bei jeder ungültigen erneut nach und nennt dabei, was
+    ankam — die eingegebene Zeichenfolge in Anführungszeichen bei nicht-leerer, ein eigener
+    Hinweis „Keine Eingabe" bei leerer
   - Eine vertippte Antwort auf die Sammelaktionsfrage („1O" statt „10") überspringt die
     Sammelaktion **ganz**, statt nachzufragen; `_ask_action` daneben fragt bei ungültiger
     Eingabe erneut. Für den Nutzer bedeutet der Vertipper 25 Einzelfragen statt eines

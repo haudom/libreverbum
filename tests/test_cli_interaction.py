@@ -221,6 +221,128 @@ def test_learning_a_word_creates_a_card_with_the_already_resolved_sense(
     assert events == [("word0", "learning", "triage")]
 
 
+def test_empty_answer_to_the_triage_prompt_is_not_booked_and_asks_again(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """Offener Punkt aus technik.md §9, „Offene Punkte" (behoben durch Nutzerentscheidung
+    vom 14.09.2026): Eine Leereingabe auf den Triage-Prompt `[k]enne ich  [l]ernen  [s]kip
+    [q]uit >` bucht nichts als „skip", sondern führt zu einer erneuten Frage.
+
+    Verfälschungsprobe: Bildete `_ACTIONS` weiterhin eine Leereingabe auf „skip" ab (der
+    Stand vor dieser Behebung), bekäme `word0` sofort und stillschweigend
+    `KnowledgeState.DEFERRED`, die zweite Antwort „l" bliebe unverwendet liegen, und die
+    Zusicherungen unten (eine Karte, ein `learning`-Ereignis) wären rot. Test war damit rot,
+    bevor die Leereingabe aus `_ACTIONS` entfernt wurde."""
+    resolution = pipeline.TriageResolution(
+        entries=_entries(1), known=0, resolved_known=0, skipped=0, remaining=[]
+    )
+    written: list[str] = []
+    # Sammelaktion: keine (Enter). Triage: erst leer (ungültig, muss erneut fragen), dann "l".
+    answers = iter(["", "", "l"])
+
+    triage_pass = interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(answers),
+        write_line=written.append,
+    )
+
+    assert len(triage_pass.cards) == 1
+    assert _events(profile_con) == [("word0", "learning", "triage")]
+    assert any("Keine Eingabe" in line for line in written)
+
+
+def test_invalid_nonempty_answer_to_the_triage_prompt_names_what_was_typed(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """Der Hinweis auf eine ungültige, nicht-leere Antwort auf den Triage-Prompt nennt die
+    tatsächlich eingegangene Zeichenfolge — auf `display.PLAIN_STYLE` (keine
+    Unicode-Fähigkeit, die Vorgabe von `run_triage_pass`) in geraden ASCII-
+    Anführungszeichen, keinen typografischen.
+
+    Verfälschungsprobe: Stand statt dieser Meldung weiterhin die alte, generische
+    „Ungültige Eingabe — k, l, s oder q erwartet." ohne die eingegebene Zeichenfolge, fand
+    sich keine Zeile mit „ka" und „erwartet" zugleich, und der `next(...)`-Aufruf unten
+    warf `StopIteration`. Test war damit rot, bevor der Hinweis die Eingabe nannte."""
+    resolution = pipeline.TriageResolution(
+        entries=_entries(1), known=0, resolved_known=0, skipped=0, remaining=[]
+    )
+    written: list[str] = []
+    answers = iter(["", "ka", "s"])
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(answers),
+        write_line=written.append,
+    )
+
+    hint = next(line for line in written if "ka" in line and "erwartet" in line)
+    assert '"ka"' in hint
+    assert "„" not in hint
+    assert "“" not in hint
+
+
+def test_ask_action_hint_uses_typographic_quotes_on_a_unicode_capable_style() -> None:
+    """Gegenprobe zum vorigen Test: Auf einem `Style` mit Unicode-Fähigkeit erscheinen die
+    typografischen Anführungszeichen aus `display.quote`, nicht die ASCII-Form — der Hinweis
+    hängt also tatsächlich am übergebenen `style`, nicht an einer fest verdrahteten Form."""
+    unicode_style = display.Style(supports_color=False, supports_unicode=True, width=80)
+    written: list[str] = []
+    answers = iter(["ka", "s"])
+
+    interaction._ask_action(lambda _prompt: next(answers), written.append, style=unicode_style)
+
+    hint = next(line for line in written if "ka" in line)
+    assert "„ka“" in hint
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("k", "known"),
+        ("kenne", "known"),
+        ("K", "known"),
+        ("KENNE", "known"),
+        ("l", "learn"),
+        ("lernen", "learn"),
+        ("L", "learn"),
+        ("LERNEN", "learn"),
+        ("s", "skip"),
+        ("skip", "skip"),
+        ("S", "skip"),
+        ("SKIP", "skip"),
+        ("q", "quit"),
+        ("quit", "quit"),
+        ("Q", "quit"),
+        ("QUIT", "quit"),
+    ],
+)
+def test_ask_action_accepts_all_valid_answers_case_insensitively(raw: str, expected: str) -> None:
+    """Die gültigen Antworten (k, kenne, l, lernen, s, skip, q, quit, auch in
+    Großschreibung) funktionieren nach der Behebung des offenen Punkts unverändert.
+
+    Verfälschungsprobe: Ein `_ACTIONS.get(typed)` ohne das `.lower()` auf der Eingabe ließe
+    jede Großschreibvariante (`K`, `KENNE`, …) als ungültig durchfallen; ohne eine zweite
+    Antwort in `answers` würfe die Schleife dann `StopIteration` statt eines Ergebnisses —
+    dieser Test war daran für jede Großschreibvariante rot."""
+    answers = iter([raw])
+
+    action = interaction._ask_action(
+        lambda _prompt: next(answers), _no_op_write, style=display.PLAIN_STYLE
+    )
+
+    assert action == expected
+
+
 def test_expressions_reach_the_triage_and_the_resulting_card(
     profile_con: sqlite3.Connection,
 ) -> None:

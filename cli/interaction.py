@@ -387,16 +387,24 @@ _ACTIONS = {
     "lernen": "learn",
     "s": "skip",
     "skip": "skip",
-    "": "skip",
     "q": "quit",
     "quit": "quit",
 }
 
 
-def _ask_action(read_line: ReadLine, write_line: WriteLine) -> str:
-    """Fragt so lange nach, bis eine gültige Antwort steht — eine unbekannte Eingabe
-    verwirft keine Entscheidung stillschweigend als „skip" (Regel 13), sondern führt zu
-    einer erneuten Frage.
+def _ask_action(read_line: ReadLine, write_line: WriteLine, *, style: display.Style) -> str:
+    """Fragt so lange nach, bis eine gültige Antwort steht — weder eine unbekannte noch
+    eine leere Eingabe verwirft eine Entscheidung stillschweigend als „skip" (Regel 13,
+    Entscheidung vom 14.09.2026, technik.md §9, „Offene Punkte"): Bis dahin bildete
+    `_ACTIONS` eine Leereingabe auf `skip` ab — eine Vorrichtung oder ein versehentlicher
+    Zeilenumbruch buchte dadurch „überspringen", ohne dass etwas meldete, und hat zwei
+    Abnahmeläufe gekostet, bevor die Ursache feststand. Beide Fälle führen jetzt zu einer
+    erneuten Frage, die nennt, was tatsächlich ankam: die eingegebene Zeichenfolge in
+    Anführungszeichen (`display.quote`, passend zu `style` — typografisch auf einem
+    fähigen Ziel, sonst ASCII) bei nicht-leerer Eingabe, ein eigener Hinweis „Keine
+    Eingabe" bei leerer, wo ein leeres Zitat sinnlos wäre. Gezeigt wird die Eingabe **vor**
+    dem `.lower()` (nach `.strip()`), damit der Nutzer liest, was er tatsächlich getippt
+    hat — die Auswertung selbst bleibt case-insensitiv.
 
     Die Leerzeile vor jedem Prompt setzt die Eingabezeile vom Eintrag darüber ab
     (Auftragstext vom 02.09.2026, „Man sieht klar, wo die vorherige Ausgabe aufhört") —
@@ -404,11 +412,17 @@ def _ask_action(read_line: ReadLine, write_line: WriteLine) -> str:
     Einrückung ändert daran nichts."""
     while True:
         write_line("")
-        raw = read_line("  [k]enne ich  [l]ernen  [s]kip  [q]uit > ").strip().lower()
-        action = _ACTIONS.get(raw)
+        typed = read_line("  [k]enne ich  [l]ernen  [s]kip  [q]uit > ").strip()
+        action = _ACTIONS.get(typed.lower())
         if action is not None:
             return action
-        write_line("  Ungültige Eingabe — k, l, s oder q erwartet.")
+        if typed:
+            write_line(
+                f"  {display.quote(typed, style)} ist keine der Antworten — "
+                "k, l, s oder q erwartet."
+            )
+        else:
+            write_line("  Keine Eingabe — k, l, s oder q erwartet.")
 
 
 def _individual_phase(
@@ -466,7 +480,7 @@ def _individual_phase(
         for line in _entry_lines(entry, index + 1, total, chosen_before + len(cards), style):
             write_line(line)
         while True:
-            action = _ask_action(read_line, write_line)
+            action = _ask_action(read_line, write_line, style=style)
             if action != "learn":
                 break
             obstacle = anki.card_obstacle(occurrence, entry.sense, card_direction)
