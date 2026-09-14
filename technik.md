@@ -2327,8 +2327,9 @@ den Fehler deshalb zuerst woanders.
 - **Ob ein Lesefehler in `config.toml` eine eigene deutsche Meldung samt Dateinamen
   bekommt** statt der `tomllib`-Meldung aus der Falle oben. Regel 13 ist erfüllt — es bricht
   laut ab —, die Sprachregel und der Hinweis auf die Datei sind es nicht
-- **Die Eingabeprüfung der Kommandozeile fragt nicht überall nach.** Sie ist in Phase 1 die
-  einzige Oberfläche, und eine Stelle darin ist noch still:
+- ~~**Die Eingabeprüfung der Kommandozeile fragt nicht überall nach.** Sie ist in Phase 1 die
+  einzige Oberfläche, und eine Stelle darin ist noch still:~~ — **beide Stellen behoben am
+  14.09.2026**:
   - ~~Der Triage-Prompt lautet `[k]enne ich  [l]ernen  [s]kip  [q]uit >`, und `_ACTIONS` legt
     eine **Leereingabe als `skip`** aus. Eine Vorrichtung, die versehentlich leere Zeilen
     schickt, bucht dadurch nichts und der Lauf sieht trotzdem plausibel aus — **zwei
@@ -2339,11 +2340,16 @@ den Fehler deshalb zuerst woanders.
     fragt bei einer Leereingabe wie bei jeder ungültigen erneut nach und nennt dabei, was
     ankam — die eingegebene Zeichenfolge in Anführungszeichen bei nicht-leerer, ein eigener
     Hinweis „Keine Eingabe" bei leerer
-  - Eine vertippte Antwort auf die Sammelaktionsfrage („1O" statt „10") überspringt die
+  - ~~Eine vertippte Antwort auf die Sammelaktionsfrage („1O" statt „10") überspringt die
     Sammelaktion **ganz**, statt nachzufragen; `_ask_action` daneben fragt bei ungültiger
     Eingabe erneut. Für den Nutzer bedeutet der Vertipper 25 Einzelfragen statt eines
     Tastendrucks — und beim ersten Durchlauf je Buch ist genau dieser Tastendruck der ganze
-    Zweck (konzept.md, Schritt 4, Nachtrag 26.08.2026)
+    Zweck (konzept.md, Schritt 4, Nachtrag 26.08.2026)~~ — **behoben am 14.09.2026**
+    (Nutzerentscheidung): Enter bleibt die ausdrückliche Ablehnung „keine Sammelaktion" und
+    liefert weiterhin sofort `set()`; jede andere ungültige Antwort — keine Zahl oder
+    außerhalb der Liste — führt stattdessen zu einer erneuten Frage, die die eingegebene
+    Zeichenfolge nennt und beide Fälle unterschieden benennt. Die nummerierte Liste wird
+    dabei nicht erneut gedruckt, nur die Frage wiederholt sich
 
 ---
 
@@ -2424,7 +2430,7 @@ gewählte Stufe trägt mit einem Tastendruck tausende ungesehene Behauptungen in
 Hand (konzept.md, Schritt 4, Nachtrag 26.08.2026). „Keine Angabe" muss deshalb
 ausgeschrieben werden — anders als beim Wörterbuchbezug, wo Enter Zustimmung bedeutet
 (Abschnitt 2, „Nachtrag 27.08.2026"), und aus demselben Grund, aus dem die Leereingabe in
-der Triage eine Falle ist (Abschnitt 9, „Offene Punkte").
+der Triage bis zur Behebung am 14.09.2026 eine Falle war (Abschnitt 9, „Offene Punkte").
 
 Geschrieben wird in **einer** Transaktion (`profile.record_preset`) — ganz oder gar nicht.
 Das ist nicht bloß Sauberkeit: Gemessen an 18.644 Ereignissen kostet `record_event` in

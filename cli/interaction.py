@@ -341,7 +341,16 @@ def _bulk_phase(
     Die nummerierte Liste (Auftragstext vom 02.09.2026, Bauschritt 2/2 der
     Konsolenausgabe): rechtsbündige Nummern und eine ausgerichtete Wortartspalte, damit sie
     überfliegbar ist — dieselbe Spaltenrechnung wie `cli.main._choose_chapter` für die
-    Kapitelliste, hier über die maximale Länge von Nummer und Wortartangabe."""
+    Kapitelliste, hier über die maximale Länge von Nummer und Wortartangabe. Sie wird genau
+    **einmal** gedruckt, auch bei einer ungültigen Antwort (Regel 13, Entscheidung vom
+    14.09.2026, technik.md §9, „Offene Punkte"): Bis dahin überging eine vertippte Zahl
+    („1O" statt „10") die Sammelaktion ganz, mit der Meldung „Sammelaktion übersprungen" —
+    für den Nutzer 25 Einzelfragen statt eines Tastendrucks, und beim ersten Durchlauf je
+    Buch ist genau dieser Tastendruck der ganze Zweck. Nur eine **leere** Antwort bleibt
+    die ausdrückliche Ablehnung „keine Sammelaktion" und liefert sofort `set()` — jede
+    andere ungültige Antwort (keine Zahl, außerhalb von `1..len(ordered)`) fragt stattdessen
+    erneut, ohne die bereits gedruckte Liste zu wiederholen, und nennt dabei die
+    eingegangene Zeichenfolge (`display.quote`, passend zu `style`)."""
     if not ordered:
         return set()
 
@@ -355,29 +364,36 @@ def _bulk_phase(
     ):
         write_line(f"  {number:>{number_width}}. {pos_label:<{pos_width}}  {occurrence.word_form}")
 
-    answer = read_line(
-        f"  Sammelaktion — bis zu welcher Nummer kennst du alles? "
-        f"(1-{len(ordered)}, Enter = keine) "
-    ).strip()
-    if not answer:
-        return set()
+    while True:
+        answer = read_line(
+            f"  Sammelaktion — bis zu welcher Nummer kennst du alles? "
+            f"(1-{len(ordered)}, Enter = keine) "
+        ).strip()
+        if not answer:
+            return set()
 
-    try:
-        position = int(answer)
-    except ValueError:
-        write_line("  Keine Zahl erkannt — Sammelaktion übersprungen.")
-        return set()
-    if not 1 <= position <= len(ordered):
-        write_line("  Außerhalb der Liste — Sammelaktion übersprungen.")
-        return set()
+        try:
+            position = int(answer)
+        except ValueError:
+            write_line(
+                f"  {display.quote(answer, style)} ist keine Zahl — "
+                f"1 bis {len(ordered)} oder Enter für keine."
+            )
+            continue
+        if not 1 <= position <= len(ordered):
+            write_line(
+                f"  {display.quote(answer, style)} liegt außerhalb der Liste — "
+                f"1 bis {len(ordered)} oder Enter für keine."
+            )
+            continue
 
-    selected = ordered[position - 1]
-    bulk = triage.bulk_mark(ordered, selected)
-    for occurrence in bulk:
-        entry = entries_by_occurrence[occurrence]
-        _record(con, entry.sense, KnowledgeState.KNOWN, Origin.BULK_MARK, book, chapter_number)
-    write_line(f"  {len(bulk)} als bekannt gebucht.")
-    return set(bulk)
+        selected = ordered[position - 1]
+        bulk = triage.bulk_mark(ordered, selected)
+        for occurrence in bulk:
+            entry = entries_by_occurrence[occurrence]
+            _record(con, entry.sense, KnowledgeState.KNOWN, Origin.BULK_MARK, book, chapter_number)
+        write_line(f"  {len(bulk)} als bekannt gebucht.")
+        return set(bulk)
 
 
 _ACTIONS = {

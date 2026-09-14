@@ -13,6 +13,7 @@ Blockschleife selbst (`run_triage_blocks`) hat ihre eigenen Tests weiter unten.
 
 from __future__ import annotations
 
+import re
 import sqlite3
 import threading
 from collections.abc import Callable, Iterator, Sequence
@@ -189,6 +190,173 @@ def test_bulk_action_does_not_mark_a_word_behind_the_selected_position(
     events = _events(profile_con)
     bulk_marked = {lemma for lemma, _, origin in events if origin == "bulk_mark"}
     assert bulk_marked == {"tied_a"}
+
+
+def test_non_numeric_bulk_answer_asks_again_instead_of_skipping(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """Offener Punkt aus technik.md §9, „Offene Punkte" (behoben durch Nutzerentscheidung
+    vom 14.09.2026): Eine vertippte Antwort auf die Sammelaktionsfrage („1O" statt „10")
+    überspringt die Sammelaktion nicht mehr, sondern führt zu einer erneuten Frage — die
+    danach gegebene gültige Zahl bucht den Ausschnitt vollständig.
+
+    Verfälschungsprobe: Vor dieser Behebung lieferte `_bulk_phase` bei einer nicht-zahligen
+    Antwort sofort `set()` zurück, die Meldung „Sammelaktion übersprungen." stand fest, und
+    die zweite Antwort „3" wäre als erste Antwort der anschließenden Einzelabfrage
+    verbraucht worden — die Zusicherung über `bulk_marked` unten (drei Wörter statt einer
+    leeren Menge) wäre damit falsch gewesen. Test war damit rot, bevor `_bulk_phase` bei
+    einer ungültigen Antwort erneut fragte."""
+    resolution = pipeline.TriageResolution(
+        entries=_entries(5), known=0, resolved_known=0, skipped=0, remaining=[]
+    )
+    written: list[str] = []
+    # Sammelaktion: "1O" (Vertipper, muss erneut fragen), dann "3". Einzelabfrage: 2x "s".
+    answers = iter(["1O", "3", "s", "s"])
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(answers),
+        write_line=written.append,
+    )
+
+    bulk_marked = {lemma for lemma, _, origin in _events(profile_con) if origin == "bulk_mark"}
+    assert bulk_marked == {"word0", "word1", "word2"}
+    hint = next(line for line in written if "1O" in line)
+    assert "ist keine Zahl" in hint
+    assert "übersprungen" not in hint
+
+
+def test_out_of_range_bulk_answer_asks_again_instead_of_skipping(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """Wie beim vertippten Fall: Eine Zahl außerhalb der Liste (hier `0` und `6` bei fünf
+    Einträgen) überspringt die Sammelaktion nicht, sondern führt zu einer erneuten Frage.
+    Beide Ränder werden geprüft, weil ein Off-by-one nur an einem davon sichtbar würde.
+
+    Verfälschungsprobe: Vor der Behebung lieferte `_bulk_phase` bei `not 1 <= position <=
+    len(ordered)` sofort `set()` — die zweite und dritte Antwort ("6", "3") wären in der
+    anschließenden Einzelabfrage verbraucht worden statt in der Sammelaktion, und die
+    Zusicherung unten wäre falsch gewesen. Test war damit rot, bevor `_bulk_phase` erneut
+    fragte."""
+    resolution = pipeline.TriageResolution(
+        entries=_entries(5), known=0, resolved_known=0, skipped=0, remaining=[]
+    )
+    written: list[str] = []
+    # Sammelaktion: "0" und "6" (beide außerhalb von 1..5), dann "3". Einzelabfrage: 2x "s".
+    answers = iter(["0", "6", "3", "s", "s"])
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(answers),
+        write_line=written.append,
+    )
+
+    bulk_marked = {lemma for lemma, _, origin in _events(profile_con) if origin == "bulk_mark"}
+    assert bulk_marked == {"word0", "word1", "word2"}
+    hint_zero = next(line for line in written if '"0"' in line)
+    hint_six = next(line for line in written if '"6"' in line)
+    assert "liegt außerhalb der Liste" in hint_zero
+    assert "liegt außerhalb der Liste" in hint_six
+    assert "übersprungen" not in hint_zero
+    assert "übersprungen" not in hint_six
+
+
+def test_non_numeric_and_out_of_range_bulk_hints_are_worded_differently(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """Die beiden Fälle bleiben unterschieden (Auftragstext): eine nicht-zahlige und eine
+    außerhalb der Liste liegende Antwort sagen verschiedene Dinge, auch wenn nur noch der
+    Nachsatz „Sammelaktion übersprungen" wegfällt."""
+    resolution = pipeline.TriageResolution(
+        entries=_entries(3), known=0, resolved_known=0, skipped=0, remaining=[]
+    )
+    written: list[str] = []
+    answers = iter(["1O", "9", "", "s", "s", "s"])
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(answers),
+        write_line=written.append,
+    )
+
+    non_numeric_hint = next(line for line in written if "1O" in line)
+    out_of_range_hint = next(line for line in written if '"9"' in line)
+    assert non_numeric_hint != out_of_range_hint
+    assert "ist keine Zahl" in non_numeric_hint
+    assert "liegt außerhalb der Liste" in out_of_range_hint
+
+
+def test_empty_bulk_answer_still_skips_immediately_without_booking_anything(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """Enter bleibt unverändert „keine Sammelaktion" (Auftragstext, Punkt 1): eine leere
+    Antwort liefert sofort `set()`, ohne Rückfrage und ohne ein Ereignis im Profil.
+
+    Verfälschungsprobe: Fragte `_bulk_phase` auch bei einer Leereingabe erneut nach (statt
+    sofort zurückzukehren), verbrauchte die Sammelaktion die erste individuelle Antwort
+    "s" als weitere Sammelaktionsantwort — der Einzelabfrage fehlte danach eine Antwort
+    und `next(answers)` würfe `StopIteration`. Test war damit rot, bevor die Leereingabe
+    ohne erneute Frage sofort überspringt."""
+    resolution = pipeline.TriageResolution(
+        entries=_entries(5), known=0, resolved_known=0, skipped=0, remaining=[]
+    )
+    answers = iter(["", "s", "s", "s", "s", "s"])
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(answers),
+        write_line=_no_op_write,
+    )
+
+    bulk_marked = {lemma for lemma, _, origin in _events(profile_con) if origin == "bulk_mark"}
+    assert bulk_marked == set()
+
+
+def test_numbered_bulk_list_is_printed_exactly_once_despite_repeated_invalid_answers(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """Auftragstext, Punkt 3: Die nummerierte Liste wird bei einer erneuten Frage NICHT
+    noch einmal gedruckt — wiederholt wird allein die Frage, auch nach mehreren
+    Fehleingaben hintereinander."""
+    resolution = pipeline.TriageResolution(
+        entries=_entries(5), known=0, resolved_known=0, skipped=0, remaining=[]
+    )
+    written: list[str] = []
+    answers = iter(["x", "0", "99", "abc", "3", "s", "s"])
+
+    interaction.run_triage_pass(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        resolution=resolution,
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(answers),
+        write_line=written.append,
+    )
+
+    list_lines = [line for line in written if re.match(r"^\s*\d+\.\s+NOUN", line)]
+    assert len(list_lines) == len(_entries(5))
 
 
 def test_learning_a_word_creates_a_card_with_the_already_resolved_sense(
