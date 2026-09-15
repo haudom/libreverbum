@@ -456,8 +456,18 @@ bekommt keine zweite Pflicht, die er vergessen kann. Abgelegt wird von der **kur
 Stelle**: Sie nimmt den Bericht entgegen und schreibt seine Beobachtungen weg, **bevor sie
 etwas anderes tut**. So schreibt genau einer, und der Zeitpunkt ist eindeutig. Wer das auf
 später verschiebt, hat sie faktisch nur im Sitzungsprotokoll — und das liegt außerhalb des
-Repositoriums, ist nicht versioniert und an einen Rechner gebunden. Die Beobachtungen der
-Phase-1-Bauzeit sind auf genau diesem Weg verlorengegangen.
+Repositoriums, ist nicht versioniert und an einen Rechner gebunden.
+
+**Das ist keine Neuerfindung, sondern die Fortsetzung von `nacharbeit.md`.** In Phase 1 lief
+dieselbe Sache als **eine** Datei, gefüllt aus den Berichten von T3 bis T15 und bei T18
+aufgelöst — jeder Punkt eingefaltet, gestrichen oder weitergeführt, die Datei danach
+gelöscht (`git show abe42cf^:nacharbeit.md`). Der Weg hat getragen; übernommen sind
+daraus die Gewichtung durch die kuratierende Stelle und das Auflösen am Tor. Zweierlei ist
+neu: die Ablage **je Bericht** statt in einer Datei — nicht, weil eine Datei nicht ginge,
+sondern weil das Anlegen nichts überschreiben kann — und der **Zeitpunkt**. `nacharbeit.md`
+verlangte beim Ablegen bereits die Einordnung in Teil A oder B samt Vorschlag; das ist
+Arbeit des Tors, und wer sie an den Eingang legt, verschiebt das Ablegen. Abgelegt wird
+deshalb **roh und ungewichtet**, sobald der Bericht ankommt.
 
 **Je Bericht, nicht je Beobachtung.** Eine Beobachtung ohne die Teilaufgabe, aus der sie
 stammt, ist nicht zu bewerten: „hat zwei Läufe gekostet" sagt nichts, solange offen bleibt,
