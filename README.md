@@ -263,7 +263,7 @@ mypy
 pytest
 ```
 
-Von den 431 Tests brauchen 34 das echte Wörterbuch, die echten EPUBs, einen Modellserver
+Von den 559 Tests brauchen 35 das echte Wörterbuch, die echten EPUBs, einen Modellserver
 oder einen zweiten Interpreter mit `wordfreq`; ohne sie werden sie übersprungen statt zu
 scheitern — und jeder Lauf nennt am Ende, welche das waren.
 

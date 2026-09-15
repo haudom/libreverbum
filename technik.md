@@ -75,6 +75,63 @@ Quelle gefunden — siehe Abschnitt 2.
 
 ---
 
+## Offene Punkte im Überblick
+
+Ein **Verweis**, kein zweiter Ort für Begründungen — die stehen in den „Offene
+Punkte"-Abschnitten der einzelnen Fragen unten. **Wer einen Punkt schließt, streicht seine
+Zeile hier** (15.09.2026: rund eine halbe Stunde Kaltstart je Bearbeiter, bevor diese
+Tabelle stand — 13 verstreute „Offene Punkte"-Abschnitte plus konzept.md, „Bewusst
+offen").
+
+| Abschnitt | Offener Punkt |
+|---|---|
+| §2 | Genaue Version der CC-BY-SA-Lizenz von WikDict/DBnary (3.0 oder 4.0) |
+| §2 | Form der Namensnennung im Programm festlegen |
+| §2 | Umgang mit historischen Schreibweisen (`to-night`, `arm-chair`) |
+| §2 | Ob DE→EN aus denselben Paaren umgekehrt wird oder eine eigene Datenbank nötig ist |
+| §3 | `candidates()` vergleicht Groß-/Kleinschreibung binär — ob das bleiben soll |
+| §3 | Ausweichantwort „keine passt" in die Auswahlliste aufnehmen |
+| §3 | Sehr lange Auswahllisten — Wirkung auf die Trefferquote nicht gemessen |
+| §3 | Was der Wortartfilter jenseits der 3,3 % kostet, ist nicht beziffert |
+| §3 | Wortart als Filter schließt mehr aus als gedacht — Entscheidung steht aus |
+| §3 | Redewendungserkennung über Textfenster noch nicht geprüft |
+| §4 | Umgang mit gleichzeitigem Zugriff, falls eine Weboberfläche hinzukommt |
+| §4 | Regel-Kommentar über `profile.record_card` begründet falsch — zu berichtigen |
+| §4 | Profil-Identität einer Bedeutung schließt die Anki-GUID aus — Fallrisiko beim nächsten Wörterbuchbezug |
+| §4 | Die beiden Idempotenz-Tests prüfen nicht, was ihr Docstring behauptet |
+| §5 | Über-Lemmatisierung von Eigennamen — bei „Figuren & Orte" zu beachten |
+| §5 | Ob die Zwischenspeicher-Kennung eine Fassungsnummer der Berechnung braucht |
+| §6 | `encoding="utf-8"` maschinell erzwingen (`PLW1514`) |
+| §6 | Ob eine `.gitattributes` die Zeilenenden festnagelt |
+| §6 | `tools/` bleibt von der Typprüfung ausgenommen — ob das so bleibt |
+| §6 | Auslieferung (Nuitka, PyInstaller) |
+| §7 | Ob `pipeline` je Schritt eine eigene Zwischenablage braucht |
+| §7 | Die Oberfläche ist nicht aufgeteilt |
+| §7 | Zurückschreiben der Anki-GUID hängt an der Kommandozeile — muss bei der Qt-Oberfläche mitwandern |
+| §7 | Der einzige Ende-zu-Ende-Test prüft die Druckseite, nicht das Profil |
+| §8 | Der EPUB-3-Zweig läuft gegen keine Fremdquelle |
+| §8 | Der Pfad „Ebene > 0" der Einrückung läuft gegen keine Fremdquelle |
+| §8 | Anker innerhalb eines Dokuments als eigenes Kapitel? |
+| §8 | Bindestrich- und Sonderzeichen der Verlagsdateien gegenüber Gutenberg ungeprüft |
+| §8 | `epub.read_chapter` wirft `ValueError` bei Vorspann-Kapiteln — trifft Phase 2 zwingend |
+| §8c | Die Gestaltung der Druckseite (funktional abgenommen, könnte schöner sein) |
+| §9 | Ob Kartenrichtung und Wortobergrenze in `config.toml` gehören oder Aufrufargumente bleiben |
+| §9 | Menüpunkt für eine konsistente Sicherung — noch nicht gebaut |
+| §9 | Ob ein Lesefehler in `config.toml` eine eigene deutsche Meldung bekommt |
+| §10 | Rechteinhaber als Handle statt bürgerlichem Namen — bei Durchsetzung zu klären |
+| §11 | Zuordnung Niveau → N ist geliehen, nicht gemessen |
+| §11 | Eine Vorbelegung lässt sich nicht zurücknehmen |
+| §11 | Vorbelegung deckt von einem Mehrwortausdruck nur die `pos = ""`-Fassung ab |
+| §12 | Wie oft ein Nutzer tatsächlich weitermacht, ist nicht gemessen |
+| §12 | Das Vorladen greift nur einen Block voraus |
+| §12 | `triage.defer_beyond_word_limit` hat außerhalb der eigenen Tests keinen Aufrufer mehr |
+| §12 | Über Kapitelgrenzen hinweg wird nicht vorgeladen |
+| §12 | Ob ein Folgelauf die Triage-Ereignisse des Kapitels wiederverwendet |
+| §13 | Ob die Zählung nach Kapiteln bei einem ungleich verteilten Buch noch etwas aussagt |
+| §13 | Bei nur einem Kapitel: Fortschritt oder Ruckeln — nicht an echten Nutzern geprüft |
+
+---
+
 ## 1. Programmiersprache — entschieden
 
 **Python als einzige Sprache. Oberfläche mit Qt Quick über PySide6.**
@@ -1596,8 +1653,8 @@ liefen sonst ungeprüft.
 `addopts = ["-rs"]` in `pyproject.toml`, seit dem 01.09.2026: `pytest` nennt am Ende jedes
 Laufs jeden übersprungenen Test samt Grund.
 
-Ohne die Angabe sieht **„grün mit dreißig stillen Skips" aus wie „grün"**. Genau das ist der
-Fall, wenn `tools/en-de.sqlite3` oder die echten EPUBs fehlen: `pytest` überspringt dann 32
+Ohne die Angabe sieht **„grün mit 33 stillen Skips" aus wie „grün"**. Genau das ist der
+Fall, wenn `tools/en-de.sqlite3` oder die echten EPUBs fehlen: `pytest` überspringt dann 33
 Tests (`needs_dictionary`, `needs_epub`, `needs_calibre_split_epub`), ohne dass der Prüfende
 etwas davon sähe. Zwei Durchsichten hintereinander mussten das mit einem zweiten
 vollständigen Lauf ausräumen, bevor sie „grün" glauben durften. Als `addopts` steht die
@@ -1642,6 +1699,23 @@ Zeile je Eintrag zerlegt. Sie stehen jetzt in derselben Blockschreibweise wie
 `IRREGULAR_FORMS` daneben. Dass die Mengen dabei unverändert geblieben sind, ist gegen
 den Stand in Git geprüft.
 
+### Zeitschranke: Hängeschutz über die Shell, nicht über `pytest-timeout` (15.09.2026)
+
+Bei einer Suite, die über austauschbare Konsolen befragt (`cli.main` bekommt `read_line`
+und `write_line` gereicht), ist der Hänger die wahrscheinlichste Fehlerform — und die
+einzige, die überhaupt kein Ergebnis liefert: kein Rot, kein Grün, nur ein Lauf, der nicht
+endet. Drei Anlässe haben die Frage entschieden: (a) Ein Testlauf hing tatsächlich, weil
+drei Testkonsolen in `tests/test_cli_main.py` eine neu eingeführte Frage nicht kannten und
+stattdessen rieten, statt zu werfen (Durchsicht ee34796) — die konkrete Ursache ist damit
+beseitigt, ein Netz gibt es trotzdem nicht, weil der Hänger jederzeit an anderer Stelle
+wiederkehren kann. (b) `pytest --timeout=…` bricht in dieser Umgebung mit „unrecognized
+arguments" ab (exit 4); `pytest-timeout` ist nicht installiert. (c) Zwei
+Verfälschungsläufe (dokumentation.md §5) hätten ohne Schranke unbegrenzt gestanden.
+
+**Entschieden: kein `pytest-timeout`.** Die Shell-Schranke (`timeout <sekunden> pytest …`)
+wirkt auch außerhalb von `pytest`, bringt keine neue Abhängigkeit (Regel 15) und braucht
+keine Sperrdatei.
+
 ### Offene Punkte
 
 - **`encoding="utf-8"` maschinell erzwingen.** ruff kennt dafür `PLW1514`; ob die Regel
@@ -1656,14 +1730,6 @@ den Stand in Git geprüft.
   deutet den Fehlschlag leicht als „Anker falsch abgeschrieben" statt als
   Zeilenende-Unterschied. `* text=auto eol=lf` würde das beenden, berührt aber als einmalige
   Umstellung jede Datei und gehört deshalb entschieden, nicht nebenbei gemacht
-- **Ob `pytest` eine Zeitschranke bekommt.** Bei einer Suite, die über austauschbare
-  Konsolen befragt (`cli.main` bekommt `read_line` und `write_line` gereicht), ist der
-  Hänger die wahrscheinlichste Fehlerform — und die einzige, die überhaupt kein Ergebnis
-  liefert: kein Rot, kein Grün, nur ein Lauf, der nicht endet. Die konkrete Ursache ist
-  beseitigt (eine Testkonsole, die eine unbekannte Frage riet, statt zu werfen — Durchsicht
-  ee34796), ein Netz gibt es nicht. `pytest-timeout` wäre die naheliegende Antwort und damit
-  eine neue Abhängigkeit: vor der Aufnahme nach Regel 15 zu prüfen, und nach Regel 14 erst
-  mit einem zweiten Anlass zu bauen
 - `tools/` bleibt von der Typprüfung ausgenommen — Messskripte, reine Standardbibliothek.
   Ob das so bleibt, ist offen; berührt wird es erst, wenn ein Messskript in den Kern wandert
 - **Auslieferung** (Nuitka, PyInstaller) bleibt offen wie in Abschnitt 1; sie berührt das
@@ -2011,6 +2077,12 @@ leeres Ergebnis (Regel 13):
   umfassen
 - **Bindestrich- und Sonderzeichen der Verlagsdateien** gegenüber Gutenberg sind nicht
   gesondert geprüft; die Abweichung von 0,08 % ist an einer Gutenberg-Datei gemessen
+- **`epub.read_chapter` wirft `ValueError` bei Vorspann-Kapiteln** (Gutenberg-Lizenztext,
+  reproduzierbar an `tools/sherlock.epub`). Für einen einzelnen Kapitelaufruf ist das
+  richtig — Regel 13, kein leerer Fließtext still —, aber ein Sweep über **alle** Kapitel
+  eines Buchs bricht daran ab; Phase 2 beginnt mit „Ganzes Buch auf einmal" (konzept.md,
+  „Phasenplan") und trifft die Stelle damit zwingend. Zu entscheiden beim Bau dieser Phase,
+  nicht vorher
 
 ---
 
@@ -3010,6 +3082,11 @@ Fehlermeldung und Exit-Code 1 — Festlegung 2 gilt unverändert, der Export ist
 - **Das Vorladen greift nur einen Block voraus.** Zwei Blöcke im Voraus wären möglich,
   bringen aber nur etwas, wenn ein Block schneller durchgeklickt ist, als der nächste
   entsteht — kein gemessener Anlass, also Regel 14
+- **`triage.defer_beyond_word_limit` hat außerhalb seiner eigenen Tests keinen Aufrufer
+  mehr**, seit die Wortobergrenze zur Blockgröße wurde (oben, „Warum Blöcke und kein
+  Nachrücken Platz für Platz"). Nachgemessen: Nur Docstrings in `triage.py` und
+  `printout.py` sowie `tests/test_triage.py` nennen sie. Ob sie entfällt oder für die
+  Oberfläche der Phase 2 bleibt, ist offen
 - **Über Kapitelgrenzen hinweg wird nicht vorgeladen.** Der Durchlauf ist auf ein Kapitel
   angelegt (Abschnitt 7); „ganzes Buch auf einmal" ist Phase 2 (konzept.md, „Phasenplan")
 - **Ob ein Folgelauf die Triage-Ereignisse dieses Kapitels wiederverwendet, statt die

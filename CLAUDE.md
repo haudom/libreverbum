@@ -121,6 +121,14 @@ pytest             # führt Tests aus
 > danach `uv lock`. Begründung: technik.md §6, „Falle: `uv sync` beschneidet die
 > Messumgebung".
 
+> **`pytest` läuft rund 145 s** — über dem 120-Sekunden-Zeitlimit mancher Werkzeuge, die
+> Befehle ausführen, und zwei Läufe sind deshalb schon unbeabsichtigt in den Hintergrund
+> gefallen. Der Lauf gehört deshalb in eine Datei, **ungefiltert** — nie durch `| tail`
+> oder ähnliches gefiltert, das hat schon eine **leere** Ergebnisdatei bei gemeldetem
+> „exit code 0" erzeugt, ohne ablesbare Testzahl —, mit großzügigem Zeitlimit oder im
+> Hintergrund. Die Testzahl gehört zum Ergebnis: „exit 0" ohne Zählwerk sieht aus wie ein
+> grünes Tor, sagt aber nicht, ob 559 Tests liefen oder 30.
+
 Zwei Prüfregeln sind abgeschaltet, weil sie gegen die Sprachregel arbeiten (`RUF001`–`003`
 melden Gedankenstrich und typografische Anführungszeichen). Wer sie wieder anschaltet,
 liest erst technik.md §6, „Zwei Prüfregeln arbeiten gegen die Hausordnung".
@@ -141,9 +149,11 @@ je Datei eine Aussage. Den vollständigen Lauf macht die verkettende Stelle zwis
 Runden.
 
 **Die Durchsicht prüft gar nicht im Arbeitsbaum**, sondern gegen `git archive <commit>` in
-einem Wegwerfordner — `tools/en-de.sqlite3` und `tools/*.epub` gehören mit hinein, sonst
-überspringt `pytest` rund zwanzig Tests still. Begründung: dokumentation.md §10, „Woran sie
-prüft: gegen den Commit, nicht gegen den Arbeitsbaum".
+einem Wegwerfordner — `tools/en-de.sqlite3` und `tools/*.epub` gehören mit hinein. Die
+Gegenprobe: Die Schlusszeile von `pytest` muss genau **zwei** Übersprungene nennen
+(`needs_model`, `needs_wordfreq`) — meldet sie stattdessen rund fünfunddreißig, ist die
+Kopie missraten. Begründung: dokumentation.md §10, „Woran sie prüft: gegen den Commit,
+nicht gegen den Arbeitsbaum".
 
 ## Daten
 
@@ -187,12 +197,13 @@ python tools/print_fit_check.py                       # Blattkapazität, echt ge
 python tools/build_wordfreq_preset.py …               # erzeugt statt zu messen (s. u.)
 ```
 
-Alle bis auf drei kommen mit der Standardbibliothek aus, brauchen also keine
+Alle bis auf fünf kommen mit der Standardbibliothek aus, brauchen also keine
 Projektumgebung. **`nlp_check.py` verlangt spaCy oder Stanza samt Modellen**: Ein Vergleich
 der beiden lässt sich nur an den echten Modellen führen, nicht nachbilden; das Skript nennt
-die Installationsbefehle in seinem Kopf. **`ambiguity_check.py` verlangt spaCy und den Kern
-selbst** (`libreverbum.extraction`, `libreverbum.dictionary`): Gemessen wird, was der Kern
-tatsächlich liefert, nicht eine nachgebaute Näherung.
+die Installationsbefehle in seinem Kopf. **`ambiguity_check.py` und `bundle_check.py`
+verlangen spaCy und den Kern selbst** (`libreverbum.extraction`, `libreverbum.dictionary`):
+Gemessen wird, was der Kern tatsächlich liefert, nicht eine nachgebaute Näherung. Die
+übrigen beiden — `print_fit_check.py` und `build_wordfreq_preset.py` — stehen unten.
 
 **`build_wordfreq_preset.py` misst nicht, es erzeugt** — als einziges Skript hier: Es
 schreibt `libreverbum/wordfreq_en_5000.txt`, einen ausgelieferten Programmbestandteil
@@ -203,11 +214,12 @@ Einzelheiten im Kopf des Skripts.
 
 **Wer ein Skript aufruft, das den Kern importiert, braucht `PYTHONPATH=.`** — das Paket
 `libreverbum` ist in `.venv/` nicht installiert, und ohne die Zuweisung bricht
-`ambiguity_check.py` mit `ModuleNotFoundError` ab. Dasselbe gilt für `print_fit_check.py`
-(`libreverbum.printout`, `libreverbum.entities`) — es druckt die echte Druckseite des
-Kerns statt eine nachgebaute (technik.md §8c, „Offene Punkte"), und braucht daneben einen
-echten, lokal gefundenen Browser (Edge oder Chrome, headless) für den Ausdruck zu PDF.
-Aufzurufen also aus dem Wurzelverzeichnis des Repositoriums.
+`ambiguity_check.py` mit `ModuleNotFoundError` ab. Dasselbe gilt für `bundle_check.py`
+(eigener Modulkopf: „den Kern `libreverbum` selbst (`extraction`, `dictionary`)") und für
+`print_fit_check.py` (`libreverbum.printout`, `libreverbum.entities`) — Letzteres druckt
+die echte Druckseite des Kerns statt eine nachgebaute (technik.md §8c, „Offene Punkte"),
+und braucht daneben einen echten, lokal gefundenen Browser (Edge oder Chrome, headless) für
+den Ausdruck zu PDF. Aufzurufen also aus dem Wurzelverzeichnis des Repositoriums.
 
 `sense_check.py` sucht einen lokalen Modellserver auf den üblichen Adressen ab
 (llama-server, LM Studio, Ollama, …) oder nimmt `--url` — **ohne** `/v1`, das hängen die
@@ -230,15 +242,26 @@ Er steht in drei Quellen, die sich selbst nachführen — nicht hier:
   Bearbeiter gleichzeitig — fremde Änderungen im Arbeitsbaum sind kein Fehler und werden
   weder repariert noch mitcommittet
 
+**Zwei Bearbeiter gleichzeitig lohnen sich nur bei disjunkten Dateien.** Zweimal starben
+beide gleichzeitig an Sitzungslimits und ließen verschränkte Halbarbeit in derselben Datei
+zurück; einmal kostete eine falsche Verortung des anderen eine Stunde (dokumentation.md §9,
+„Der Auftrag trennt Belegtes von Vermutetem"). Ab dem Punkt, an dem zwei Teilaufgaben
+dieselben Dateien berühren, lief es einspurig glatter.
+
 Die technischen Entscheidungen stehen sämtlich in technik.md — auch die zuletzt gefallenen
 E8b (Anki-Erzeugung, §8b) und E8c (Druckausgabe, §8c).
 
 Nicht im Repository, aber zur Arbeit vorhanden: die Umgebung `.venv/` (spaCy mit
-`en_core_web_md` und `en_core_web_sm`), das Wörterbuch `tools/en-de.sqlite3`, die
+`en_core_web_md` und `en_core_web_sm` — Wiederherstellung nach einem Rechnerwechsel:
+`.venv/Scripts/python -m spacy download en_core_web_sm` entsprechend `en_core_web_md`;
+beide liegen bereits in `.venv/`, hier nur dokumentiert, nicht auszuführen. Ein grünes
+`pytest` ist kein Nachweis einer vollständigen Arbeitsumgebung — kein Prüfbefehl merkt ein
+fehlendes `en_core_web_sm`, das bewusst nicht in `pyproject.toml` steht, technik.md §6,
+„Falle: `uv sync` beschneidet die Messumgebung"), das Wörterbuch `tools/en-de.sqlite3`, die
 Testtexte `tools/*.txt` und die EPUBs `tools/*.epub`, darunter `tools/dune.epub`
 (Calibre-Konvertat mit `_split_NNN`-Dokumenten, technik.md §8, Nachtrag 28.08.2026). Tests,
-die davon abhängen, tragen `needs_dictionary`, `needs_model`, `needs_epub` oder
-`needs_calibre_split_epub` und werden ohne sie übersprungen.
+die davon abhängen, tragen `needs_dictionary`, `needs_model`, `needs_epub`,
+`needs_calibre_split_epub` oder `needs_wordfreq` und werden ohne sie übersprungen.
 
 ## Arbeitsweise
 
@@ -256,6 +279,12 @@ die davon abhängen, tragen `needs_dictionary`, `needs_model`, `needs_epub` oder
   - **Ein Commit je abgeschlossener Sache**, nicht je Sitzung. Liegen zwei Anliegen im
     Arbeitsbaum, werden es zwei Commits
   - Auf `main` und **ohne zu pushen**. Veröffentlichen bleibt eine eigene Entscheidung
+  - **Nur die eigenen Dateien werden gestagt** — `git add` mit den Dateien namentlich, nie
+    `git add -A` und nie `git commit -a`; `git status --short` vor und nach dem Commit.
+    Es laufen regelmäßig zwei Bearbeiter gleichzeitig (siehe „Aktueller Stand" unten), und
+    zweimal lagen deren fremde, unversionierte Änderungen im Arbeitsbaum. Mit `git add -A`
+    wäre die fremde, halbfertige Arbeit mitgewandert — an einer der beiden Stellen war eine
+    zugehörige Testdatei zu dem Zeitpunkt noch nicht angepasst, der Commit also rot gewesen
   - Nachricht deutsch (dokumentation.md §1). Der Betreff sagt, *was* sich ändert; das
     dauerhafte *warum* gehört in die Dokumente, nicht in die Nachricht
   - **Halbfertiges wird nicht committet**, um einen Stand zu haben. Läuft es nicht, ist

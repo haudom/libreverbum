@@ -78,7 +78,7 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | Herkunft und Zeitpunkt (einer Kenntnisangabe) | `origin`, `timestamp` |
 | Vorbelegung (Grundwortschatz als bekannt vorbelegen) | `preset` |
 | Sprachniveau (nach GER, A1–C1, für die Vorbelegung) | `cefr_level` (`CefrLevel`) — **nicht** `level`, das ist die Gliederungsebene der Navigation |
-| unbekannt / bekannt / neue Bedeutung eines bekannten Wortes (Abgleich Kapitelwortschatz ↔ Profil) | `unknown` / `known` / `new_meaning_of_known_word` (`VocabularyStatus`) |
+| unbekannt / bekannt / neue Bedeutung eines bekannten Wortes (Abgleich Kapitelwortschatz ↔ Profil) | `unknown` / `known` / `new_meaning_of_known_word` (`VocabularyStatus`, in `libreverbum/profile.py` — **nicht** `entities.py`, wo `KnowledgeState`, `Origin`, `CardDirection` und `CefrLevel` liegen) |
 | Triage, Sammelaktion, Wortobergrenze | `triage`, `bulk_mark`, `word_limit` |
 | Block (eine Portion der Triage), Blockgröße | `block`, `block_size` — die Zahl, nach der die Fortsetzungsfrage kommt (konzept.md §4, „Nachtrag 01.09.2026"); **nicht** `limit`, das im Kern weiterhin die Obergrenze **eines** Aufrufs ist |
 | Fortsetzungsfrage (nach jedem Block) | `ask_continue` |
@@ -335,6 +335,21 @@ nicht zurück. Sie wird deshalb vorher **binär** gesichert und die Wiederherste
 **Hash** verglichen — der Augenschein genügt nicht: Unter Windows verwandelte
 `Path.write_text` beim Zurückschreiben LF in CRLF, und die Datei sah unverändert aus.
 
+**Eine Verfälschung wird nie mit `git checkout` zurückgenommen — auch an einer
+versionierten Datei nicht.** Der Stand ist zur Zeit der Probe **immer** uncommittet, das
+Tor ist ja noch nicht durch; die Falle steckt damit im vorgeschriebenen Vorgehen selbst.
+Beleg: Bei der Nachbesserung `aa90722` rief ein Bauagent `git checkout --
+cli/interaction.py` auf, um allein die Verfälschung zurückzunehmen. Die Datei ging damit
+auf `HEAD`, und der ganze noch uncommittete Befund — Hilfsfunktion, vier Meldungen, ein
+Docstring-Absatz — war mit weg; die Wiederherstellung lief aus dem Gedächtnis. Stufe
+`schwer` (Verlust, der nicht wiederherstellbar ist).
+
+> **Regel:** Zurückgenommen wird mit einem gezielten Edit, der genau die verfälschte
+> Stelle wiederherstellt — oder aus einer Kopie, die **vor** der Probe im Scratchpad
+> angelegt wurde. Im Wegwerfordner der Durchsicht (§10) ist das ohnehin der einzige Weg: Er
+> ist kein Repository, `git checkout` steht dort nicht zur Verfügung. `git checkout` ist
+> nur zulässig, wenn der Arbeitsbaum sonst nachweislich sauber ist.
+
 ---
 
 ### Hängt ein Ergebnis an einem Modell, wird derselbe Lauf zweimal gefahren
@@ -353,6 +368,22 @@ desselben Aufrufs machten daraus eine Aussage (8/10 gegen 2/10).
 Die Probe kostet einen zweiten Lauf und ist die billigste Zusicherung im Bestand: Sie
 bewacht die Temperaturfestlegung von außen, ohne etwas über sie zu wissen. Schlägt sie an,
 ist **nicht** das Ergebnis der Befund, sondern dass es keines gibt.
+
+### Wer eine Zahl in ein Dokument schreibt, schreibt das Rezept daneben
+
+Belege: Das Rezept der `importance`-Rangliste stand nirgends — vier Varianten
+durchprobiert, rund ein Viertel der Messzeit, bevor ein Befund belastbar war statt bloß ein
+Rezeptunterschied. Welches Kapitel die Abnahme T17 gemessen hat, stand nirgends; es musste
+über vier in konzept.md genannte Wörter gesucht werden, und eine falsche Kapitelwahl hätte
+sämtliche Zahlen verschoben, ohne aufzufallen. Die Zahlen „ohne Wörterbucheintrag" hängen an
+mindestens drei verschiedenen Abfragen, und technik.md §11 benutzte zwei davon in
+aufeinanderfolgenden Sätzen (8,0 % und 12,8 %), ohne sie zu unterscheiden — beinahe ein
+falscher Befund. Ein Messlauf nahm das falsche Modell, weil die Modellfestlegung in §3
+steht und nicht bei der Messung in §11.
+
+> **Regel:** Rezept heißt Abfrage, Modell, Kapitel, Datum — so viel, dass die Zahl
+> nachrechenbar ist. Der Messstand selbst überlebt die Sitzung nicht; das Dokument ist der
+> einzige Ort, an dem er bleibt.
 
 ## 6. Nicht dokumentiert wird
 
@@ -421,6 +452,10 @@ diese Spur verloren.
   Kodierung der Systemumgebung und zerstört still typografische Anführungszeichen und
   Gedankenstriche im Buchtext
 - Verweisform: `technik.md §3, „Datenfalle"` — Nummer und Überschrift, nie eine Zeilennummer
+- **PowerShell: `… | Select-Object -First N` beendet die Pipeline** und damit das laufende
+  Skript (Exit 255) — ein sauberer Lauf sieht danach wie ein Fehlschlag aus (passt zu §10,
+  „Nach jedem Prüfpunkt ein Zwischenergebnis in eine Datei"). Lange Ausgaben stattdessen in
+  eine Datei umleiten und dann lesen
 
 ---
 
@@ -568,6 +603,43 @@ ist genau das passiert.
 > **Regel:** Verlangt eine Teilaufgabe zwei Wege, nennt die Prüfung **beide** — je einen
 > Fall, an dem der eine ohne den anderen rot wird.
 
+### Der Auftrag trennt Belegtes von Vermutetem
+
+Belege (alle aus Berichten seit dem 31.08.2026, je einer eine eigene Teilaufgabe):
+
+- `extract_expression_candidates` — ein Funktionsname, den es nicht gibt. Er stand in
+  einem Durchsichtsbericht, wurde in drei Aufträge übernommen und landete in einer
+  **ausgelieferten Datei** (`libreverbum/wordfreq_en_5000.txt`, Dateikopf) *und* in einem
+  Test, der ihn einfror. Gefunden nur, weil ein Agent beim Prüfen einer *anderen*
+  Behauptung zufällig darüber stolperte
+- „suche den zweiten `JOIN`" — als Tatsache formuliert; es gibt keinen. Rund fünfzehn
+  Minuten vollständige SQL-Inventur, um „es gibt keinen" belegen statt behaupten zu können
+- „vorhandene Testattrappen von `pipeline.run_chapter` in `tests/test_cli_main.py`
+  durchsehen" — es gibt keine
+- Der Auftrag verortete den zweiten Bearbeiter in `cli/`; tatsächlich stand er in den
+  beiden Dateien des Beauftragten. Kosten: rund eine Stunde Umweg über einen
+  Wegwerfordner samt einem Verfahren, am fremden Stand vorbeizucommitten
+- Die Bilanzformel im Auftrag war um zwei Summanden zu kurz; der vermeintliche Fehlbetrag
+  von 934 Einträgen galt eine Weile als Befund
+- Die genannte Wegwerfumgebung hieß anders und lag im Scratchpad einer anderen Sitzung;
+  zehn Minuten Suche über alle Sitzungsordner
+
+Folge, wenn es niemand bemerkt: Ein Name oder eine Zahl aus einem Bericht wird in Code und
+Test **eingefroren** und gilt danach als belegt — vier grüne Befehle sehen das nicht.
+Stufe `schwer`.
+
+Schließt an §5 an, „Womit zu verfälschen sei, ist eine Vermutung und kein Auftrag" —
+dieselbe Wurzel, eine Ebene höher:
+
+> **Regel:** Was ein Auftrag aus einem Bericht übernimmt — Funktionsname, Dateiname, Zahl,
+> Ort des zweiten Bearbeiters —, wird als **Vermutung gekennzeichnet** und mit der Stelle
+> genannt, aus der es stammt. Wer eine gekennzeichnete Vermutung antrifft, prüft sie am
+> Bestand, bevor er darauf baut; bestätigt oder widerlegt gehört sie in den Bericht
+> zurück.
+
+Die Kennzeichnung kostet den Auftraggeber einen Halbsatz und erspart dem Beauftragten die
+Wahl zwischen Glauben und Nachmessen.
+
 **Abgearbeitet werden `schwer` und `mittel`.** `leicht` bleibt liegen und wird von Hand
 angestoßen, wo es sich lohnt — **spätestens am Phasenende** wird jeder verbliebene Punkt
 eingefaltet oder ersatzlos gestrichen. Streichen ist dort oft die richtige Antwort, weil
@@ -615,6 +687,16 @@ vergibt hier der Durchsehende selbst** — anders als bei einer Beobachtung: Die
 eines Befunds ist örtlich und jetzt sichtbar, sie zeigt sich nicht erst, wenn mehrere
 Berichte nebeneinander liegen.
 
+### Die Durchsicht bedient die Kommandozeile wirklich
+
+Beleg: In einer Durchsicht kamen drei von neun Befunden allein aus dem echten Durchlauf —
+darunter der falsche „alles durchgesehen"-Ruf und der Durchsatzdiebstahl des verworfenen
+Vorladefadens. Aus dem Quelltext waren sie plausibel, aber nicht sicher.
+
+> **Regel:** Die Durchsicht ruft den Kern wirklich auf, statt nur den Quelltext zu lesen.
+> Der billige Einstieg ist `cli.main.main(argv, read_line=…, write_line=…)`: keine Konsole
+> zu füttern, kein Unterprozess. Er steht im Docstring von `cli/main.py`.
+
 ### Woran sie prüft: gegen den Commit, nicht gegen den Arbeitsbaum
 
 Es laufen regelmäßig zwei Bearbeiter gleichzeitig (CLAUDE.md, „Aktueller Stand"). Wer im
@@ -623,20 +705,53 @@ nicht zuordnen — hängt es am durchgesehenen Commit oder an der Arbeit des and
 betroffenen Testdateien laufen lassen" verkleinert das Problem, löst es aber nicht.
 
 > **Regel:** Die Durchsicht prüft gegen `git archive <commit>` in einem Wegwerfordner, nicht
-> gegen den Arbeitsbaum. `tools/en-de.sqlite3` und `tools/*.epub` werden dorthin mitkopiert
-> — ohne sie überspringt `pytest` 32 Tests (`needs_dictionary`, `needs_epub`,
-> `needs_calibre_split_epub`) stillschweigend, und die Durchsicht hält für grün, was gar
-> nicht gelaufen ist.
+> gegen den Arbeitsbaum. `tools/en-de.sqlite3` und `tools/*.epub` werden dorthin
+> mitkopiert. Die **Gegenprobe** dafür ist die Schlusszeile von `pytest`: Sie muss genau
+> **zwei** Übersprungene nennen — `needs_model` und `needs_wordfreq`, die einzigen beiden
+> Marken, die nicht an `tools/` hängen (`addopts = ["-rs"]` in `pyproject.toml` nennt jeden
+> Skip namentlich, ohne Zusatzaufwand). Meldet der Lauf stattdessen rund fünfunddreißig
+> Übersprungene, ist die Kopie missraten — `tools/en-de.sqlite3` oder ein EPUB fehlt —, und
+> die Durchsicht hält für grün, was gar nicht gelaufen ist. Zur Einordnung: 33 der 559
+> Tests hängen an `tools/` (`needs_dictionary`, `needs_epub`, `needs_calibre_split_epub`) —
+> diese Größenordnung darf danebenstehen, ist aber nicht die Prüfgröße; geprüft wird die
+> Zahl **zwei**.
+
+**Ein Verfälschungslauf im Wegwerfordner wird in `timeout` gewickelt** (etwa
+`timeout 900 pytest …`), damit eine falsche Umsetzung **rot** wird, statt zu hängen — der
+Hänger ist sonst die einzige Fehlerform, die überhaupt kein Ergebnis liefert. Begründung
+und die drei Anlässe: technik.md §6, „Zeitschranke: Hängeschutz über die Shell, nicht über
+`pytest-timeout`".
 
 **Die eigenen Messskripte der Durchsicht liegen dagegen außerhalb dieses Ordners.** Sonst
 prüft das Tor sie mit — und ihr Rot sieht aus wie Rot des durchgesehenen Commits: Am
 01.09.2026 machten 18 Meldungen aus dem Prüfcode selbst `ruff format --check .` und
 `ruff check .` rot, in einem Commit, der beide bestanden hatte.
 
+**`PYTHONUTF8=1` bzw. `PYTHONIOENCODING=utf-8` für jedes eigene Prüfskript der
+Durchsicht, und Textvergleiche über `repr()` statt über das Auge.** Belege: Ein
+Prüfskript, das mit `print` protokolliert, starb beim Wort `iodoform` an einem `₃` in der
+WikDict-Übersetzung, weil `print` gegen cp1252 schrieb — ein vollständiger
+Wiederholungslauf. Der Kern selbst fängt das ab (`cli.display.safe_print`), das
+Prüfskript nicht. Und: Die Windows-Konsole zerstört in jeder Werkzeugausgabe Umlaute und
+typografische Zeichen, sodass `anki._UNCERTAIN_TEXT` und `printout._UNCERTAIN_MARK` samt
+Zusatz identisch aussahen, obwohl sich Halbgeviertstrich und Bindestrich unterschieden —
+hier hätte ein falsches Ergebnis durchgehen können.
+
 Das Vorgehen hat sich in drei Durchsichten und drei Abnahmeläufen im August 2026 bewährt und
 kostet einen Befehl. Es ersetzt nicht das Tor auf der Seite des Bauenden (CLAUDE.md, „Prüfen
 vor »fertig«"), sondern beantwortet dessen offene Frage: woran „grün" bei zwei Bearbeitern
 überhaupt gemessen ist.
+
+### Nach jedem Prüfpunkt ein Zwischenergebnis in eine Datei
+
+Die Durchsicht läuft mehrere Prüfpunkte hintereinander ab und kann mittendrin abbrechen.
+Beleg: Zwei Durchsichten starben mitten in den Verfälschungsproben — eine am
+Sitzungslimit, eine an einem Serverfehler. Beim Serverfehler rettete genau diese, im
+Einzelfall zugerufene Anweisung rund eine Stunde Messarbeit; im anderen Fall war der
+erhaltene Stand Glück.
+
+> **Regel:** Die Durchsicht schreibt nach jedem Prüfpunkt ein Zwischenergebnis in eine
+> Datei — nicht erst am Ende. Das gehört ins Vorgehen, nicht in einen Zuruf im Einzelfall.
 
 ### Befund und Beobachtung sind zweierlei
 
