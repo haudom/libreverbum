@@ -40,11 +40,23 @@ nie in `.venv/`, während spaCy und `en_core_web_md` nur dort liegen. Der Reprod
 zu `tools/build_wordfreq_preset.py` braucht beides und läuft deshalb zweistufig — Stufe 1
 mit dem Interpreter aus `LIBREVERBUM_WORDFREQ_PYTHON`, Stufe 2 mit `sys.executable`. Fehlt
 die Variable, wird übersprungen.
+
+Die Marke `needs_gui` (bauplan-phase2.md AP 1) steht für sich: PySide6 liegt in der
+optionalen Gruppe `gui` (technik.md §1, §6, „Die Architekturregel steht jetzt in der
+Umgebung") und ist nicht Teil der Kernabhängigkeiten — ein versehentlicher Import im Kern
+soll sofort scheitern, nicht erst im Gespräch über die Architektur. Tests, die PySide6
+brauchen, werden ohne die Gruppe übersprungen statt zu scheitern, wie bei den Marken oben.
+`QT_QPA_PLATFORM` wird hier fest auf `offscreen` gesetzt, bevor irgendein Qt-Objekt
+entsteht — ein Testlauf soll kein Fenster öffnen und auf keinem echten Bildschirm
+angewiesen sein. Die Vorrichtung `qt_gui_app` hält dazu genau **eine** `QGuiApplication` je
+Prozess vor (Abschnitt 8 des Bauplans: „Genau eine QGuiApplication je Prozess — im Test ein
+Fixture mit Sitzungsreichweite, nie eine je Test").
 """
 
 from __future__ import annotations
 
 import http.server
+import importlib.util
 import json
 import os
 import sqlite3
@@ -53,9 +65,18 @@ import zipfile
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import pytest
+
+if TYPE_CHECKING:
+    from PySide6.QtGui import QGuiApplication
+
+# REGEL (bauplan-phase2.md AP 1): Muss gesetzt sein, bevor die erste QGuiApplication
+# entsteht — danach wirkt die Variable nicht mehr (dieselbe Reihenfolgefalle wie
+# QQuickStyle.setStyle, Abschnitt 8 des Bauplans). setdefault statt Zuweisung, damit eine
+# Vorgabe aus der aufrufenden Shell nicht überschrieben wird.
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 # --------------------------------------------------------------------- Mini-Wörterbuch
 
@@ -568,11 +589,34 @@ def wordfreq_python() -> str:
     return path
 
 
+# ------------------------------------------------------------------------- Marke needs_gui
+
+
+def _pyside6_importable() -> bool:
+    # find_spec statt eines echten Imports: Ein Test, der nur die Marke prüft, soll
+    # PySide6 nicht laden müssen — das Laden selbst bleibt Sache der needs_gui-Tests.
+    return importlib.util.find_spec("PySide6") is not None
+
+
+@pytest.fixture(scope="session")
+def qt_gui_app() -> Iterator[QGuiApplication]:
+    """Stellt für `needs_gui`-Tests genau **eine** `QGuiApplication` je Testlauf bereit
+    (bauplan-phase2.md AP 1; Abschnitt 8, „Genau eine QGuiApplication je Prozess"). Der
+    Sitzungsumfang sorgt dafür, dass jeder Test dieselbe Instanz bekommt statt einer
+    eigenen — eine zweite Instanz im selben Prozess ist mit Qt nicht vorgesehen."""
+    from PySide6.QtGui import QGuiApplication
+
+    app = QGuiApplication.instance()
+    if app is None:
+        app = QGuiApplication([])
+    yield cast("QGuiApplication", app)
+
+
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Überspringt `needs_dictionary`-, `needs_model`-, `needs_epub`-,
-    `needs_calibre_split_epub`- und `needs_wordfreq`-Tests ohne ihre Voraussetzung, statt
-    sie scheitern zu lassen (bauplan.md, T2 und T12; technik.md §8, „Ein Kapitel ist nicht
-    ein Dokument")."""
+    `needs_calibre_split_epub`-, `needs_wordfreq`- und `needs_gui`-Tests ohne ihre
+    Voraussetzung, statt sie scheitern zu lassen (bauplan.md, T2 und T12; technik.md §8,
+    „Ein Kapitel ist nicht ein Dokument"; bauplan-phase2.md AP 1)."""
     if not _real_dictionary_path().exists():
         skip_dictionary = pytest.mark.skip(reason="echtes Wörterbuch tools/en-de.sqlite3 fehlt")
         for item in items:
@@ -606,3 +650,10 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
         for item in items:
             if item.get_closest_marker("needs_wordfreq") is not None:
                 item.add_marker(skip_wordfreq)
+    if not _pyside6_importable():
+        skip_gui = pytest.mark.skip(
+            reason='PySide6 (Gruppe gui) ist nicht installiert (pip install "PySide6>=6.11,<7")'
+        )
+        for item in items:
+            if item.get_closest_marker("needs_gui") is not None:
+                item.add_marker(skip_gui)

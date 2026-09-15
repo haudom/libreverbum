@@ -115,4 +115,7 @@ markers = [
     "needs_epub: benötigt die echten EPUBs tools/sherlock.epub und tools/dorian_gray.epub",
     "needs_calibre_split_epub: benötigt die echte EPUB-Datei tools/dune.epub (Calibre-Konvertat mit _split_NNN-Dokumenten)",
     "needs_wordfreq: benötigt einen zweiten Interpreter mit dem echten wordfreq-Paket (LIBREVERBUM_WORDFREQ_PYTHON; wordfreq liegt bewusst nicht in .venv/, siehe tools/build_wordfreq_preset.py)",
+    # bauplan-phase2.md AP 1: PySide6 (Gruppe gui) ist optional installiert. Ohne die
+    # Gruppe wird übersprungen statt zu scheitern, wie bei den übrigen Marken oben.
+    "needs_gui: benötigt PySide6 (Gruppe gui) und ein Qt-Fenster (QT_QPA_PLATFORM=offscreen im Test)",
 ]

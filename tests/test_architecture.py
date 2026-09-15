@@ -7,14 +7,27 @@ bestehen — sonst bewiese er ab dem Tag nichts mehr, an dem der Pfad nicht mehr
 import ast
 from pathlib import Path
 
+import pytest
+
 CORE = Path(__file__).resolve().parent.parent / "libreverbum"
+APP = Path(__file__).resolve().parent.parent / "app"
 
 # PySide6 ist die Oberflächenbibliothek des Projekts (technik.md §1). PyQt steht daneben,
 # weil es dieselbe Schnittstelle bedient und beim Übernehmen fremder Beispiele hereingerät.
 # "cli" (Befund mittel 5, Durchsicht T16): Mit bauplan.md T16 gibt es eine zweite
 # Oberfläche neben der künftigen Qt-Oberfläche — ohne diesen Eintrag prüfte dieser Test
 # nur PySide6/PyQt und ein `from cli import ...` im Kern bliebe grün.
-GUI_PACKAGES = frozenset({"PySide6", "PyQt5", "PyQt6", "cli"})
+# "gui", "app" (bauplan-phase2.md AP 1): Mit technik.md §14, E4 gibt es eine dritte
+# Oberflächenschicht — ein `from gui import ...` oder `from app import ...` im Kern bliebe
+# ohne diese beiden Einträge grün.
+GUI_PACKAGES = frozenset({"PySide6", "PyQt5", "PyQt6", "cli", "gui", "app"})
+
+# Was app/ selbst nicht importieren darf: keine der beiden Oberflächen, keine
+# Oberflächenbibliothek (technik.md §14, E4 — „ein drittes Paket app/ … importiert den
+# Kern, wird von beiden Oberflächen importiert, vom Kern nie"). Die Ausnahme app/pdf.py
+# (E7 (b), AP 10) ist hier bewusst noch nicht eingebaut — E7 ist noch nicht entschieden,
+# und Regel 14 verbietet einen Schalter ohne zweiten Anwendungsfall.
+APP_FORBIDDEN_IMPORTS = frozenset({"PySide6", "PyQt5", "PyQt6", "cli", "gui"})
 
 
 def imported_packages(source: str) -> set[str]:
@@ -91,3 +104,32 @@ def test_rule_9_step_modules_import_only_entities() -> None:
         and (found := core_siblings_imported(module.read_text(encoding="utf-8-sig")) - {"entities"})
     }
     assert not offenders, f"Schrittmodul kennt mehr als entities: {offenders}"
+
+
+def test_rule_9_app_package_does_not_import_the_interfaces() -> None:
+    """technik.md §14, E4: `app/` importiert weder `cli` noch `gui` noch eine
+    Oberflächenbibliothek — es liegt zwischen Kern und beiden Oberflächen, nicht über
+    ihnen (bauplan-phase2.md AP 1).
+
+    `app/` entsteht erst in AP 3. Bis dahin überspringt sich dieser Test **sichtbar** mit
+    Begründung, statt stillschweigend nichts zu prüfen — sonst sähe eine Prüfung, die
+    dauerhaft nichts prüft, wie eine grüne Prüfung aus (Klarstellung der Hauptsitzung zu
+    AP 1). Sobald `app/` existiert, greift er wie `test_rule_9_core_does_not_import_the_
+    user_interface` oben."""
+    if not APP.is_dir():
+        pytest.skip(
+            "app/ existiert noch nicht (entsteht in AP 3, bauplan-phase2.md) — "
+            "dieser Test greift, sobald das Paket da ist"
+        )
+    modules = sorted(APP.rglob("*.py"))
+    assert modules, f"Kein Modul unter {APP} gefunden — dieser Test prüfte nichts."
+
+    offenders = {
+        module.relative_to(APP.parent).as_posix(): sorted(found)
+        for module in modules
+        if (
+            found := imported_packages(module.read_text(encoding="utf-8-sig"))
+            & APP_FORBIDDEN_IMPORTS
+        )
+    }
+    assert not offenders, f"Oberflächen-Import in app/: {offenders}"
