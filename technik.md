@@ -3386,8 +3386,10 @@ schief.
 
 **Entschieden:** ein drittes Paket `app/` neben `cli/` und `gui/` — ohne Qt, ohne
 Konsole; importiert den Kern, wird von beiden Oberflächen importiert, vom Kern nie.
-`tests/test_architecture.py` soll das ab AP 1 prüfen — heute prüft `GUI_PACKAGES` nur
-`PySide6`/`PyQt5`/`PyQt6`/`cli`, weder `app` noch `gui` kommen vor. Regel 14 ist erfüllt: Der
+`tests/test_architecture.py` prüft das seit AP 1 über `FORBIDDEN_IN_CORE` (vormals
+`GUI_PACKAGES`, umbenannt in der Durchsicht von `907ab02`, Befund 5, weil `app/` selbst
+keine Oberfläche ist); die Prüfung auf `app/` überspringt sich sichtbar, solange das Paket
+noch nicht angelegt ist — das tut AP 3. Regel 14 ist erfüllt: Der
 zweite Anwendungsfall (zwei Oberflächen) liegt vor. Was dagegen **Verkettung von
 Kernschritten** ist — Anki-Deck schreiben, Druckseite schreiben, Triage-Karte im Profil
 buchen — gehört nach Abschnitt 7 in `pipeline`, nicht nach `app/`; das schließt den
