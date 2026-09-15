@@ -2019,13 +2019,20 @@ Zwei Beobachtungen daraus:
 > Lesereihenfolge als ein Kapitel — zusammen mit einem sichtbaren Hinweis, dass die Grenzen
 > nicht aus dem Buch stammen.
 
-Beim Calibre-Konvertat heißt das vier „Kapitel" zu je rund 30.000 Wörtern. Die Triage
+Beim Calibre-Konvertat der Tabelle heißt das sechs „Kapitel" zu je rund 20.200 Wörtern
+(121.315 W / 6 Dokumente) — die Zeile oben nennt sechs Dokumente, nicht vier. Die Triage
 bleibt benutzbar, weil sie in Blöcken läuft und der Nutzer nach jedem gefragt wird
 (konzept.md §4, „Blockweise Triage mit Fortsetzungsfrage"; bis dahin stand hier die
 Wortobergrenze, die dieselbe Wirkung hatte); die Zusage des Konzepts,
 danach ein Kapitel am Stück zu lesen, wird sie nicht. Der saubere Weg führt über die
 Quelle: Calibre kann für solche Dateien ein Inhaltsverzeichnis erzeugen. Abnahmekriterium 1
 in konzept.md hält das mit dem Verweis auf Schritt 1 fest.
+
+Das versionierte Beispiel für diese Dateiform, `tools/dune.epub`, fällt nicht unter diesen
+Rückfall: Nachgemessen (`PYTHONUTF8=1 PYTHONPATH=. .venv/Scripts/python tools/epub_check.py
+tools/dune.epub`) hat es eine eigene Navigation mit vier Zielen, 10 Dokumente und 206.930
+Wörter — die Kapitelliste kommt dort regulär aus der Navigation. Einzelheiten unten, „Ein
+Kapitel ist nicht ein Dokument".
 
 ### Befund 18.08.2026: wie viel Vorspann die Heuristik wegnimmt
 
@@ -2331,8 +2338,10 @@ Maximum 199.
 > trägt das Kriterium weiterhin — beurteilt wurde sie bei der Abnahme T17 (konzept.md
 > §4, „Der erste Durchlauf je Buch ist ein Kalibrierdurchlauf": sie bleibt bei 25).
 
-Diese Rechnung ergab `MAX_ENTRIES = 36`. Seit der echten Druckmessung unten gilt das nicht
-mehr — geprüft und gültig ist **33** (`libreverbum/printout.py`).
+Diese Rechnung — 36 × 13,3 mm Eintragshöhe (zwei Zeilen zu 4,66 mm plus 4 mm Abstand) =
+478,8 mm von 491 mm nutzbarer Spaltenhöhe, **97,5 % Füllung** — ergab `MAX_ENTRIES = 36`.
+Seit der echten Druckmessung unten gilt das nicht mehr — geprüft und gültig ist **33**
+(`libreverbum/printout.py`).
 
 ### Echt gedruckt statt gerechnet: `MAX_ENTRIES` auf 33 korrigiert
 
@@ -2355,10 +2364,11 @@ Darauf beruht die Korrektur auf `MAX_ENTRIES = 33`.
 
 Drei Dinge sind daran festzuhalten:
 
-1. **Die Rechnung war nicht falsch, sie war zu knapp.** 97,5 % Füllung (Abschnitt oben)
-   lässt keinen Spielraum für das, was ein echter Browser anders macht als eine
-   Schriftmetrik-Rechnung — Zeilenumbruch, Silbentrennung, Schriftrendering im Detail
-   weichen vom rechnerischen Modell ab, und bei fast voller Blattbelegung reicht das schon.
+1. **Die Rechnung war nicht falsch, sie war zu knapp.** 97,5 % Füllung (oben, „36 × 13,3 mm
+   … 97,5 % Füllung") lässt keinen Spielraum für das, was ein echter Browser anders macht
+   als eine Schriftmetrik-Rechnung — Zeilenumbruch, Silbentrennung, Schriftrendering im
+   Detail weichen vom rechnerischen Modell ab, und bei fast voller Blattbelegung reicht das
+   schon.
 2. **Die Messung ist über die Übersetzungslänge nicht monoton** — 74 und 75 Zeichen
    ergeben bei 36 Einträgen zwei Seiten, 76 wieder eine. Das ist kein Messfehler des
    Browsers, sondern liegt an der Auswahl: Zu jeder Ziellänge zieht `print_fit_check.py`
@@ -3398,8 +3408,9 @@ des Modellnamens, Dateinamen der Exporte, Buchung einer Triage-Entscheidung, Vor
 schief.
 
 **Entschieden:** ein drittes Paket `app/` neben `cli/` und `gui/` — ohne Qt, ohne
-Konsole; importiert den Kern, wird von beiden Oberflächen importiert, vom Kern nie
-(`tests/test_architecture.py` prüft alle drei Richtungen). Regel 14 ist erfüllt: Der
+Konsole; importiert den Kern, wird von beiden Oberflächen importiert, vom Kern nie.
+`tests/test_architecture.py` soll das ab AP 1 prüfen — heute prüft `GUI_PACKAGES` nur
+`PySide6`/`PyQt5`/`PyQt6`/`cli`, weder `app` noch `gui` kommen vor. Regel 14 ist erfüllt: Der
 zweite Anwendungsfall (zwei Oberflächen) liegt vor. Was dagegen **Verkettung von
 Kernschritten** ist — Anki-Deck schreiben, Druckseite schreiben, Triage-Karte im Profil
 buchen — gehört nach Abschnitt 7 in `pipeline`, nicht nach `app/`; das schließt den

@@ -449,6 +449,33 @@ wurde erst im zweiten Anlauf gerichtet.
 Nachträge in den Fließtext, der Rest fällt weg. Sonst wird aus einzelnen Nachträgen über
 zwanzig Entscheidungen hinweg eine Sedimentschicht.
 
+### Ein verteiltes Einfalten braucht eine verbindliche Umbenennungstabelle
+
+Ein Einfalten, das auf mehrere Teilaufträge oder mehrere Commits verteilt wird, erzeugt
+**tote Verweise auf Zeit**: Ein Verweis auf eine neue Überschrift zeigt ins Leere, solange
+der Teilauftrag, der sie einträgt, noch nicht committet hat — und keiner der beiden
+Bauenden kann das im eigenen Diff sehen. Beleg: `konzept.md` trug die neue §8c-Überschrift
+bereits seit `0b09b7d`; zwischen `0b09b7d` und `8f87838` lief ein Verweis darauf ins Leere,
+bis der zugehörige Teilauftrag selbst committet hatte.
+
+> **Regel:** Ein verteiltes Einfalten nennt im Auftrag eine **verbindliche
+> Umbenennungstabelle** — sie ist die einzige Prüfgrundlage, an der der Durchsehende einen
+> Übergangszustand von einem toten Verweis unterscheiden kann. Die Tabelle nennt die
+> **verschachtelte Gruppe** von Überschriften, nicht nur die einzelne Überschrift:
+> Binnenverweise wie „siehe oben" oder „stand unter …" zwischen zusammenhängenden
+> Abschnitten benutzen das gesuchte Stichwort oft gar nicht, und kein `grep` findet sie
+> dann.
+
+Zwei Prüffragen gehören beim Einfalten dazu, aus derselben Fehlerfamilie:
+
+- **Nicht „ist alles noch da?", sondern „steht jede erhaltene Messreihe unter der Regel,
+  unter der sie gemessen wurde?"** Beleg: Nach dem Verschmelzen zweier Nachträge stand die
+  Messreihe einer verworfenen Regel im Präsens unter der Überschrift der geltenden — alle
+  Zahlen waren da, der Abschnitt las sich trotzdem falsch.
+- **Eine neu geschriebene Zusammenfassung ist die gefährlichste Zeile eines Einfaltens.**
+  Ein Satz, der wie eine Zusammenfassung der Tabelle darunter klingt, ihr aber
+  widerspricht, sieht im Diff richtig aus.
+
 ---
 
 ### Vor dem Löschen einer Datei: nachsehen, wer auf sie zeigt
@@ -570,6 +597,14 @@ wächst, stirbt leise; eines, das leer sein soll, meldet sich. Verloren geht dab
 Die Historie hat Git, genau wie bei `bauplan.md` (§7, „Überschreiben bei ersetzter
 Festlegung").
 
+**Beim Einfalten ist die Suchmenge „alles außer `beobachtungen/`", nie die im Auftrag
+aufgezählten geänderten Verzeichnisse.** Ein Auftrag, der die zu durchsuchenden Orte
+aufzählt, verengt damit ungewollt die Suche nach dem alten Wortlaut. Beleg: Eine
+Kurzfassung der Nachtragsregel aus §7 stand weiterhin unverändert in CLAUDE.md — einer
+Datei, die keiner der aufgezählten Teilaufträge als eigene führte — und wurde nur
+gefunden, weil `grep` über den ganzen Wegwerfordner lief statt über die im Auftrag
+benannten Verzeichnisse. Die Stelle stand als Prosa, nicht im Diff der Teilaufgabe.
+
 ### Die beiden Arten werden verschieden behandelt
 
 **Was ein Dokument berichtigt, wird bei jedem Einfalten vollständig abgearbeitet.** Es ist
@@ -659,6 +694,16 @@ dieselbe Wurzel, eine Ebene höher:
 Die Kennzeichnung kostet den Auftraggeber einen Halbsatz und erspart dem Beauftragten die
 Wahl zwischen Glauben und Nachmessen.
 
+### Ein „nicht selbst entscheiden"-Punkt braucht die Antwort rechtzeitig
+
+Die beiden Regeln oben regeln, was der Auftrag **sagt**. Eine dritte, denselben Ursprungs,
+regelt den **Zeitpunkt**: Ein ausdrücklich als „nicht selbst entscheiden" markierter Punkt
+braucht eine Antwort, bevor der Bearbeiter die Stelle erreicht — nicht erst danach, wenn er
+längst davor steht und entweder wartet oder doch selbst entscheidet.
+
+> **Regel:** Markiert ein Auftrag einen Punkt ausdrücklich als „nicht selbst entscheiden",
+> liegt die Antwort vor, wenn der Bearbeiter die Stelle erreicht.
+
 **Abgearbeitet werden `schwer` und `mittel`.** `leicht` bleibt liegen und wird von Hand
 angestoßen, wo es sich lohnt — **spätestens am Phasenende** wird jeder verbliebene Punkt
 eingefaltet oder ersatzlos gestrichen. Streichen ist dort oft die richtige Antwort, weil
@@ -686,10 +731,15 @@ und in seinen eigenen Tests wiederholt hatte — dieselbe Wurzel wie bei der sel
 Vorrichtung in §5, „Woran geprüft wird". Wer prüft, muss die Annahme nicht teilen.
 
 **Bei einem reinen Dokumentationscommit ist das Tor nicht nur unvollständig, sondern
-stumm.** Kein Testlauf berührt Prosa — `grep` und der Augenschein sind dort der ganze
+stumm** — aber nur, wenn der Diff **keine ausführbare Zeile und keine `.py`-Datei**
+berührt. Kein Testlauf berührt Prosa — `grep` und der Augenschein sind dort der ganze
 Prüfapparat. Beleg: In einer Durchsicht der Phase-1-Nachträge waren fünf von sechs
 Befunden von einer Art, die kein Testlauf je angefasst hätte. Dieselbe stille Fehlerklasse
-wie bei Code, nur ohne die vier Befehle, die überhaupt etwas melden könnten.
+wie bei Code, nur ohne die vier Befehle, die überhaupt etwas melden könnten. Docstrings und
+Regel-Kommentare sind dagegen Prosa **in** Code: Ein Einfalten in `tools/*.py` erzeugte
+dort einmal an kollidierenden Anführungszeichen einen Syntaxfehler, den `ruff check`
+gemeldet hätte. Der Verzicht auf die vier Befehle ist deshalb **begründungspflichtig** —
+mit dem Diff als Begründung: keine ausführbare Zeile, keine `.py`-Datei.
 
 ### Wonach sie sucht, und was herauskommt
 
@@ -711,6 +761,13 @@ Abnahmekriterium, Regel, Auftrag —, und dem echten Gegenüber (§5, „Woran g
 vergibt hier der Durchsehende selbst** — anders als bei einer Beobachtung: Die Wirkung
 eines Befunds ist örtlich und jetzt sichtbar, sie zeigt sich nicht erst, wenn mehrere
 Berichte nebeneinander liegen.
+
+**Ein Vorbefund ist ein Befund mit ausgewiesener Herkunft.** Bestand der Fehler schon vor
+dem durchgesehenen Commit, gehört er dennoch in den Bericht — gesondert von den Befunden
+am Commit ausgewiesen als „vor diesem Commit entstanden". Der Gegenstand der Durchsicht
+ist der Commit, aber ein Durchsehender ist oft der Einzige, der die Stelle überhaupt
+ansieht; bei strenger Auslegung „nur der Commit zählt" fiele ein solcher Vorbefund unter
+den Tisch, ohne dass ihn je jemand sonst bemerkt.
 
 ### Die Durchsicht bedient die Kommandozeile wirklich
 
@@ -746,21 +803,14 @@ betroffenen Testdateien laufen lassen" verkleinert das Problem, löst es aber ni
 > (`tests/conftest.py`) — falscher Alarm, kein falsches Grün; die betreffende Variable vor
 > dem Lauf löschen.
 
-**Das Vergleichspaar einer Durchsicht ist `git show <commit>`, nicht `git diff
-<vorgänger> <commit>`.** Liegt zwischen den beiden ein fremder Commit — bei zwei
-gleichzeitig Bearbeitenden der Normalfall —, geraten dessen Zeilen mit in den Diff und
-drohen als Befund gegen den falschen Bauenden auszufallen. Beleg: 23 fremde Zeilen einer
-README-Arbeit im genannten Vergleichspaar, aus denen beinahe ein Befund gegen den
-falschen Bauenden entstanden wäre; entdeckt nur, weil die Zuordnung vor dem Formulieren
-noch einmal geprüft wurde.
-
-**Beim Einfalten ist die Suchmenge „alles außer `beobachtungen/`", nie die im Auftrag
-aufgezählten geänderten Verzeichnisse.** Ein Auftrag, der die zu durchsuchenden Orte
-aufzählt, verengt damit ungewollt, was der vorgeschriebene `grep` weit gefasst hätte.
-Beleg: Eine Kurzfassung der Nachtragsregel aus §7 stand weiterhin unverändert in
-CLAUDE.md — einer Datei, die keiner der aufgezählten Teilaufträge als eigene führte — und
-wurde nur gefunden, weil der `grep` über den ganzen Wegwerfordner lief statt über die im
-Auftrag benannten Verzeichnisse. Die Stelle stand als Prosa, nicht im Diff der Teilaufgabe.
+**Das Vergleichspaar einer Durchsicht ist der Commit selbst — `git show <commit>`,
+gleichwertig `git diff <unmittelbarer Vorgänger> <commit>`.** Die Falle ist eine
+**ältere Basis**: ein von Hand gewähltes „Vorher", das mehr als einen Commit
+zurückliegt, zieht die dazwischenliegende fremde Arbeit in den Diff und droht als Befund
+gegen den falschen Bauenden auszufallen. Beleg: `git diff b663678 0b09b7d` schloss den
+dazwischenliegenden Commit `29e137d` (fremde README-Arbeit, 23 Zeilen) mit ein, aus denen
+beinahe ein Befund gegen den falschen Bauenden entstanden wäre; entdeckt nur, weil die
+Zuordnung vor dem Formulieren noch einmal geprüft wurde.
 
 **Ein eigenes Prüfskript meldet seine Trefferzahl und wird gegen eine unabhängig bekannte
 Größe gehalten, bevor sein Ergebnis zählt.** Beleg: Ein Verweisskript beim Einfalten von
@@ -769,12 +819,6 @@ weil der Bestand öffnend `„` (U+201E), schließend aber ASCII `"` verwendet �
 tatsächliche Zahl lag bei 518. Gerettet hat nur, dass der Auftrag „rund 160 Stellen"
 nannte und zwei dagegen absurd war: genau das falsche Grün, das die Durchsicht sucht —
 null tote Verweise, weil überhaupt keine Verweise gefunden wurden.
-
-**Ein Fehler, der schon vor dem durchgesehenen Commit bestand, gehört dennoch in den
-Bericht — gesondert von den Befunden am Commit ausgewiesen.** Der Gegenstand der
-Durchsicht ist der Commit, aber ein Durchsehender ist oft der Einzige, der die Stelle
-überhaupt ansieht; bei strenger Auslegung „nur der Commit zählt" fiele ein solcher
-Vorbefund unter den Tisch, ohne dass ihn je jemand sonst bemerkt.
 
 **Ein Verfälschungslauf im Wegwerfordner wird in `timeout` gewickelt** (etwa
 `timeout 900 pytest …`, **in Git Bash** — dort ist `timeout` das GNU-Werkzeug), damit eine

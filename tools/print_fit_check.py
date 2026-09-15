@@ -6,8 +6,9 @@ Hintergrund
 -----------
 `printout.MAX_ENTRIES` (../libreverbum/printout.py) stammte aus einer **Rechnung**:
 Arial-Schriftmetrik, Zeilenhöhe, 36 × 13,3 mm = 478,8 mm von 491 mm nutzbarer
-Spaltenhöhe — 97,5 % Füllung (../technik.md §8c, „Gemessene Ergebnisse"). Gedruckt wurde
-dabei nie. Dieses Skript hat am 01.09.2026 mit Edge headless gedruckt und die Rechnung am
+Spaltenhöhe — 97,5 % Füllung (../technik.md §8c, „Echt gedruckt statt gerechnet:
+MAX_ENTRIES auf 33 korrigiert"). Gedruckt wurde dabei nie. Dieses Skript hat am
+01.09.2026 mit Edge headless gedruckt und die Rechnung am
 eigenen Designpunkt widerlegt: 36 Einträge mit 74 oder 75 Zeichen Übersetzungstext
 ergaben **zwei** physische Seiten, obwohl dieselbe Eintragszahl bei der p99-Länge (76
 Zeichen), auf die §8c auslegt, wieder auf einer Seite blieb — die gerechnete 97,5-%-Füllung
