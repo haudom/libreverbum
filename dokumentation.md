@@ -443,12 +443,54 @@ durchgehen können. **Wie schwer eine Beobachtung wiegt, entscheidet er nicht** 
 sich erst, wenn mehrere Berichte nebeneinander liegen. Zum Bericht gehört außerdem der
 rote Lauf aus §5: welcher Test bei welcher Verfälschung gefallen ist.
 
+### Wo die Beobachtungen liegen: `beobachtungen/`
+
 **Keine gemeinsame Datei, in die alle schreiben.** Es laufen regelmäßig zwei Bearbeiter
 gleichzeitig; beim Anhängen an dieselbe Datei gehen Einträge verloren, ohne dass es jemand
-merkt. Der Bericht ist der Kanal; das Sammeln und Einfalten macht die kuratierende Stelle.
-Reicht das nicht mehr, ist die nächste Stufe ein **Verzeichnis mit einer Datei je
-Beobachtung** — konfliktfrei, weil jeder in seine eigene schreibt — und kein zweiter
-Sammeltext.
+merkt. Deshalb **eine Datei je Bericht** im Verzeichnis `beobachtungen/`: Jeder
+Schreibvorgang legt eine Datei an, statt an eine bestehende anzuhängen, und damit ist diese
+Fehlerklasse weg statt verwaltet.
+
+**Der Bericht bleibt der Kanal** — wer baut oder durchsieht, legt selbst nichts ab und
+bekommt keine zweite Pflicht, die er vergessen kann. Abgelegt wird von der **kuratierenden
+Stelle**: Sie nimmt den Bericht entgegen und schreibt seine Beobachtungen weg, **bevor sie
+etwas anderes tut**. So schreibt genau einer, und der Zeitpunkt ist eindeutig. Wer das auf
+später verschiebt, hat sie faktisch nur im Sitzungsprotokoll — und das liegt außerhalb des
+Repositoriums, ist nicht versioniert und an einen Rechner gebunden. Die Beobachtungen der
+Phase-1-Bauzeit sind auf genau diesem Weg verlorengegangen.
+
+**Je Bericht, nicht je Beobachtung.** Eine Beobachtung ohne die Teilaufgabe, aus der sie
+stammt, ist nicht zu bewerten: „hat zwei Läufe gekostet" sagt nichts, solange offen bleibt,
+welche. Konfliktfrei ist das eine wie das andere; beisammen bleibt nur das erste.
+
+Der Name nennt Datum und Sache, die Rolle unterscheidet Bau von Durchsicht — aus derselben
+Teilaufgabe kommen beide:
+
+```
+beobachtungen/2026-09-15-teilexport-bei-abbruch-durchsicht.md
+```
+
+```markdown
+# Teilexport bei Abbruch — Durchsicht
+
+Datum: 15.09.2026 · Commit: b91a56e · Rolle: Durchsicht
+
+- Die Verfälschungsprobe ließ sich nicht mit `git checkout` zurücknehmen, ohne die
+  uncommittete echte Arbeit mitzuverwerfen.
+  Kosten: eine Stunde Wiederherstellung. Hätte durchgehen können: nein.
+```
+
+**Beide Angaben stehen in jeder Zeile**, auch wo sie „keine" und „nein" lauten. Ein Feld,
+das freibleiben darf, macht die oben eng gestellte Frage wieder weit.
+
+Drei Dinge gehören **nicht** hinein:
+
+- **keine Stufe** — gewichtet wird am Tor, nicht vom Bauenden (siehe oben und die Tabelle
+  unten)
+- **kein Befund** — der geht an die Teilaufgabe zurück und ist dort erledigt (§10, „Befund
+  und Beobachtung sind zweierlei")
+- **kein roter Lauf** — welcher Test bei welcher Verfälschung fiel, gehört in den Bericht
+  und zur Teilaufgabe, nicht zum Ablauf
 
 **Eingefaltet wird an den Toren einer Phase** — dort, wo ein Bündel von Teilaufgaben
 abgeschlossen ist und der nächste Abschnitt beginnt: Die gesammelte Liste wird
@@ -456,6 +498,13 @@ durchgegangen, was ein Dokument berichtigt, wandert hinein, was die Hausordnung 
 wird entschieden. Der Punkt, an dem ein solcher Rückweg gewöhnlich stirbt, ist nicht das
 Sammeln, sondern das Einfalten — dieselbe Vorsichtsmaßnahme wie „Am Phasenende einfalten"
 in §7.
+
+**Das Einfalten löscht die Dateien**, im selben Commit, der die Nachträge in die Dokumente
+trägt. `beobachtungen/` ist damit zwischen zwei Toren gefüllt und danach leer — und ein
+nicht-leeres Verzeichnis **ist** die Erinnerung ans Einfalten. Ein Verzeichnis, das nur
+wächst, stirbt leise; eines, das leer sein soll, meldet sich. Verloren geht dabei nichts:
+Die Historie hat Git, genau wie bei `bauplan.md` (§7, „Überschreiben bei ersetzter
+Festlegung").
 
 ### Die beiden Arten werden verschieden behandelt
 

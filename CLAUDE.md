@@ -263,6 +263,14 @@ die davon abhängen, tragen `needs_dictionary`, `needs_model`, `needs_epub` oder
 - **Jeder Auftrag endet mit „Beobachtungen zum Ablauf"** (dokumentation.md §9), jeder
   Bericht beantwortet ihn. Das ist der einzige Rückweg für das, was einen Bearbeiter
   aufgehalten hat; eingefaltet wird an den Toren einer Phase, nicht nebenbei
+  - **Wer den Bericht entgegennimmt, legt dessen Beobachtungen sofort unter
+    `beobachtungen/` ab** — eine Datei je Bericht, bevor irgendetwas anderes geschieht.
+    Wer es aufschiebt, hat sie nur im Sitzungsprotokoll, und das liegt außerhalb des
+    Repositoriums: Die Beobachtungen aus der Bauzeit der Phase 1 sind so verlorengegangen.
+    Form, Inhalt und was **nicht** hineingehört: dokumentation.md §9, „Wo die
+    Beobachtungen liegen"
+  - Das Verzeichnis ist zwischen zwei Toren gefüllt und danach leer. **Ist es beim
+    Kaltstart nicht leer, steht ein Einfalten aus** — das ist seine zweite Aufgabe
 - **Korrigieren: Nachtrag oder überschreiben** (dokumentation.md §7). Eine widerlegte,
   aber plausible Annahme bekommt einen datierten Nachtrag — so wie in konzept.md §5,
   wo die Wendungsmessung eine Konzeptaussage gekippt hat. Ersetzte Festlegungen werden
