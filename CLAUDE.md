@@ -262,7 +262,8 @@ beide liegen bereits in `.venv/`, hier nur dokumentiert, nicht auszuführen. Ein
 fehlendes `en_core_web_sm`, das bewusst nicht in `pyproject.toml` steht, technik.md §6,
 „Falle: `uv sync` beschneidet die Messumgebung"), das Wörterbuch `tools/en-de.sqlite3`, die
 Testtexte `tools/*.txt` und die EPUBs `tools/*.epub`, darunter `tools/dune.epub`
-(Calibre-Konvertat mit `_split_NNN`-Dokumenten, technik.md §8, Nachtrag 28.08.2026). Tests,
+(Calibre-Konvertat mit `_split_NNN`-Dokumenten, technik.md §8, „Ein Kapitel ist nicht ein
+Dokument"). Tests,
 die davon abhängen, tragen `needs_dictionary`, `needs_model`, `needs_epub`,
 `needs_calibre_split_epub` oder `needs_wordfreq` und werden ohne sie übersprungen.
 

@@ -7,10 +7,10 @@ Schritt 1 des Kernablaufs (konzept.md, „1. Buch einlesen"): `container.xml` �
 Metadaten, `spine`, Navigation (technik.md §8, T12) liefern die Kapitelliste, mit der der
 Nutzer ein Kapitel auswählt (konzept.md, „Der Kernablauf"). `read_chapter` (T12b) liest
 danach den Fließtext dieses Kapitels — aller seiner Dokumente, von seinem Navigationsziel
-bis ausschließlich zum nächsten (technik.md §8, Nachtrag 28.08.2026: „ein Kapitel ist
-nicht ein Dokument") — mit `html.parser`, von Vorspann und Impressum ausgesteuert, und
-meldet die drei Ablehnfälle (kein ZIP-Archiv, Bildband ohne Text, verschlüsselt) statt
-leer zurückzugeben.
+bis ausschließlich zum nächsten (technik.md §8, „Ein Kapitel ist nicht ein Dokument") —
+mit `html.parser`, von Vorspann und Impressum ausgesteuert, und meldet die drei
+Ablehnfälle (kein ZIP-Archiv, Bildband ohne Text, verschlüsselt) statt leer
+zurückzugeben.
 
 Voraussetzungen
 ---------------
@@ -32,14 +32,15 @@ dem Buch stammen — ein Feld im Ergebnis, kein Protokolleintrag, den ein Aufruf
 Docstring zu `number`) — die Navigation legt nur Beschriftung und eindeutige Ziele fest,
 nicht die Zählrichtung. `ChapterReference.documents` trägt die Inhaltsdokumente des
 Kapitels im Archiv: die zusammenhängende Strecke der `spine` von seinem Navigationsziel
-bis ausschließlich zum nächsten (technik.md §8, Nachtrag 28.08.2026) — Calibre zerlegt
-große Inhaltsdokumente in `…_split_000`, `…_split_001`, und die Navigation zeigt nur auf
-das jeweils erste Stück. Dokumente vor dem ersten Navigationsziel gehören zu keinem
-Kapitel. Fehlt die Navigation, trägt jedes Kapitel genau ein Dokument.
+bis ausschließlich zum nächsten (technik.md §8, „Ein Kapitel ist nicht ein Dokument") —
+Calibre zerlegt große Inhaltsdokumente in `…_split_000`, `…_split_001`, und die
+Navigation zeigt nur auf das jeweils erste Stück. Dokumente vor dem ersten
+Navigationsziel gehören zu keinem Kapitel. Fehlt die Navigation, trägt jedes Kapitel
+genau ein Dokument.
 `ChapterReference.level` trägt die Gliederungsebene aus einer verschachtelten Navigation
-(technik.md §8, Nachtrag 28.08.2026, „Unterkapitel gibt es"), oberste Ebene 0 — eine
-flache, durchlaufend nummerierte Liste bleibt es trotzdem: kein Aufklappbaum, `number`
-zählt unbeeinflusst weiter. Fehlt die Navigation, ist `level` stets 0.
+(technik.md §8, „Unterkapitel gibt es"), oberste Ebene 0 — eine flache, durchlaufend
+nummerierte Liste bleibt es trotzdem: kein Aufklappbaum, `number` zählt unbeeinflusst
+weiter. Fehlt die Navigation, ist `level` stets 0.
 
 `read_chapter` liefert dazu `entities.Chapter` mit dem zusammengefügten Fließtext aller
 Dokumente des Kapitels, in `spine`-Reihenfolge: Skripte, Stilangaben und Kopfzeilen
@@ -57,9 +58,9 @@ bleibt die Trennung deshalb unversucht und der Text unverändert — eine allgem
 Schwelle ist durch keine Messung belegt (Regel 14).
 
 `count_chapter_words` liefert dazu den Umfang je Kapitel, für die Anzeige vor der Auswahl
-(technik.md §8, Nachtrag 28.08.2026, „Was die Kapitelliste zusätzlich zeigt"): denselben
-Umfang, den `read_chapter` für dasselbe Kapitel tatsächlich liefert — beide teilen sich die
-Strecke vom Archiv zum Kapiteltext, damit Anzeige und Wirklichkeit nicht auseinanderlaufen
+(technik.md §8, „Was die Kapitelliste zusätzlich zeigt"): denselben Umfang, den
+`read_chapter` für dasselbe Kapitel tatsächlich liefert — beide teilen sich die Strecke
+vom Archiv zum Kapiteltext, damit Anzeige und Wirklichkeit nicht auseinanderlaufen
 (Regel 14). Anders als `read_chapter` bricht sie bei einem einzelnen unlesbaren Kapitel
 nicht ab: Sein Umfang ist dann unbekannt (`None`), nicht `0` — die Liste erscheint trotzdem
 vollständig (Regel 13). Absichtlich nicht in `read_structure`: `pipeline.run_chapter`
@@ -112,18 +113,17 @@ NAVIGATION_MISSING_NOTICE = (
 class ChapterReference:
     """Ein Eintrag der Kapitelliste vor dem Einlesen des Fließtexts (bauplan.md T12):
     Titel und die Inhaltsdokumente im Archiv, die zu ihm gehören. Ein Kapitel reicht von
-    seinem Navigationsziel bis ausschließlich zum nächsten (technik.md §8, Nachtrag
-    28.08.2026, „ein Kapitel ist nicht ein Dokument") — `documents` trägt deshalb die
-    zusammenhängende Strecke der `spine` dazwischen, in ihrer Reihenfolge, mindestens ein
-    Dokument. `number` zählt ab 1 in der Reihenfolge der `spine`, wie
-    `entities.Chapter.number` es später fortführt — unabhängig von `level`, das nur die
-    Beschriftung betrifft. `entities.Chapter` entsteht daraus erst, wenn der Fließtext
-    dieser Dokumente gelesen ist (T12b) — das Auswählen eines Kapitels soll nicht das
-    ganze Buch parsen.
+    seinem Navigationsziel bis ausschließlich zum nächsten (technik.md §8, „Ein Kapitel
+    ist nicht ein Dokument") — `documents` trägt deshalb die zusammenhängende Strecke der
+    `spine` dazwischen, in ihrer Reihenfolge, mindestens ein Dokument. `number` zählt ab 1
+    in der Reihenfolge der `spine`, wie `entities.Chapter.number` es später fortführt —
+    unabhängig von `level`, das nur die Beschriftung betrifft. `entities.Chapter` entsteht
+    daraus erst, wenn der Fließtext dieser Dokumente gelesen ist (T12b) — das Auswählen
+    eines Kapitels soll nicht das ganze Buch parsen.
 
-    `level` ist die Gliederungsebene aus der Navigation (technik.md §8, Nachtrag
-    28.08.2026, „Unterkapitel gibt es"), oberste Ebene 0 — Beschriftung für eine flache,
-    durchlaufend nummerierte Liste, kein Aufklappbaum: Eine Elternzeile bleibt wählbar,
+    `level` ist die Gliederungsebene aus der Navigation (technik.md §8, „Unterkapitel
+    gibt es"), oberste Ebene 0 — Beschriftung für eine flache, durchlaufend nummerierte
+    Liste, kein Aufklappbaum: Eine Elternzeile bleibt wählbar,
     weil sie eigenen Text trägt. Fehlt die Navigation (spine-Rückfall), ist `level` stets
     0, weil dann keine Hierarchie aus dem Buch stammt."""
 
@@ -257,7 +257,7 @@ def _read_nav(archive: zipfile.ZipFile, href: str) -> list[tuple[str, str, int]]
     Sherlock-Fall); die Zusammenführung auf eindeutige Ziele übernimmt
     `_deduplicate_by_target`. `level` ist die Zahl der umschließenden `<ol>`/`<ul>`
     innerhalb des `nav`, minus eins und mindestens 0 — oberste Ebene 0 (technik.md §8,
-    Nachtrag 28.08.2026, „Unterkapitel gibt es").
+    „Unterkapitel gibt es").
 
     Durchläuft **jedes** `<a>` im `nav` mit `.iter()`, statt seine Struktur Schritt für
     Schritt abzuschreiten (Befund 1, Durchsicht 162e439): Ein `<a>`, das nicht direktes
@@ -302,7 +302,7 @@ def _read_ncx(archive: zipfile.ZipFile, href: str) -> list[tuple[str, str, int]]
     für den Mehrheitsfall aus technik.md §8 (zehn von zwölf gemessenen Dateien EPUB 2.0).
     `level` ist die Verschachtelungstiefe des `navPoint`, oberste Ebene 0 — **nicht**
     `dtb:depth` der Datei: Bei Dune steht dort „2", obwohl die Navigation flach ist
-    (technik.md §8, Nachtrag 28.08.2026)."""
+    (technik.md §8, „Unterkapitel gibt es")."""
     root = ElementTree.fromstring(archive.read(href))
     base = posixpath.dirname(href)
     entries: list[tuple[str, str, int]] = []
@@ -316,7 +316,8 @@ def _read_ncx_points(
     parent: ElementTree.Element, level: int, base: str, entries: list[tuple[str, str, int]]
 ) -> None:
     """Tiefensuche in Dokumentreihenfolge über verschachtelte `navPoint` (technik.md §8,
-    Nachtrag 28.08.2026): je `navPoint` sein eigener Eintrag, dazu — falls vorhanden —
+    „Ein Kapitel ist nicht ein Dokument"): je `navPoint` sein eigener Eintrag, dazu — falls
+    vorhanden —
     seine verschachtelten `navPoint` eine Ebene tiefer. `_deduplicate_by_target` stützt
     sich auf die unveränderte Reihenfolge (Sherlock-Fall 18→14)."""
     for point in parent.findall("ncx:navPoint", _NS):
@@ -381,14 +382,15 @@ def _resolve_chapters(
     # umgehängt (Befund 1, Review Runde 2).
     if ordered_targets and any(document in names for document in ordered_targets):
         target_documents = set(ordered_targets)
-        # technik.md §8, Nachtrag 28.08.2026: Ein Kapitel reicht von seinem Navigationsziel
-        # bis ausschließlich zum nächsten. Beim Durchlauf der spine beginnt an jedem
-        # Zieldokument eine neue Gruppe; jedes dazwischenliegende Dokument hängt sich an die
-        # zuletzt begonnene an. Dokumente vor dem ersten Ziel treffen auf keine begonnene
-        # Gruppe und fallen weg — Umschlag, Titelei, Inhaltsverzeichnisseite gehören zu
-        # keinem Kapitel. Ein im Archiv fehlendes Zieldokument beginnt trotzdem seine eigene
-        # Gruppe (Befund 1, Review Runde 2) — sonst hinge sein Nachfolger sich an die zuletzt
-        # begonnene Gruppe und würde als fremder Text in ein falsches Kapitel gemischt.
+        # technik.md §8, „Ein Kapitel ist nicht ein Dokument": Ein Kapitel reicht von
+        # seinem Navigationsziel bis ausschließlich zum nächsten. Beim Durchlauf der spine
+        # beginnt an jedem Zieldokument eine neue Gruppe; jedes dazwischenliegende Dokument
+        # hängt sich an die zuletzt begonnene an. Dokumente vor dem ersten Ziel treffen auf
+        # keine begonnene Gruppe und fallen weg — Umschlag, Titelei, Inhaltsverzeichnisseite
+        # gehören zu keinem Kapitel. Ein im Archiv fehlendes Zieldokument beginnt trotzdem
+        # seine eigene Gruppe (Befund 1, Review Runde 2) — sonst hinge sein Nachfolger sich
+        # an die zuletzt begonnene Gruppe und würde als fremder Text in ein falsches Kapitel
+        # gemischt.
         document_groups: list[list[str]] = []
         for document in package.spine_documents:
             if document in target_documents:
@@ -403,7 +405,7 @@ def _resolve_chapters(
         ]
         notice = None
     else:
-        # technik.md §8, Nachtrag 28.08.2026, „Was die Kapitelliste zusätzlich zeigt":
+        # technik.md §8, „Was die Kapitelliste zusätzlich zeigt":
         # Ohne Navigation stammt keine Hierarchie aus dem Buch.
         documents = [document for document in package.spine_documents if document in names]
         chapters = [
@@ -596,9 +598,9 @@ def _read_chapter_documents(
 ) -> list[str]:
     """Liest und dekodiert den Fließtext jedes Dokuments eines Kapitels, in
     `spine`-Reihenfolge — die Strecke vom Archiv zum noch ungesäuberten Kapiteltext, die
-    sich `read_chapter` und `count_chapter_words` teilen (technik.md §8, Nachtrag
-    28.08.2026, „Was die Kapitelliste zusätzlich zeigt"): Zwei getrennte Umsetzungen dieser
-    Strecke ließen Anzeige und Wirklichkeit auseinanderdriften (Regel 14). Bricht mit einer
+    sich `read_chapter` und `count_chapter_words` teilen (technik.md §8, „Was die
+    Kapitelliste zusätzlich zeigt"): Zwei getrennte Umsetzungen dieser Strecke ließen
+    Anzeige und Wirklichkeit auseinanderdriften (Regel 14). Bricht mit einer
     deutschen Meldung ab (Regel 13), wenn eines der Kapiteldokumente im Archiv fehlt, nicht
     UTF-8 kodiert ist, beschädigt ist (kaputte CRC-Prüfsumme, Befund 2, Durchsicht 29715b2),
     `META-INF/encryption.xml` es als verschlüsselt nennt oder selbst kein wohlgeformtes XML
@@ -647,7 +649,8 @@ def _read_chapter_documents(
 
 def read_chapter(path: Path, book: Book, chapter: ChapterReference) -> Chapter:
     """Liest den zusammengefügten Fließtext eines Kapitels — aller seiner Dokumente, in
-    `spine`-Reihenfolge (bauplan.md T12b, technik.md §8, Nachtrag 28.08.2026).
+    `spine`-Reihenfolge (bauplan.md T12b, technik.md §8, „Ein Kapitel ist nicht ein
+    Dokument").
 
     Bricht mit einer deutschen Meldung ab (Regel 13) statt eines leeren oder beschädigten
     Ergebnisses: wenn `path` fehlt, die Datei kein gültiges ZIP-Archiv ist, eines der
@@ -667,8 +670,9 @@ def read_chapter(path: Path, book: Book, chapter: ChapterReference) -> Chapter:
         document_texts = _read_chapter_documents(archive, names, path, chapter)
 
     # Dieselbe Absatzgrenze wie zwischen zwei Blockelementen eines Dokuments (extraction
-    # braucht sie für Belegsätze) — ein mehrteiliges Kapitel (technik.md §8, Nachtrag
-    # 28.08.2026) darf am Dokumentwechsel nicht anders getrennt sein als an einer
+    # braucht sie für Belegsätze) — ein mehrteiliges Kapitel (technik.md §8, „Ein Kapitel
+    # ist nicht ein Dokument") darf am Dokumentwechsel nicht anders getrennt sein als an
+    # einer
     # Absatzgrenze innerhalb eines Dokuments.
     raw_text = "\n".join(document_texts)
     if not _WORD.search(raw_text):
@@ -699,9 +703,9 @@ def read_chapter(path: Path, book: Book, chapter: ChapterReference) -> Chapter:
 
 
 def count_chapter_words(path: Path, chapters: list[ChapterReference]) -> dict[int, int | None]:
-    """Wortumfang je Kapitel, für die Anzeige vor der Auswahl (technik.md §8, Nachtrag
-    28.08.2026, „Was die Kapitelliste zusätzlich zeigt"): genau die Wörter des Textes, den
-    `read_chapter` für dasselbe Kapitel tatsächlich liefert — beide teilen sich über
+    """Wortumfang je Kapitel, für die Anzeige vor der Auswahl (technik.md §8, „Was die
+    Kapitelliste zusätzlich zeigt"): genau die Wörter des Textes, den `read_chapter` für
+    dasselbe Kapitel tatsächlich liefert — beide teilen sich über
     `_read_chapter_documents` dieselbe Strecke vom Archiv zum Kapiteltext, sonst wiche die
     angezeigte Zahl von dem ab, was das Kapitel beim Lesen wirklich liefert (Regel 13).
     Öffnet das Archiv einmal für alle Kapitel, nicht einmal je Kapitel — anders als das

@@ -1950,9 +1950,9 @@ Zwei Beobachtungen daraus:
 
 > **Regel:** Kapitel kommen aus der Navigation (`nav.xhtml` oder `toc.ncx`), gezählt nach
 > eindeutigen Zielen; ein Kapitel reicht von seinem Ziel bis zum nächsten und umfasst alle
-> Dokumente der Lesereihenfolge dazwischen (Nachtrag 28.08.2026 unten). Fehlt die
-> Navigation, gilt jedes Dokument der Lesereihenfolge als ein Kapitel — zusammen mit einem
-> sichtbaren Hinweis, dass die Grenzen nicht aus dem Buch stammen.
+> Dokumente der Lesereihenfolge dazwischen. Fehlt die Navigation, gilt jedes Dokument der
+> Lesereihenfolge als ein Kapitel — zusammen mit einem sichtbaren Hinweis, dass die Grenzen
+> nicht aus dem Buch stammen.
 
 Beim Calibre-Konvertat heißt das vier „Kapitel" zu je rund 30.000 Wörtern. Die Triage
 bleibt benutzbar, weil sie in Blöcken läuft und der Nutzer nach jedem gefragt wird
@@ -1972,30 +1972,30 @@ die Trennung bleibt aus: eine allgemeine Schwelle ist durch keine Messung belegt
 Das Inhaltsverzeichnis bleibt auch bei Gutenberg im Fließtext stehen, weil es nach der
 Startmarke steht, nicht davor (`entities.Chapter`, Docstring zu `text`).
 
-### Nachtrag 28.08.2026: ein Kapitel ist nicht ein Dokument
+### Ein Kapitel ist nicht ein Dokument
 
-Aufgeworfen beim Ausprobieren von „Dune" (Ace Books 1999, Calibre-Konvertat, EPUB 2.0) und
-am 28.08.2026 mit `tools/epub_check.py` sowie über `epub.read_structure` und
-`epub.read_chapter` selbst nachgemessen.
+Calibre zerlegt große Inhaltsdokumente in `…_split_000`, `…_split_001`, `…`; die
+Navigation zeigt dabei nur auf das jeweils erste Stück. Ein Kapitel reicht deshalb von
+seinem Navigationsziel bis ausschließlich zum nächsten und umfasst **alle** Dokumente der
+Lesereihenfolge dazwischen — `ChapterReference` trägt dafür `documents: list[str]` statt
+`document: str`.
 
-**Der Fund ist ein stiller Verlust.** Calibre zerlegt große Inhaltsdokumente in
-`…_split_000`, `…_split_001`, `…`; die Navigation zeigt nur auf das jeweils erste Stück.
-`_resolve_chapters` behielt daraus allein die Dokumente, die selbst ein Navigationsziel
-sind, und `read_chapter` liest genau eines davon:
+**Ohne die vollständige Dokumentliste wäre das ein stiller Verlust.** Behielte
+`_resolve_chapters` allein die Dokumente, die selbst ein Navigationsziel sind, und läse
+`read_chapter` genau eines davon, blieben bei „Dune" (Ace Books 1999, Calibre-Konvertat,
+EPUB 2.0) 63 % des Buchs über das Programm unerreichbar — ohne Meldung, bei vollständig
+plausibler Kapitelliste, die Abnahmekriterium 1 weiterhin erfüllt. Gemessen am 28.08.2026
+mit `tools/epub_check.py` sowie über `epub.read_structure` und `epub.read_chapter`:
 
-| | in der Datei | bisher gelesen |
+| | in der Datei | über ein einzelnes Navigationsziel erreichbar |
 |---|---|---|
-| Book 1 DUNE | 78.774 W (3 Dokumente) | **20.604 W** |
+| Book 1 DUNE | 78.774 W (3 Dokumente) | 20.604 W |
 | Book Two MUAD’DIB | 63.513 W (2 Dokumente) | 29.341 W |
 | Book Three THE PROPHET | 64.637 W (2 Dokumente) | 27.383 W |
 | **gesamt** | **206.929 W** | **rund 77.500 W (37 %)** |
 
-Die übrigen 63 % gehören zu keinem Kapitel und sind über das Programm überhaupt nicht
-erreichbar — ohne Meldung, bei vollständig plausibler Kapitelliste, die Abnahmekriterium 1
-weiterhin erfüllt. Genau der stille Fehlschlag aus Regel 13, und er trifft nicht nur diese
-Datei: `_split_NNN` ist Calibres Normalverhalten bei großen Dokumenten. Die Regel oben ist
-entsprechend nachgezogen; `ChapterReference` trägt dafür `documents: list[str]` statt
-`document: str`.
+Genau der stille Fehlschlag aus Regel 13, und er träfe nicht nur diese eine Datei:
+`_split_NNN` ist Calibres Normalverhalten bei großen Dokumenten.
 
 **Unterkapitel gibt es — Dune hat aber keine.** Die Navigation ist in beiden Formen
 hierarchisch (verschachtelte `<navPoint>`, verschachtelte `<ol>`), und `_read_nav` wie
@@ -2035,9 +2035,6 @@ statt ihn zu erklären:
   (`entities.Chapter`, Docstring zu `number`), Elternzeilen bleiben wählbar, weil sie
   eigenen Text tragen. Kein Aufklappbaum — die Ebene ist Beschriftung, nicht Auswahl
 
-Zu bauen ist in dieser Reihenfolge: erst `documents: list[str]`, weil jede Anzeige sonst
-richtig aussieht und falsch rechnet, dann die Umfangsspalte, dann die Einrückung.
-
 `tools/dune.epub` liegt seit 28.08.2026 im Baum; `tests/test_epub.py` (Marke
 `needs_calibre_split_epub`) rechnet die Tabelle oben gegen die echte Datei nach —
 Dokumentlisten und Wortumfänge je Kapitel.
@@ -2062,8 +2059,9 @@ leeres Ergebnis (Regel 13):
   selbstgebaute Vorrichtung, und genau davor warnt dokumentation.md §5: Die Vorrichtung
   zeigt, dass der Code läuft, die Fremdquelle zeigt, ob er stimmt. **Dune schließt den
   Punkt nicht** — es bringt denselben `toc.ncx`-Zweig wie die beiden anderen Dateien, nur
-  zusätzlich den Mehrdokument-Fall (Nachtrag 28.08.2026 oben). Geschlossen wäre der Punkt,
-  sobald eine EPUB-3-Datei in `tools/` liegt (die beiden hier gemessenen Manga-Bände sind
+  zusätzlich den Mehrdokument-Fall (oben, „Ein Kapitel ist nicht ein Dokument").
+  Geschlossen wäre der Punkt, sobald eine EPUB-3-Datei in `tools/` liegt (die beiden hier
+  gemessenen Manga-Bände sind
   3.0) und `needs_epub` sie einschließt
 - **Der Pfad „Ebene > 0" der Einrückung läuft gegen keine Fremdquelle.** `sherlock.epub`
   nennt roh 18 Navigationseinträge, davon 3 auf Ebene 1 (`I./II./III.` unter „I. A SCANDAL
@@ -2073,15 +2071,15 @@ leeres Ergebnis (Regel 13):
   (nachgeprüft 28.08.2026). Beide Dateien nehmen zudem den `toc.ncx`-Zweig; `_read_nav`
   bleibt damit ungeprüft gegen jede echte Datei. **Dune schließt den Punkt nicht** — seine
   Navigation ist flach (vier Einträge, vier eindeutige Ziele, keine Verschachtelung; das
-  `dtb:depth="2"` der Datei ist unzutreffend, Nachtrag 28.08.2026 oben). Geschlossen wäre
-  der Punkt, sobald eine Datei mit tatsächlich verschachtelter Navigation über eigene
+  `dtb:depth="2"` der Datei ist unzutreffend — oben, „Unterkapitel gibt es"). Geschlossen
+  wäre der Punkt, sobald eine Datei mit tatsächlich verschachtelter Navigation über eigene
   Dokumente (nicht bloß Anker im selben Dokument) in `tools/` liegt und `needs_epub` sie
   einschließt
 - **Anker innerhalb eines Dokuments.** Ob Navigationsziele mit `#anker` als eigene Kapitel
   zu behandeln sind, ist offen. Der Fall liegt vor — die Unterpunkte `I./II./III.` in
-  `sherlock.epub` sind genau das (Nachtrag 28.08.2026) —, verlangt aber, innerhalb eines
-  Dokuments zu schneiden, und wird deshalb nicht mit den drei Punkten des Nachtrags
-  zusammen gebaut. Die frühere Annahme „ein Kapitel gleich ein Dokument" gilt **nicht**
+  `sherlock.epub` sind genau das (oben, „Unterkapitel gibt es") —, verlangt aber, innerhalb
+  eines Dokuments zu schneiden, und wird deshalb nicht mit den drei Punkten oben zusammen
+  gebaut. Die frühere Annahme „ein Kapitel gleich ein Dokument" gilt **nicht**
   mehr, allerdings aus dem umgekehrten Grund: Ein Kapitel kann mehrere Dokumente
   umfassen
 - **Bindestrich- und Sonderzeichen der Verlagsdateien** gegenüber Gutenberg sind nicht
@@ -2163,9 +2161,9 @@ Der Preis ist bewusst in Kauf genommen: Ein neu bezogenes Wörterbuch mit geänd
 und korrigierbar — der still überschriebene Lernfortschritt der Gegenseite wäre es nicht
 (Abschnitt 4, „Jetzt billig, später teuer: die Anki-Kennung").
 
-### Nachtrag 01.09.2026: Ein Wort ohne Wörterbucheintrag kostet nicht mehr den ganzen Export
+### Ein Wort ohne Wörterbucheintrag kostet nicht mehr den ganzen Export
 
-Aus einem Kapiteldurchlauf gemeldet: Ein „lernen" auf `jabbar` — ein Wort, das WikDict nicht
+Am 01.09.2026 aus einem Kapiteldurchlauf gemeldet: Ein „lernen" auf `jabbar` — ein Wort, das WikDict nicht
 führt — ließ `cli.export.write_exports` abbrechen, und weil `anki.export_deck` der **erste**
 der beiden Exporte ist, entstand gar keine Datei: kein Deck, keine Druckseite, auch nicht
 für die übrigen Karten. Die Triage war da bereits vollständig durchlaufen.
@@ -2221,8 +2219,8 @@ Genau das tat die erste Fassung, bevor sie den zweiten Fall überhaupt kannte.
 
 Offen bleibt davon unberührt, **ob** solche Einträge überhaupt einen der 25 Plätze bekommen
 sollen — konzept.md, „Bewusst offen", „Ob Einträge ohne Wörterbucheintrag Vorrang haben
-sollen". Dieser Nachtrag beantwortet nur, was mit einem geschieht, den der Nutzer gewählt
-hat.
+sollen". Beantwortet ist hier nur, was mit einem Eintrag geschieht, den der Nutzer bereits
+gewählt hat.
 
 ---
 
@@ -2267,10 +2265,10 @@ Maximum 199.
 > trägt das Kriterium weiterhin — beurteilt wurde sie bei der Abnahme T17 (konzept.md
 > §4, „Der erste Durchlauf je Buch ist ein Kalibrierdurchlauf": sie bleibt bei 25).
 
-Diese Rechnung ergab `MAX_ENTRIES = 36`. Seit dem Nachtrag unten gilt das nicht mehr —
-geprüft und gültig ist **33** (`libreverbum/printout.py`).
+Diese Rechnung ergab `MAX_ENTRIES = 36`. Seit der echten Druckmessung unten gilt das nicht
+mehr — geprüft und gültig ist **33** (`libreverbum/printout.py`).
 
-### Nachtrag 01.09.2026: echt gedruckt statt gerechnet — `MAX_ENTRIES` auf 33 korrigiert
+### Echt gedruckt statt gerechnet: `MAX_ENTRIES` auf 33 korrigiert
 
 Am 01.09.2026 hat `tools/print_fit_check.py` zum ersten Mal wirklich gedruckt: Edge
 headless, echte `trans_list`-Werte aus `tools/en-de.sqlite3`, PDF-Seiten gezählt statt
@@ -2790,7 +2788,7 @@ vor (`tawdry` steht auf `importance`-Rang 6.193).
 > offene Punkte in konzept.md, „Nachrücken in der Triage" und „Fortsetzungsfrage nach der
 > Wortobergrenze"; gebaut ist daraus eine Sache.
 
-### Nachtrag 01.09.2026: die Vorbelegung erzeugt keine teilweise bekannten Einträge
+### Die Vorbelegung erzeugt keine teilweise bekannten Einträge
 
 Aufgefallen bei der Durchsicht von d4f10fc, dort als Nebenbefund einer ganz anderen Messung
 — festgehalten, weil es die Aussage aus Abschnitt 3 verschärft, der `bank`-Fall aus
@@ -2799,9 +2797,10 @@ konzept.md §5 sei auf der Vorgabe „faktisch abgeschaltet":
 `profile.record_preset` bucht **jede** Bedeutung einer vorbelegten Grundform als bekannt.
 Damit ist `pipeline._all_candidates_known` für sie wahr, und sie fällt in die Gruppe
 „vollständig bekannt" — nie in „teilweise bekannt", die Gruppe, aus der die neuen
-Bedeutungen bekannter Wörter kommen. Gemessen an `tools/sherlock.epub` Kapitel 2 gegen ein
-frisch auf B2 vorbelegtes Profil (11.924 Bedeutungen): 1410 Worteinträge, davon **838
-vollständig bekannt, 572 sichere Treffer, 0 teilweise bekannte**.
+Bedeutungen bekannter Wörter kommen. Gemessen am 01.09.2026 an `tools/sherlock.epub`
+Kapitel 2 gegen ein frisch auf B2 vorbelegtes Profil (11.924 Bedeutungen): 1410
+Worteinträge, davon **838 vollständig bekannt, 572 sichere Treffer, 0 teilweise
+bekannte**.
 
 Das ist keine Eigenart der Messung, sondern folgt aus der Bauart: Eine Vorbelegung, die
 eine Grundform nur zur Hälfte als bekannt buchte, gäbe es nicht. Der `bank`-Fall entsteht
@@ -2961,7 +2960,7 @@ Blockgröße ist eine Entscheidung der Bedienung und steht deshalb in `cli`, nic
 
 **Die Häufigkeitsordnung gilt innerhalb eines Blocks, nicht über deren Folge.** Unter der
 Vorgabe `order = "new_words_first"` legt `resolve_triage_entries` erst alle sicheren
-Treffer vor, dann die teilweise bekannten (Abschnitt 3, Nachtrag 25.08.2026) — jede Gruppe
+Treffer vor, dann die teilweise bekannten (Abschnitt 9, „Einstellungen: `config.toml`") — jede Gruppe
 für sich nach Häufigkeit. Ein Folgeaufruf bildet dieselbe Verkettung auf dem Rest, und
 sobald die sicheren Treffer aufgebraucht sind, **springt der nächste Block an die Spitze
 der teilweise bekannten zurück**. Gemessen an `tools/sherlock.epub` Kapitel 2 (1410
@@ -3030,8 +3029,9 @@ Diese Garantie ist weg: Wer vier Blöcke durchgeht, kann mehr als 36 Karten habe
 Abbruch wird deshalb zum **Seitenumbruch**; Abnahmekriterium 5 ist mit derselben Änderung
 nachgezogen (konzept.md, „Abnahmekriterien"). Die Kapazität bleibt gemessen und begründet
 (Abschnitt 8c) — sie sagt jetzt, wo umgebrochen wird, statt wo abgebrochen wird. Die Zahl
-selbst ist seit dem Nachtrag 01.09.2026 in Abschnitt 8c nicht mehr 36, sondern **33**: die
-dort gerechnete Zahl hielt beim echten Druck nicht.
+selbst ist seit der echten Druckmessung vom 01.09.2026 (Abschnitt 8c, „Echt gedruckt statt
+gerechnet") nicht mehr 36, sondern **33**: die dort gerechnete Zahl hielt beim echten Druck
+nicht.
 
 ### Entschieden 15.09.2026: ein abgebrochener Lauf exportiert, was er hat
 
@@ -3078,16 +3078,14 @@ Fehlermeldung und Exit-Code 1 — Festlegung 2 gilt unverändert, der Export ist
   wäre Arbeit, die niemand bestellt hat. Der vorgesehene Weg hinaus bleibt `q`
   beziehungsweise „nein" bei der Fortsetzungsfrage — beide sind ohnehin kein Abbruch,
   sondern das reguläre Verlassen der Triage, und exportieren wie bisher vollständig.
-- **Eine abgeschnittene Eingabe zählt zum Teilexport, nicht zu den Ausstiegswegen
-  (Nachtrag 15.09.2026, Durchsicht b91a56e).** Zwischen den beiden Fällen oben liegt
-  `EOFError`: Eine abgeschnittene Eingabe (Pipe-Ende, umgeleitetes `/dev/null`) lässt
-  `input()` — und damit jedes `read_line` — diese Ausnahme werfen. Sie ist eine
-  `Exception`, kein `BaseException`, fällt also unter denselben Fang wie ein echter
-  Programmfehler und schreibt die bis dahin entschiedenen Karten als Teilexport, bevor
-  `cli.main.main` den Lauf mit der eigenen deutschen Meldung „Abgebrochen — keine Eingabe
-  mehr." beendet. Das ist von der Entscheidung oben bereits gedeckt und inhaltlich
-  richtig — die Entscheidungen des Nutzers bis dahin waren echt —, stand bisher nur
-  nirgends.
+- **Eine abgeschnittene Eingabe zählt zum Teilexport, nicht zu den Ausstiegswegen.**
+  Zwischen den beiden Fällen oben liegt `EOFError`: Eine abgeschnittene Eingabe
+  (Pipe-Ende, umgeleitetes `/dev/null`) lässt `input()` — und damit jedes `read_line` —
+  diese Ausnahme werfen. Sie ist eine `Exception`, kein `BaseException`, fällt also unter
+  denselben Fang wie ein echter Programmfehler und schreibt die bis dahin entschiedenen
+  Karten als Teilexport, bevor `cli.main.main` den Lauf mit der eigenen deutschen Meldung
+  „Abgebrochen — keine Eingabe mehr." beendet. Das ist von der Entscheidung oben bereits
+  gedeckt und inhaltlich richtig — die Entscheidungen des Nutzers bis dahin waren echt.
 
 ### Offene Punkte
 
@@ -3217,11 +3215,11 @@ Beide Fähigkeiten werden **einmal** je Lauf ermittelt, an einem übergebenen St
 `sys.stdout`) — das hält `detect_style` selbst ohne echtes Terminal prüfbar und vermeidet
 den Aufwand, sie bei jeder einzelnen Zeile neu zu bestimmen.
 
-### Nachtrag 02.09.2026: der Lernzähler und die zweite stille Lücke
+### Der Lernzähler und die zweite stille Lücke
 
-Beides kam aus dem ersten echten Durchlauf des Nutzers mit der neuen Anzeige, am selben
-Tag — der Grund, warum es hier steht und nicht oben: Es sind keine Korrekturen an den
-Entscheidungen, sondern zwei Dinge, die erst beim Benutzen sichtbar wurden.
+Beide Punkte kamen am 02.09.2026 aus dem ersten echten Durchlauf des Nutzers mit der neuen
+Anzeige — zwei Dinge, die erst beim Benutzen sichtbar wurden, keine Korrekturen an den
+Entscheidungen oben.
 
 **Der Zähler „N zum Lernen" steht in der Trennlinie**, hinter dem Positionszähler
 (`cli.display.entry_rule`), nicht in einer eigenen Zeile und nicht im Eingabeprompt. Die
@@ -3397,16 +3395,10 @@ auseinanderliegen:
 Der Eigennamen-Ausschluss ist nötig, weil Eigennamen wie `New York` (`Proper_noun`,
 score 163,6), `Great Britain` (210,0) oder `United States` (131,1) sonst als Lernvokabel
 erschienen — gemessen an `tools/en-de.sqlite3`: 1.864 mehrwortige `Proper_noun`-Zeilen mit
-`score ≥ 50`.
-
-> **Nachtrag 18.08.2026 — falsches Beispiel `Sherlock Holmes`.** Hier stand zuvor,
-> `Sherlock Holmes` stehe als `Proper_noun` im Wörterbuch und erschiene ohne den Filter
-> 101× als Lernvokabel. Das ist falsch: `Sherlock Holmes` hat in `tools/en-de.sqlite3`
-> genau eine Zeile, ohne `lexentry` (also ohne Wortart) und mit `score = 2,0` — der
-> Eintrag fällt bereits an der Schwelle `score ≥ 50`, der `Proper_noun`-Filter kommt gar
-> nicht zum Zug (Befund 6, Review T7). Festgehalten, weil die Behauptung plausibel klingt
-> und sonst erneut als Beleg für den Filter angeführt würde; der Filter selbst bleibt
-> richtig und nötig, nur das Beispiel trug nicht.
+`score ≥ 50`. `Sherlock Holmes` selbst taugt dafür nicht als Beleg (geprüft am
+18.08.2026): Der Ausdruck hat in `tools/en-de.sqlite3` genau eine Zeile, ohne `lexentry`
+(also ohne Wortart) und mit `score = 2,0` — er fällt bereits an der Schwelle
+`score ≥ 50`, der `Proper_noun`-Filter kommt gar nicht zum Zug (Befund 6, Review T7).
 
 ### Grenze: rund ein Fünftel der Phrasal Verbs steht getrennt
 
@@ -3427,23 +3419,17 @@ Abhängigkeitsanalyse nicht: Sie findet `„work it out"`, `„shut the business
 > Wortfolgenabgleich. Mit Entscheidung 5 (Abschnitt 5) steht sie zur Verfügung, der
 > Punkt ist damit erledigt.
 
-> **Nachtrag 19.08.2026 — mit dem gebauten Code gegengemessen.** Die Anteile oben stammen
-> aus `tools/nlp_check.py`. Der Code aus T4 zählt an denselben zwei Romanen **24 %**
-> (Sherlock) und **22 %** (Dorian Gray) statt 21 % und 19 %. Die Überschrift trägt also
-> weiterhin — der getrennte Anteil ist eher größer als kleiner geworden.
+Am gebauten Code aus T4 gegengemessen (19.08.2026, an denselben zwei Romanen): **24 %**
+(Sherlock) und **22 %** (Dorian Gray) statt 21 % und 19 % — die Überschrift trägt damit
+weiterhin, der getrennte Anteil ist eher größer als kleiner geworden.
 
 Offen bleibt ein anderer: **394 Vorkommen mit Partikel haben keinen
 Wörterbucheintrag** — `take up`, `throw down`, `bring in`, `start off`. Sie gehören
 nach Regel 10 als `uncertain` markiert, nicht verworfen.
 
-> **Nachtrag 12.08.2026 — warum hier vorher 51 % stand.** Die erste Messung vom
-> 11.08.2026 zählte 196 zusammenhängend gegen 205 getrennt und schloss auf „rund 51 %,
-> etwa die Hälfte, nicht ein Randfall". Das war mehr als doppelt zu hoch. Ursache ist
-> die Schwäche, die `mwe_check.py` an sich selbst schon vermerkt hatte: Es sucht Verb
-> und Partikel ohne Wortartbestimmung im Satzzusammenhang und zählt Wortpaare mit, die
-> gar kein Phrasal Verb bilden. Festgehalten, weil derselbe Fehler bei jedem künftigen
-> Wortfolgen-Detektor genauso entstünde — eine Zahl aus einem Detektor ohne
-> Wortartbestimmung ist eine Obergrenze, keine Messung.
+Eine Zahl aus einem Detektor ohne Wortartbestimmung ist dabei nur eine Obergrenze, keine
+Messung — die erste Zählung vom 11.08.2026 hatte ohne Wortartbestimmung noch „rund 51 %"
+ergeben, mehr als das Doppelte der Zahl oben.
 
 ### Das LLM darf Wendungen nicht frei suchen
 
@@ -3488,7 +3474,7 @@ Konzept bereits ein Verfahren vor, nämlich die **Triage durch den Nutzer**.
 > unterstützt durch Häufigkeitssortierung und Sammelaktion, die das Konzept ohnehin
 > vorsieht.
 
-### Nachtrag 19.08.2026: die Maße beider Wege
+### Die Maße beider Wege
 
 Die Arbeitsteilung unten ist inzwischen mit Zahlen unterlegt. Gemessen beim Bau von T4 am
 17.08.2026, die Wörterbuchzahlen am 19.08.2026 gegen `tools/en-de.sqlite3` nachgeprüft;

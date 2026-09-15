@@ -12,7 +12,7 @@ eigenen Designpunkt widerlegt: 36 Einträge mit 74 oder 75 Zeichen Übersetzungs
 ergaben **zwei** physische Seiten, obwohl dieselbe Eintragszahl bei der p99-Länge (76
 Zeichen), auf die §8c auslegt, wieder auf einer Seite blieb — die gerechnete 97,5-%-Füllung
 ließ keinen Spielraum für das, was ein echter Browser anders macht. `MAX_ENTRIES` ist
-seither auf **33** korrigiert (../technik.md §8c, Nachtrag 01.09.2026).
+seither auf **33** korrigiert (../technik.md §8c, „Echt gedruckt statt gerechnet").
 
 Dieses Skript rechnet nicht, es druckt. Es erzeugt die Druckseite über den echten Kern
 (`libreverbum.printout.write_printout`, nicht einen Nachbau — ../dokumentation.md §5:
@@ -126,7 +126,7 @@ DEFAULT_ENTRY_COUNTS = [25, 30, 33, 35, 36, 37, 40]
 # genau diese Längen fehlten in der ersten Vorgabe — ein Lauf ohne eigene `--length`-Angabe
 # hätte den Bruch deshalb nicht gefunden und die 36 bestätigt. Wer eine Kapazität prüft,
 # muss die Umgebung ihrer Bruchstelle mitmessen, nicht nur die Verteilungspunkte
-# (../technik.md §8c, „Nachtrag 01.09.2026: echt gedruckt statt gerechnet").
+# (../technik.md §8c, „Echt gedruckt statt gerechnet: MAX_ENTRIES auf 33 korrigiert").
 DEFAULT_LENGTHS = [12, 32, 45, 60, 65, 74, 75, 78, 80]
 DEFAULT_P99_LENGTH = 76
 DEFAULT_TIMEOUT = 30.0
@@ -349,7 +349,7 @@ def main() -> int:
         description=(
             "Misst, wie viele Einträge bei welcher Übersetzungslänge tatsächlich auf ein "
             "physisches Blatt passen — gedruckt mit einem echten Browser, nicht gerechnet "
-            "(../technik.md §8c, „Nachtrag 01.09.2026“)."
+            "(../technik.md §8c, „Echt gedruckt statt gerechnet“)."
         ),
         epilog=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,

@@ -26,7 +26,8 @@ Die Marke `needs_epub` (bauplan.md T12) folgt demselben Muster für die beiden
 Gutenberg-EPUBs `tools/sherlock.epub` und `tools/dorian_gray.epub`, an denen technik.md
 §8 die Navigationsauswertung gemessen hat.
 
-Die Marke `needs_calibre_split_epub` (technik.md §8, Nachtrag 28.08.2026) steht für sich:
+Die Marke `needs_calibre_split_epub` (technik.md §8, „Ein Kapitel ist nicht ein
+Dokument") steht für sich:
 `tools/dune.epub` ist eine Verlagsdatei, kein Gutenberg-Text, den sich jeder beschaffen
 kann, und deckt einen anderen Fall ab — Calibre zerlegt große Inhaltsdokumente in
 `…_split_000`, `…_split_001`, `…`, wovon die Navigation nur auf das jeweils erste Stück
@@ -535,8 +536,8 @@ def _real_dune_epub_path() -> Path:
 
 @pytest.fixture
 def real_dune_epub_path() -> Path:
-    """Pfad zu `tools/dune.epub` (technik.md §8, Nachtrag 28.08.2026) — dem
-    Calibre-Konvertat, an dem der Mehrdokument-Fall gemessen wurde: Die Navigation zeigt
+    """Pfad zu `tools/dune.epub` (technik.md §8, „Ein Kapitel ist nicht ein Dokument") —
+    dem Calibre-Konvertat, an dem der Mehrdokument-Fall gemessen wurde: Die Navigation zeigt
     nur auf das jeweils erste Stück eines in `…_split_NNN` zerlegten Inhaltsdokuments.
     Dieselbe Stelle, gegen die auch `pytest_collection_modifyitems` die Marke
     `needs_calibre_split_epub` prüft."""
@@ -570,7 +571,8 @@ def wordfreq_python() -> str:
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Überspringt `needs_dictionary`-, `needs_model`-, `needs_epub`-,
     `needs_calibre_split_epub`- und `needs_wordfreq`-Tests ohne ihre Voraussetzung, statt
-    sie scheitern zu lassen (bauplan.md, T2 und T12; technik.md §8, Nachtrag 28.08.2026)."""
+    sie scheitern zu lassen (bauplan.md, T2 und T12; technik.md §8, „Ein Kapitel ist nicht
+    ein Dokument")."""
     if not _real_dictionary_path().exists():
         skip_dictionary = pytest.mark.skip(reason="echtes Wörterbuch tools/en-de.sqlite3 fehlt")
         for item in items:

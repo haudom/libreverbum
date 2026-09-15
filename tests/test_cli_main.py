@@ -1686,8 +1686,8 @@ def test_run_chapter_with_progress_closes_the_line_even_when_the_run_fails(
 def test_choose_chapter_shows_the_title_first_then_the_word_count_with_unknown_as_such(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Befund 3b (Durchsicht 29715b2): technik.md §8, Nachtrag 28.08.2026, „Was die
-    Kapitelliste zusätzlich zeigt" nennt die Zeile als „Book 1 DUNE — 78.800 Wörter" — der
+    """Befund 3b (Durchsicht 29715b2): technik.md §8, „Was die Kapitelliste zusätzlich
+    zeigt" nennt die Zeile als „Book 1 DUNE — 78.800 Wörter" — der
     Titel steht vor der Zahl, nicht danach. Die Kapitelliste zeigt den Umfang je Kapitel
     mit deutschem Tausendertrennzeichen (`78.774`) und einen unbekannten Umfang sichtbar als
     solchen, nicht als Zahl (Regel 13)."""
@@ -1773,8 +1773,7 @@ def test_choose_chapter_indents_the_title_by_navigation_level_and_keeps_the_word
     """Auftrag Teilaufgabe 3, Punkt 6: Der Titel wird je Ebene eingerückt (zwei
     Leerzeichen, fest — Regel 14: kein Konfigurationsschalter) — die Einrückung zählt zur
     Breite der Titelspalte, damit die Spalte „Wörter" bei eingerückten Zeilen ausgerichtet
-    bleibt (technik.md §8, Nachtrag 28.08.2026, „Was die Kapitelliste zusätzlich
-    zeigt")."""
+    bleibt (technik.md §8, „Was die Kapitelliste zusätzlich zeigt")."""
     chapters = [
         epub.ChapterReference(number=1, title="Teil I", documents=["a.xhtml"], level=0),
         epub.ChapterReference(

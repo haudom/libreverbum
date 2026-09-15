@@ -127,8 +127,8 @@ from libreverbum.entities import Occurrence, Sense
 # Wert begrenzt nur, was `write_printout` je Blatt unterbringt, unabhängig davon, was T16
 # am Ende hineinlegt.
 #
-# Nachtrag 01.09.2026 (technik.md §12, „Folge: die Druckseite bricht um, statt
-# abzubrechen"): Mit der blockweisen Triage garantiert keine Wortobergrenze mehr, dass nie
+# (technik.md §12, „Folge: die Druckseite bricht um, statt abzubrechen", entschieden am
+# 01.09.2026): Mit der blockweisen Triage garantiert keine Wortobergrenze mehr, dass nie
 # mehr als MAX_ENTRIES Einträge ankommen. Die Zahl bleibt unverändert und misst weiter
 # dasselbe Blatt — sie sagt jetzt aber, **wo** `_group_entries` umbricht, nicht mehr, wo
 # `write_printout` abbricht.

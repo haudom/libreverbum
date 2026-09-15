@@ -126,7 +126,7 @@ def test_read_structure_numbers_chapters_from_one_in_document_order(
 ) -> None:
     """`ChapterReference.number` zählt ab 1 (`entities.Chapter`, Docstring zu `number`).
     Kapitel 2 trägt zusätzlich `chapter3.xhtml`, das keinen eigenen Navigationseintrag hat
-    (technik.md §8, Nachtrag 28.08.2026: „ein Kapitel ist nicht ein Dokument")."""
+    (technik.md §8, „Ein Kapitel ist nicht ein Dokument")."""
     result = epub.read_structure(mini_epub_with_navigation)
 
     assert [chapter.number for chapter in result.chapters] == [1, 2]
@@ -135,10 +135,9 @@ def test_read_structure_numbers_chapters_from_one_in_document_order(
 def test_a_chapter_spans_the_spine_up_to_but_excluding_the_next_navigation_target(
     mini_epub_with_navigation: Path,
 ) -> None:
-    """technik.md §8, Nachtrag 28.08.2026, „ein Kapitel ist nicht ein Dokument": Ein
-    Kapitel reicht von seinem Navigationsziel bis ausschließlich zum nächsten und umfasst
-    alle Dokumente der Lesereihenfolge dazwischen — hier für die EPUB-3-Navigation
-    (`nav.xhtml`)."""
+    """technik.md §8, „Ein Kapitel ist nicht ein Dokument": Ein Kapitel reicht von seinem
+    Navigationsziel bis ausschließlich zum nächsten und umfasst alle Dokumente der
+    Lesereihenfolge dazwischen — hier für die EPUB-3-Navigation (`nav.xhtml`)."""
     result = epub.read_structure(mini_epub_with_navigation)
 
     assert [chapter.documents for chapter in result.chapters] == [
@@ -177,7 +176,8 @@ def test_spine_fallback_gives_each_document_its_own_single_element_chapter(
 
 def test_spine_fallback_chapters_have_level_zero(mini_epub_without_navigation: Path) -> None:
     """Ohne verwertbare Navigation hat jedes Kapitel die Ebene 0 — es gibt keine Hierarchie,
-    wenn die Grenzen nicht aus dem Buch stammen (technik.md §8, Nachtrag 28.08.2026)."""
+    wenn die Grenzen nicht aus dem Buch stammen (technik.md §8, „Ein Kapitel ist nicht ein
+    Dokument")."""
     result = epub.read_structure(mini_epub_without_navigation)
 
     assert all(chapter.level == 0 for chapter in result.chapters)
@@ -233,7 +233,7 @@ def test_read_structure_orders_chapters_by_spine_position_not_navigation_order(
 # --------------------------------------- Lokale Vorrichtung: verschachtelte Navigation
 
 # Zwei Teile mit je eigener Titelseite, darunter je ein bis zwei Kapitel — die Bauform aus
-# technik.md §8, Nachtrag 28.08.2026, „Unterkapitel gibt es": „Unterpunkte als eigene
+# technik.md §8, „Unterkapitel gibt es": „Unterpunkte als eigene
 # Dokumente unter einem Elternknoten (Teil I → Kapitel 1–5)". Die Vorrichtungen aus
 # tests/conftest.py (T2) sind absichtlich flach und können diese Ebene nicht prüfen.
 _NESTED_LEVEL_NAV_OPF = """<?xml version="1.0" encoding="UTF-8"?>
@@ -379,7 +379,7 @@ _NESTED_LEVEL_LEVELS = [0, 1, 1, 0, 1]
 
 
 def test_nested_nav_xhtml_reports_the_level_of_each_entry(tmp_path: Path) -> None:
-    """technik.md §8, Nachtrag 28.08.2026, „Unterkapitel gibt es": Die Ebene ist die Zahl
+    """technik.md §8, „Unterkapitel gibt es": Die Ebene ist die Zahl
     der umschließenden `<ol>` innerhalb des `nav` — Teil I und Teil II auf Ebene 0, ihre
     Kapitel je ein `<ol>` tiefer auf Ebene 1."""
     path = tmp_path / "nested_nav.epub"
@@ -405,7 +405,8 @@ def test_nested_nav_xhtml_numbers_run_through_across_levels_in_spine_order(tmp_p
 def test_nested_toc_ncx_reports_the_level_of_each_entry(tmp_path: Path) -> None:
     """Derselbe Beleg wie mit `nav.xhtml`, für die EPUB-2-Form `toc.ncx` — die Ebene ist
     hier die Verschachtelungstiefe des `navPoint`, nicht `dtb:depth` der Datei (technik.md
-    §8, Nachtrag 28.08.2026: bei Dune steht dort „2", obwohl die Navigation flach ist)."""
+    §8, „Unterkapitel gibt es": bei Dune steht dort „2", obwohl die Navigation flach
+    ist)."""
     path = tmp_path / "nested_ncx.epub"
     _write_nested_toc_ncx_epub(path)
 
@@ -419,8 +420,8 @@ def test_nested_toc_ncx_reports_the_level_of_each_entry(tmp_path: Path) -> None:
 def test_a_parent_chapter_stays_selectable_and_reads_its_own_document(tmp_path: Path) -> None:
     """Auftrag Teilaufgabe 3: „Elternzeilen bleiben wählbar, weil sie eigenen Text
     tragen" — `read_chapter` auf „Teil I" liefert dessen eigenes Vorspanndokument, nicht
-    den Text seiner Kinder „Kapitel 1"/„Kapitel 2" (technik.md §8, Nachtrag 28.08.2026,
-    „Was die Kapitelliste zusätzlich zeigt")."""
+    den Text seiner Kinder „Kapitel 1"/„Kapitel 2" (technik.md §8, „Was die Kapitelliste
+    zusätzlich zeigt")."""
     path = tmp_path / "nested_nav_parent.epub"
     _write_nested_nav_xhtml_epub(path)
     structure = epub.read_structure(path)
@@ -667,8 +668,8 @@ _LEADING_DOCUMENT_NAV_XHTML = """<?xml version="1.0" encoding="UTF-8"?>
 
 def _write_leading_document_epub(path: Path) -> None:
     """Baut ein Mini-EPUB, dessen spine mit einem Umschlagdokument beginnt, das keinen
-    eigenen Navigationseintrag hat (technik.md §8, Nachtrag 28.08.2026: Dokumente vor dem
-    ersten Navigationsziel gehören zu keinem Kapitel)."""
+    eigenen Navigationseintrag hat (technik.md §8, „Ein Kapitel ist nicht ein Dokument":
+    Dokumente vor dem ersten Navigationsziel gehören zu keinem Kapitel)."""
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
         archive.writestr("META-INF/container.xml", _REORDERED_NAV_CONTAINER_XML)
@@ -680,8 +681,8 @@ def _write_leading_document_epub(path: Path) -> None:
 
 
 def test_documents_before_the_first_navigation_target_belong_to_no_chapter(tmp_path: Path) -> None:
-    """technik.md §8, Nachtrag 28.08.2026, „ein Kapitel ist nicht ein Dokument": Ein
-    Kapitel reicht von seinem Navigationsziel bis zum nächsten — ein spine-Dokument vor dem
+    """technik.md §8, „Ein Kapitel ist nicht ein Dokument": Ein Kapitel reicht von seinem
+    Navigationsziel bis zum nächsten — ein spine-Dokument vor dem
     ersten Ziel (Umschlag, Titelei, Inhaltsverzeichnisseite) gehört deshalb zu keinem
     Kapitel und fällt weg."""
     path = tmp_path / "leading_document.epub"
@@ -1276,8 +1277,8 @@ def test_acceptance_1_matches_the_measured_unique_chapter_count_for_real_books(
 def test_no_spine_document_from_the_first_navigation_target_onward_is_lost_or_duplicated(
     real_epub_paths: dict[str, Path],
 ) -> None:
-    """technik.md §8, Nachtrag 28.08.2026, „ein Kapitel ist nicht ein Dokument": Jedes
-    spine-Dokument ab dem ersten Navigationsziel gehört zu genau einem Kapitel — geprüft
+    """technik.md §8, „Ein Kapitel ist nicht ein Dokument": Jedes spine-Dokument ab dem
+    ersten Navigationsziel gehört zu genau einem Kapitel — geprüft
     gegen die echte spine der Package-Datei (dokumentation.md §5, „Was über den Inhalt
     einer Fremdquelle behauptet wird, wird zusätzlich gegen das echte Gegenüber
     geprüft")."""
@@ -1331,7 +1332,7 @@ def test_read_structure_deduplicates_a_trailing_navigation_entry_in_a_real_book(
 def test_sherlock_holmes_folds_entirely_to_level_zero_despite_nested_navpoints(
     real_epub_paths: dict[str, Path],
 ) -> None:
-    """technik.md §8, Nachtrag 28.08.2026: `sherlock.epub` verschachtelt die drei Kinder
+    """technik.md §8, „Unterkapitel gibt es": `sherlock.epub` verschachtelt die drei Kinder
     I./II./III. unter „I. A SCANDAL IN BOHEMIA", alle über `#anker` auf dasselbe Dokument
     wie der Elternteil. Nach dem Zusammenfalten (`_deduplicate_by_target`) liegt die ganze
     Kapitelliste auf Ebene 0 — keine einzige eingerückte Zeile, obwohl die Datei
@@ -1424,8 +1425,8 @@ def test_read_chapter_keeps_a_paragraph_boundary_between_adjacent_paragraphs(
 def test_read_chapter_reads_the_text_of_every_document_in_a_multi_document_chapter(
     mini_epub_with_navigation: Path,
 ) -> None:
-    """technik.md §8, Nachtrag 28.08.2026, „ein Kapitel ist nicht ein Dokument":
-    `read_chapter` liest alle Dokumente eines Kapitels und fügt ihren Fließtext mit einer
+    """technik.md §8, „Ein Kapitel ist nicht ein Dokument": `read_chapter` liest alle
+    Dokumente eines Kapitels und fügt ihren Fließtext mit einer
     Absatzgrenze zusammen wie zwischen zwei Blockelementen — chapter3.xhtml gehört zum
     zweiten Kapitel dieser Vorrichtung und muss im gelesenen Text enthalten sein."""
     structure = epub.read_structure(mini_epub_with_navigation)
@@ -1522,7 +1523,8 @@ def test_read_chapter_keeps_real_content_that_shares_a_document_with_the_license
 
 def _write_multi_document_epub(path: Path, documents: dict[str, str]) -> None:
     """Wie `_write_single_document_epub`, aber für mehrere Inhaltsdokumente eines Kapitels
-    (technik.md §8, Nachtrag 28.08.2026) — `read_chapter` braucht dafür weiterhin weder
+    (technik.md §8, „Ein Kapitel ist nicht ein Dokument") — `read_chapter` braucht dafür
+    weiterhin weder
     `container.xml` noch die Package-Datei."""
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
@@ -2019,14 +2021,15 @@ def test_read_chapter_reads_a_real_story_chapter_unchanged(
     assert "Sherlock Holmes" in chapter.text
 
 
-# ================================== Wortumfang je Kapitel (technik.md §8, Nachtrag 28.08.2026)
+# ================================== Wortumfang je Kapitel (technik.md §8, „Was die
+# Kapitelliste zusätzlich zeigt")
 
 
 def test_count_chapter_words_matches_what_read_chapter_actually_returns(
     mini_epub_with_navigation: Path,
 ) -> None:
-    """technik.md §8, Nachtrag 28.08.2026, „Was die Kapitelliste zusätzlich zeigt": Für
-    jedes Kapitel stimmt der gezählte Umfang mit der Zahl der Wörter überein, die
+    """technik.md §8, „Was die Kapitelliste zusätzlich zeigt": Für jedes Kapitel stimmt der
+    gezählte Umfang mit der Zahl der Wörter überein, die
     `read_chapter` für dasselbe Kapitel tatsächlich liefert — die Zusicherung, die Anzeige
     und Wirklichkeit aneinanderbindet."""
     structure = epub.read_structure(mini_epub_with_navigation)
@@ -2114,8 +2117,8 @@ def test_count_chapter_words_reports_zero_for_a_chapter_that_is_pure_boilerplate
 def test_count_chapter_words_counts_every_document_of_a_multi_document_chapter(
     mini_epub_with_navigation: Path,
 ) -> None:
-    """technik.md §8, Nachtrag 28.08.2026, „ein Kapitel ist nicht ein Dokument": ein
-    mehrdokumentiges Kapitel wird über alle seine Dokumente gezählt, nicht nur über sein
+    """technik.md §8, „Ein Kapitel ist nicht ein Dokument": ein mehrdokumentiges Kapitel
+    wird über alle seine Dokumente gezählt, nicht nur über sein
     Navigationsziel — chapter2.xhtml und chapter3.xhtml gehören beide zum zweiten Kapitel
     dieser Vorrichtung (Kommentar bei `_NAV_ENTRIES` in tests/conftest.py)."""
     structure = epub.read_structure(mini_epub_with_navigation)
@@ -2140,7 +2143,8 @@ def test_count_chapter_words_counts_every_document_of_a_multi_document_chapter(
 def test_count_chapter_words_reports_unknown_not_zero_for_a_missing_document(
     tmp_path: Path,
 ) -> None:
-    """technik.md §8, Nachtrag 28.08.2026: Ein Kapitel mit fehlendem Dokument im Archiv
+    """technik.md §8, „Ein Kapitel ist nicht ein Dokument": Ein Kapitel mit fehlendem
+    Dokument im Archiv
     liefert unbekannt (`None`), nicht `0` — `0` sähe aus wie ein leeres Kapitel und wäre
     der stille Fehlschlag aus Regel 13. Die übrigen Kapitel bekommen trotzdem ihre Zahl."""
     path = tmp_path / "one_missing_document.epub"
@@ -2176,8 +2180,8 @@ def test_count_chapter_words_reports_zero_not_unknown_for_a_picture_book_chapter
 def test_count_chapter_words_opens_the_archive_only_once(
     monkeypatch: pytest.MonkeyPatch, mini_epub_with_navigation: Path
 ) -> None:
-    """technik.md §8, Nachtrag 28.08.2026, „Was die Kapitelliste zusätzlich zeigt": Das
-    Archiv wird einmal geöffnet, nicht einmal je Kapitel — sonst kostete jedes zusätzliche
+    """technik.md §8, „Was die Kapitelliste zusätzlich zeigt": Das Archiv wird einmal
+    geöffnet, nicht einmal je Kapitel — sonst kostete jedes zusätzliche
     Kapitel eine weitere Archivöffnung, obwohl genau das vermieden werden soll (Befund 4,
     Durchsicht 29715b2: die vorige Fassung dieser Zeile zitierte Fließtext statt der
     Überschrift, die Verweisform verlangt beides)."""
@@ -2197,13 +2201,13 @@ def test_count_chapter_words_opens_the_archive_only_once(
 
 
 # ============ Echte Datei: Calibre-Konvertat mit _split_NNN-Dokumenten (technik.md §8,
-# ============ Nachtrag 28.08.2026)
+# ============ „Ein Kapitel ist nicht ein Dokument")
 
 
 @pytest.mark.needs_calibre_split_epub
 def test_book_one_dune_spans_all_three_split_documents(real_dune_epub_path: Path) -> None:
-    """technik.md §8, Nachtrag 28.08.2026, „ein Kapitel ist nicht ein Dokument": Calibre
-    zerlegt „Book 1 DUNE" in drei `…_split_NNN`-Dokumente, wovon die Navigation nur auf das
+    """technik.md §8, „Ein Kapitel ist nicht ein Dokument": Calibre zerlegt „Book 1 DUNE"
+    in drei `…_split_NNN`-Dokumente, wovon die Navigation nur auf das
     erste zeigt — `documents` muss trotzdem alle drei tragen, nicht nur das Navigationsziel."""
     structure = epub.read_structure(real_dune_epub_path)
 
@@ -2219,7 +2223,8 @@ def test_book_one_dune_spans_all_three_split_documents(real_dune_epub_path: Path
 @pytest.mark.needs_calibre_split_epub
 def test_book_two_and_three_span_their_two_split_documents_each(real_dune_epub_path: Path) -> None:
     """Derselbe Beleg wie oben für die beiden übrigen Mehrdokument-Kapitel — beide mit zwei
-    statt drei `…_split_NNN`-Dokumenten (technik.md §8, Nachtrag 28.08.2026)."""
+    statt drei `…_split_NNN`-Dokumenten (technik.md §8, „Ein Kapitel ist nicht ein
+    Dokument")."""
     structure = epub.read_structure(real_dune_epub_path)
 
     by_title = {chapter.title: chapter.documents for chapter in structure.chapters}
@@ -2238,7 +2243,8 @@ def test_book_two_and_three_span_their_two_split_documents_each(real_dune_epub_p
 def test_chapter_word_counts_match_the_measured_table_in_technik_md(
     real_dune_epub_path: Path,
 ) -> None:
-    """technik.md §8, Nachtrag 28.08.2026: Die gemessene Tabelle — 78.774 / 63.513 / 64.637
+    """technik.md §8, „Ein Kapitel ist nicht ein Dokument": Die gemessene Tabelle —
+    78.774 / 63.513 / 64.637
     Wörter für die drei Mehrdokument-Kapitel — ist die Gegenprobe, dass die Anzeige
     (`count_chapter_words`) und die Dokumentliste (`documents`) dasselbe Kapitel meinen."""
     structure = epub.read_structure(real_dune_epub_path)
@@ -2255,8 +2261,9 @@ def test_chapter_word_counts_match_the_measured_table_in_technik_md(
 def test_read_chapter_includes_text_from_the_third_split_document_of_book_one(
     real_dune_epub_path: Path,
 ) -> None:
-    """technik.md §8, Nachtrag 28.08.2026, „Der Fund ist ein stiller Verlust": Vor dieser
-    Regel lag rund 63 % des Buchs außerhalb jedes Kapitels — der Text des dritten Dokuments
+    """technik.md §8, „Ohne die vollständige Dokumentliste wäre das ein stiller Verlust":
+    Ohne diese Regel läge rund 63 % des Buchs außerhalb jedes Kapitels — der Text des
+    dritten Dokuments
     von „Book 1 DUNE" (`part2_split_002.xhtml`) muss jetzt über `read_chapter` erreichbar
     sein."""
     structure = epub.read_structure(real_dune_epub_path)
@@ -2271,7 +2278,8 @@ def test_read_chapter_includes_text_from_the_third_split_document_of_book_one(
 def test_documents_before_the_first_navigation_target_belong_to_no_chapter_in_dune(
     real_dune_epub_path: Path,
 ) -> None:
-    """technik.md §8, Nachtrag 28.08.2026: `titlepage.xhtml` und `OEBPS/title.xhtml` stehen
+    """technik.md §8, „Ein Kapitel ist nicht ein Dokument": `titlepage.xhtml` und
+    `OEBPS/title.xhtml` stehen
     vor dem ersten Navigationsziel (`OEBPS/part1.xhtml`) und dürfen deshalb in keiner
     `documents`-Liste auftauchen."""
     structure = epub.read_structure(real_dune_epub_path)

@@ -300,10 +300,10 @@ def pos_variant_lists(
 # 128,6). Festlegung aus bauplan.md T7, keine Einstellung (Regel 14).
 _MWE_MIN_SCORE = 50
 
-# REGEL (technik.md, „Messung: Mehrwortausdrücke"; Nachtrag 18.08.2026, siehe dort): Der
-# zweite Teil des Filters. Nötig, weil Eigennamen wie „New York" (Proper_noun, score 163,6)
-# oder „Great Britain" (210,0) selbst als mehrwortiger Wörterbucheintrag mit hohem score
-# geführt werden und sonst als Lernvokabel erschienen.
+# REGEL (technik.md, „Messung: Mehrwortausdrücke"): Der zweite Teil des Filters. Nötig,
+# weil Eigennamen wie „New York" (Proper_noun, score 163,6) oder „Great Britain" (210,0)
+# selbst als mehrwortiger Wörterbucheintrag mit hohem score geführt werden und sonst als
+# Lernvokabel erschienen.
 _EXCLUDED_MWE_POS = "Proper_noun"
 
 

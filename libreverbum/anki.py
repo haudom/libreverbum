@@ -434,7 +434,8 @@ def card_obstacle(
     `export_deck` **vor** `printout.write_printout`. Ein Abbruch dort kostet deshalb beide
     Dateien samt aller übrigen Karten eines Durchlaufs — nach vollständig durchlaufener
     Triage, also zum teuersten denkbaren Zeitpunkt. Genau das ist am 01.09.2026 aus der
-    Praxis gemeldet worden (technik.md §8b, Nachtrag). Der Aufrufer (`cli.interaction`)
+    Praxis gemeldet worden (technik.md §8b, „Ein Wort ohne Wörterbucheintrag kostet nicht
+    mehr den ganzen Export"). Der Aufrufer (`cli.interaction`)
     fragt deshalb **vor** der Entscheidung; die Abbrüche in `_translation_text` und
     `_cloze_text` bleiben der Rückhalt für jeden Weg, der hier nicht vorbeikommt (Regel
     13). Beide Seiten müssen sich einig sein — geprüft in `tests/test_anki.py`.

@@ -165,8 +165,8 @@ Manche Dateien — vor allem Calibre-Konvertate — nennen im Inhaltsverzeichnis
 groben Teile eines Romans. Die Kapitelliste zeigt dann drei Einträge zu je 60.000 bis
 80.000 Wörtern: Die Triage bleibt dank der blockweisen Portionierung benutzbar, die
 Zusage, danach ein
-Kapitel am Stück zu lesen, wird sie nicht ([technik.md](technik.md) §8, „Nachtrag
-28.08.2026: ein Kapitel ist nicht ein Dokument").
+Kapitel am Stück zu lesen, wird sie nicht ([technik.md](technik.md) §8, „Ein Kapitel ist
+nicht ein Dokument").
 
 Der saubere Weg führt über die Quelle: **calibre kann das Inhaltsverzeichnis neu erzeugen**,
 wenn im Text eine wiederkehrende Marke steht, an der sich schneiden lässt. In einem

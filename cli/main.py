@@ -267,16 +267,16 @@ def _confirm_dictionary_fetch(
 def _format_word_count(count: int | None) -> str:
     """Wortumfang für die Kapitelliste: deutsches Tausendertrennzeichen (`78.774`),
     unbekannter Umfang sichtbar als `unbekannt` statt als Zahl — die stille Falschaussage
-    `0` wäre genau der stille Fehlschlag, den Regel 13 verbietet (technik.md §8, Nachtrag
-    28.08.2026, „Was die Kapitelliste zusätzlich zeigt")."""
+    `0` wäre genau der stille Fehlschlag, den Regel 13 verbietet (technik.md §8, „Was die
+    Kapitelliste zusätzlich zeigt")."""
     if count is None:
         return "unbekannt"
     return f"{count:,}".replace(",", ".")
 
 
 def _indent_title(chapter: epub.ChapterReference) -> str:
-    """Titel eingerückt nach Gliederungsebene (technik.md §8, Nachtrag 28.08.2026, „Was
-    die Kapitelliste zusätzlich zeigt"): zwei Leerzeichen je Ebene, fest und ohne
+    """Titel eingerückt nach Gliederungsebene (technik.md §8, „Was die Kapitelliste
+    zusätzlich zeigt"): zwei Leerzeichen je Ebene, fest und ohne
     Konfigurationsschalter (Regel 14) — eine flache, durchlaufend nummerierte Liste bleibt
     es trotzdem, kein Aufklappbaum. Oberste Ebene (0) bleibt unverändert."""
     return f"{'  ' * chapter.level}{chapter.title}"
@@ -287,7 +287,7 @@ def _choose_chapter(
 ) -> int:
     """Zeigt die Kapitelliste mit Wortumfang je Kapitel und fragt so lange nach, bis eine
     darin vorhandene Kapitelnummer eingegeben wird. Titel vor Zahl, wie technik.md §8,
-    Nachtrag 28.08.2026, „Was die Kapitelliste zusätzlich zeigt" es nennt („Book 1 DUNE —
+    „Was die Kapitelliste zusätzlich zeigt" es nennt („Book 1 DUNE —
     78.800 Wörter"): Nummer und Wortumfang stehen rechtsbündig in eigenen Spalten, der
     Titel linksbündig auf die Länge des längsten (eingerückten) Titels aufgefüllt
     dazwischen — erst die aufgefüllte Nummer hält beide Spalten auch ab Kapitel 10
