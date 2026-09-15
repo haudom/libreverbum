@@ -56,8 +56,8 @@ zufällig, für eindeutige Wörter wie `watch`. Die Auflösung, welche Bedeutung
 tatsächlich meint, braucht das Modell (`translation.choose_sense`) — und *das* ist Sache des
 Kerns (technik.md §7: „`translation` als einziger Ort mit Modellzugriff"), nicht der
 Oberfläche. `pipeline.resolve_triage_entries` löst deshalb **vor** der Triage auf, wie es
-konzept.md, „Der Kernablauf" verlangt: „Die Triage kommt nach dem Beschaffen der
-Bedeutungen." Schreib- und Leseseite sind seither dieselbe Stelle: `resolve_triage_entries`
+konzept.md, „Der Kernablauf" es verlangt: Die Triage kommt nach dem Beschaffen der
+Bedeutungen. Schreib- und Leseseite sind seither dieselbe Stelle: `resolve_triage_entries`
 prüft den Kenntnisstand der aufgelösten Bedeutung selbst (`pipeline._all_candidates_known`
 für den Vorfilter, ein frischer `profile.compare_chapter_vocabulary`-Aufruf je aufgelöster
 Bedeutung danach), und dieses Modul bucht hier nur noch genau diese eine Bedeutung

@@ -153,8 +153,9 @@ from libreverbum.entities import Occurrence, Sense
 # §8c, ist die Messung zu wiederholen.
 #
 # (Befund 5, Durchsicht 4fa3c8e): Der Verweis im Moduldocstring, Abschnitt
-# „Voraussetzungen", zeigte auf einen inzwischen weggefallenen Anker. Nachgezogen auf
-# „konzept.md §4, »Blockweise Triage mit Fortsetzungsfrage«".
+# „Voraussetzungen", nannte „konzept.md §4, »Obergrenze pro Kapitel«" — eine Festlegung,
+# die mit der blockweisen Triage gefallen ist. Er steht jetzt auf „konzept.md §4,
+# »Blockweise Triage mit Fortsetzungsfrage«".
 MAX_ENTRIES = 33
 
 
@@ -215,9 +216,6 @@ def _pos_label(pos: str) -> str | None:
         raise ValueError(f"Kein Wortart-Kürzel für {pos!r} hinterlegt.") from error
 
 
-# (Befund 5, Durchsicht 4fa3c8e): Der Verweis zeigte auf einen inzwischen weggefallenen
-# Anker. Nachgezogen auf den gültigen Stand (konzept.md §4, „Blockweise Triage mit
-# Fortsetzungsfrage").
 def _ensure_single_chapter(entries: Sequence[tuple[Occurrence, Sense]]) -> None:
     """Bricht sichtbar ab, wenn `entries` Vorkommen aus mehr als einem Kapitel enthält —
     dieselbe Prüfung wie `triage._ensure_single_chapter`, hier eigenständig geschrieben,

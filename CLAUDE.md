@@ -304,8 +304,9 @@ die davon abhängen, tragen `needs_dictionary`, `needs_model`, `needs_epub`,
   - Das Verzeichnis ist zwischen zwei Toren gefüllt und danach leer. **Ist es beim
     Kaltstart nicht leer, steht ein Einfalten aus** — das ist seine zweite Aufgabe
 - **Korrigieren: Nachtrag oder überschreiben** (dokumentation.md §7). Eine widerlegte,
-  aber plausible Annahme bekommt einen datierten Nachtrag — so wie in konzept.md §5,
-  wo die Wendungsmessung eine Konzeptaussage gekippt hat. Ersetzte Festlegungen werden
+  aber plausible Annahme bekommt einen datierten Nachtrag — der Musterfall stand bis zum
+  Einfalten der Phase-1-Nachträge in konzept.md §5, wo die Wendungsmessung eine
+  Konzeptaussage gekippt hat (`git show b663678:konzept.md`). Ersetzte Festlegungen werden
   dagegen überschrieben; die Historie hat Git. In beiden Fällen gilt: **der gültige
   Stand steht oben**, nie die überholte Fassung zuerst
 - **Keine erzeugte Schnittstellenreferenz, keine Änderungshistorie in Dateiköpfen**

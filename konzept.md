@@ -46,9 +46,9 @@ Kenntnis wird pro Bedeutung geführt, nicht pro Grundform (technik.md §4, „Ke
 Kenntnis pro Bedeutung, nicht pro Wort") — sonst ließe sich „neue Bedeutung eines bekannten
 Wortes" gar nicht erkennen. Der Abgleich gegen das Profil vergleicht deshalb auf Ebene der
 Bedeutung und setzt bereits aufgelöste Bedeutungen voraus: Er läuft **nach** „Bedeutungen
-beschaffen", nicht davor. Im Code ist es ebenso — `libreverbum/pipeline.py`, Abschnitt
-„Regeln" des Moduldocstrings: „Der Abgleich gegen das Profil in `run_chapter` läuft nach
-dem Nachschlagen im Wörterbuch". Aus demselben Grund läuft auch die Triage erst, nachdem
+beschaffen", nicht davor — im Kern ebenso, wo `profile.compare_chapter_vocabulary` erst
+nach dem Nachschlagen im Wörterbuch aufgerufen wird. Aus demselben Grund läuft auch die
+Triage erst, nachdem
 die Bedeutungen feststehen: Der zweite Eintrag eines mehrdeutigen Wortes wird dort als
 „neue Bedeutung eines bekannten Wortes" gekennzeichnet, was voraussetzt, dass die Bedeutung
 bereits feststeht.
@@ -59,9 +59,10 @@ und lernt das Wort nie. Der Belegsatz allein trägt das nicht; in einer zügigen
 er überflogen.
 
 **Die Abschnittsnummern unten folgen weiterhin der ursprünglichen Reihenfolge**, nicht dem
-tatsächlichen Ablauf, damit die Verweise aus technik.md gültig bleiben: Abschnitt 5
-(„Übersetzen") läuft vor Abschnitt 4 („Triage"). Geändert hat sich nur die Reihenfolge,
-nicht die Sache — Abschnitt 5 beschreibt weiterhin denselben Hybrid, er läuft nur früher.
+tatsächlichen Ablauf, damit die Verweise aus technik.md gültig bleiben: Gelaufen wird
+1‑2‑**5**‑3‑4‑6, Abschnitt 5 („Übersetzen") also vor Abschnitt 3 („Gegen das Profil
+filtern") und vor Abschnitt 4 („Triage"). Geändert hat sich nur die Reihenfolge, nicht die
+Sache — Abschnitt 5 beschreibt weiterhin denselben Hybrid, er läuft nur früher.
 
 ### 1. Buch einlesen
 EPUB öffnen, Metadaten (Titel, Autor) und die Kapitelstruktur auslesen. Fließtext von
@@ -100,8 +101,9 @@ Der wichtigste und unterschätzteste Schritt. Aus dem Rohtext entsteht eine saub
 - **Belegsatz merken**: zu jedem Wort der Originalsatz aus dem Buch, in dem es vorkommt.
 
 ### 3. Gegen das Profil filtern
-Alles, was im Profil als *bekannt* markiert ist, fällt raus. Beim ersten Buch ist das Profil
-leer — deshalb muss Schritt 4 auch bei großen Listen erträglich bleiben.
+Alles, was im Profil als *bekannt* markiert ist, fällt raus — verglichen wird auf Ebene der
+Bedeutung, dieser Schritt setzt also Schritt 5 voraus (siehe „Der Kernablauf"). Beim ersten
+Buch ist das Profil leer — deshalb muss Schritt 4 auch bei großen Listen erträglich bleiben.
 
 ### 4. Triage durch den Nutzer
 Die verbleibenden Wörter werden durchgegangen, jeweils mit Belegsatz **und Bedeutung** als
@@ -137,7 +139,7 @@ unbekannten Grundformen ausnahmslos A1/A2-Wortschatz (`life`, `had`, `said`, `ma
 nach einer Sammelaktion erscheinen `portrait`, `tragedy`, `dreadful`, `lad`, `afraid`. Eine
 höhere Grenze verlängerte nur diesen Kalibrierdurchlauf — was ihn abkürzt, ist ein
 Tastendruck und die Vorbelegung des Grundwortschatzes ([technik.md](technik.md) §11). Die
-Obergrenze bleibt deshalb bei 25.
+Blockgröße bleibt deshalb bei 25.
 
 **In der Triage steht die gemeinte Bedeutung**, nicht bloß die Liste der möglichen. Sie wird
 dafür **vor** der Triage aufgelöst, und „kenne ich" bucht auf sie — Kenntnis wird pro
