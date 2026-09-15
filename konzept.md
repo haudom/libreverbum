@@ -293,7 +293,10 @@ Kern, nicht darunter").
 - **Weitere Eingabeformate**: Untertiteldateien (.srt) für Serien — mit Abstand am einfachsten zu
   verarbeiten und bei Lernenden sehr beliebt. Dazu Kindles Nachschlage-Datenbank als
   Startbestand für „das kenne ich noch nicht", sowie PDF und reiner Text
-- **Weitere Sprachpaare** aktivieren
+- **Weitere Sprachpaare** aktivieren — die Tür dazu hält [technik.md](technik.md) §4,
+  „Entschieden 15.09.2026: Mehrsprachigkeit bleibt möglich" offen: eine Sprachspalte im
+  Schema, sonst nichts vorab. Japanisch ist dort als eigenes Extraktionsmodul eingeordnet,
+  nicht als Variante des englischen
 
 ### Phase 4 — Bildmodus
 - **Englische Comics und Graphic Novels**: Sprechblasen finden, Text auslesen, in dieselbe

@@ -97,6 +97,7 @@ offen").
 | §3 | Redewendungserkennung über Textfenster noch nicht geprüft |
 | §3 | Ob Ollama dauerhaft die richtige Wahl ist oder `llama-server` mit Vulkan direkt |
 | §4 | Umgang mit gleichzeitigem Zugriff, falls eine Weboberfläche hinzukommt |
+| §4 | `book.language` und `lemma.language` beschlossen, nicht gebaut — mit der nächsten Schemafassung mitnehmen |
 | §4 | Regel-Kommentar über `profile.record_card` begründet falsch — zu berichtigen |
 | §4 | Profil-Identität einer Bedeutung schließt die Anki-GUID aus — Fallrisiko beim nächsten Wörterbuchbezug |
 | §4 | Die beiden Idempotenz-Tests prüfen nicht, was ihr Docstring behauptet |
@@ -1183,6 +1184,49 @@ Fünf-Minuten-Entscheidung jetzt einen unreparierbaren Zustand später verhinder
 Woraus die Kennung gebildet wird, steht in Abschnitt 8b, „Befund: die vorgegebene GUID
 bindet den Feldinhalt" — die Vorgabe der Bibliothek erfüllt Regel 6 nur dem Anschein nach.
 
+### Entschieden 15.09.2026: Mehrsprachigkeit bleibt möglich — eine Spalte, keine Weiche
+
+**Weitere Sprachpaare bleiben Phase 3** (konzept.md, „Phase 3"). Entschieden ist nur, die
+Tür dorthin nicht zufallen zu lassen — und was das heute kostet: **eine** Strukturmaßnahme
+im Schema und eine Bauregel für den Kern. Kein Sprachparameter, kein Schalter.
+
+**Die Struktur: `book.language` und `lemma.language`, mit der nächsten Schemafassung.**
+Beide Spalten tragen das Kürzel der **Ausgangssprache** nach ISO 639-1 (`en`); `lemma`
+wird eindeutig über `UNIQUE (language, text, pos)` statt `UNIQUE (text, pos)`. Der Kern
+schreibt den Wert selbst — bis zum zweiten Sprachpaar immer `en` — und liest ihn
+nirgends. Die Zielsprache bleibt Deutsch und bekommt keine Spalte: Es gibt genau eine, und
+Regel 14 gilt für Verhalten, nicht für Struktur (dokumentation.md §4, „Zu Regel 14:
+Struktur ist nicht Funktion") — dieselbe Abwägung wie bei der Anki-Kennung oben. Ein
+Profil, das mit der Vorbelegung vom ersten Tag an fünfstellig ist („Fassung 2"), macht aus
+der nachgereichten Spalte eine Wanderung mit Altbestand; heute ist sie eine Zeile im
+Schema. **Sie kommt mit der nächsten Erhöhung von `user_version`**, nicht als eigene
+Fassung — Phase 2 plant Fassung 3 bereits für `learner` (Einstufungstest, Abschnitt 11).
+
+**Die Bauregel: Sprachwissen wohnt in `extraction` und im Prompt-Text von `translation`,
+sonst nirgends.** Heute ist das erfüllt — `pipeline`, `profile`, `anki`, `printout` und
+`epub` kennen kein englisches Grammatikwissen — und so bleibt es. Was am Englischen hängt,
+steht hier aufgezählt, damit der Bearbeiter des zweiten Sprachpaars es nicht sucht:
+
+- `extraction.load_nlp` lädt `en_core_web_md` als Literal; die Wendungsheuristiken
+  (`_PARTICLE_DEP`, `_EXPRESSION_PARTICLE_WORDS`, `dobj`/`advmod`/`prep`-Satelliten) sind
+  englische Grammatik, nicht spaCy-Allgemeingut
+- `translation._build_prompt` beginnt mit „German learner of English"
+- `anki._EN_DE_MODEL`/`_DE_EN_MODEL` tragen das Paar im Namen, und `_deck_id` leitet die
+  Kennung aus dem Decknamen ab
+- `wordfreq_en_5000.txt` samt `CefrLevel` (Abschnitt 11) — der GER passt für Japanisch
+  nicht, dort zählt die JLPT-Skala
+- `printout` setzt `sans-serif` ohne CJK-Fallback und `lang="de"`
+
+**Reihenfolge, falls es so weit kommt:** ein europäisches Paar zuerst (spaCy-Modelle
+gleicher Bauart, WikDict `fr-de`/`es-de` in ähnlicher Größe wie `en-de`), Japanisch
+danach mit **eigenem Extraktionsmodul** — nicht als Variante von `extraction`: keine
+Wortgrenzen (Sudachi-Zerlegungsmodus statt `token.is_alpha`), Kanji- und Kana-Schreibung
+desselben Worts beim Abgleich gegen `written_rep`, und Karten brauchen die Lesung, für die
+weder `Sense` noch das Schema ein Feld haben. Diese Lesung wird **nicht** vorgesehen: Sie
+ist die Struktur einer einzigen Sprache, und sie bleibt die Migration, die Japanisch dann
+kostet. WikDict `ja-de.sqlite3` existiert (geprüft 15.09.2026: 2,1 MB gegenüber rund 20 MB
+für `en-de`); die Abdeckungsmessung aus Abschnitt 2 wäre dafür zu wiederholen.
+
 ### Sichern und Ausleiten
 
 Zwei getrennte Dinge:
@@ -1211,6 +1255,10 @@ bemerkbar gewesen — eine Profildatei der Fassung 1 trägt dieselben Tabellenna
   „Die Spalten, wie sie seit T8 stehen" festgehalten
 - Umgang mit gleichzeitigem Zugriff, falls später eine Weboberfläche hinzukommt
   (siehe Architekturregel in Abschnitt 1)
+- **`book.language` und `lemma.language` sind beschlossen, aber nicht gebaut** — sie
+  kommen mit der nächsten Erhöhung von `user_version`, nicht als eigene Fassung (oben,
+  „Entschieden 15.09.2026: Mehrsprachigkeit bleibt möglich"). Wer Fassung 3 baut, nimmt
+  sie mit; ihre Zeile in der Spaltentabelle oben entsteht dann
 - **Der Regel-Kommentar über `profile.record_card` begründet falsch.** Er nennt als Grund,
   „ein zweiter Lauf erzeugte in Anki stumm eine Doppelnotiz". Das trifft nicht zu und
   widerspricht Abschnitt 8b: Weil `anki.new_card_guid` stabil ist, aktualisiert Anki dieselbe

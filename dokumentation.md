@@ -115,6 +115,7 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | Datenverzeichnis | `data_dir` |
 | Zwischenspeicher (Wegwerfwert, ohne Nutzerwert selbst neu berechenbar — bisher nur für den buchweiten Eigennamenanteil, technik.md §5, „Entschieden 15.09.2026") | `cache`, `cache_dir` |
 | Einstellungen | `config` |
+| Ausgangssprache (die Sprache, die gelernt wird: des Buchs, der Grundform; Kürzel nach ISO 639-1, heute nur `en`) | `language` (Spalte an `book` und `lemma`, beschlossen 15.09.2026, kommt mit der nächsten Schemafassung — technik.md §4, „Entschieden 15.09.2026: Mehrsprachigkeit bleibt möglich") — **nicht** `lang`, und nicht die Zielsprache: die ist Deutsch und hat keine Spalte |
 
 Neue Begriffe kommen hierher, **bevor** der erste Bezeichner damit entsteht.
 
