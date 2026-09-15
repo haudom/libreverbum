@@ -122,7 +122,7 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | Arbeiter, Hintergrundfaden der Oberfläche | `worker` |
 | Gestaltungsvorgaben, Token | `theme` (`Theme.qml`) |
 | Bildschirm, Ansicht | `screen` |
-| Abdeckung | `coverage` |
+| Abdeckung (Anteil der vom Leser bereits verstandenen Wortformen, Anzeige der Oberfläche) | `coverage` — **nicht** zu verwechseln mit der Wörterbuchabdeckung aus technik.md §2, „Abdeckung — empirisch geprüft" (dort `remaining`/`undetermined_entries`: Anteil der Grundformen mit Wörterbucheintrag) |
 | Schwierigkeit (eines Buchs) | `difficulty` |
 | Lesezeichen (Druckformat) | `bookmark` |
 | Figuren & Orte | `proper_noun_list` |
@@ -731,17 +731,20 @@ betroffenen Testdateien laufen lassen" verkleinert das Problem, löst es aber ni
 
 > **Regel:** Die Durchsicht prüft gegen `git archive <commit>` in einem Wegwerfordner, nicht
 > gegen den Arbeitsbaum. `tools/en-de.sqlite3` und `tools/*.epub` werden dorthin
-> mitkopiert. Die **Gegenprobe** dafür ist die Schlusszeile von `pytest`: Sie muss genau
-> **zwei** Übersprungene nennen — `needs_model` und `needs_wordfreq`, die einzigen beiden
-> Marken, die nicht an `tools/` hängen (`addopts = ["-rs"]` in `pyproject.toml` nennt jeden
-> Skip namentlich, ohne Zusatzaufwand). Meldet der Lauf stattdessen rund fünfunddreißig
+> mitkopiert. Die **Gegenprobe** dafür ist die Schlusszeile von `pytest`: Mit installiertem
+> PySide6 muss sie genau **zwei** Übersprungene nennen — `needs_model` und `needs_wordfreq`,
+> die einzigen beiden Marken, die nicht an `tools/` hängen (`addopts = ["-rs"]` in
+> `pyproject.toml` nennt jeden Skip namentlich, ohne Zusatzaufwand). Ab AP 1 kommt
+> `needs_gui` dazu, sobald PySide6 in der Prüfumgebung fehlt — dann sind es **drei**; mit
+> installiertem PySide6 bleibt es bei zwei. Meldet der Lauf stattdessen rund fünfunddreißig
 > Übersprungene, ist die Kopie missraten — `tools/en-de.sqlite3` oder ein EPUB fehlt —, und
 > die Durchsicht hält für grün, was gar nicht gelaufen ist. Zur Einordnung: 33 der 559
 > Tests hängen an `tools/` (`needs_dictionary`, `needs_epub`, `needs_calibre_split_epub`) —
 > diese Größenordnung darf danebenstehen, ist aber nicht die Prüfgröße; geprüft wird die
-> Zahl **zwei**. Meldet der Lauf **eine** statt zwei, hängt in der Umgebung
-> `LIBREVERBUM_MODEL_URL` oder `LIBREVERBUM_WORDFREQ_PYTHON` (`tests/conftest.py`) —
-> falscher Alarm, kein falsches Grün; die betreffende Variable vor dem Lauf löschen.
+> Zahl **zwei** (bzw. ab AP 1 ohne PySide6: **drei**). Meldet der Lauf **eine** statt zwei,
+> hängt in der Umgebung `LIBREVERBUM_MODEL_URL` oder `LIBREVERBUM_WORDFREQ_PYTHON`
+> (`tests/conftest.py`) — falscher Alarm, kein falsches Grün; die betreffende Variable vor
+> dem Lauf löschen.
 
 **Das Vergleichspaar einer Durchsicht ist `git show <commit>`, nicht `git diff
 <vorgänger> <commit>`.** Liegt zwischen den beiden ein fremder Commit — bei zwei

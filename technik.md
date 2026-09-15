@@ -140,6 +140,7 @@ offen").
 | §13 | Bei nur einem Kapitel: Fortschritt oder Ruckeln — nicht an echten Nutzern geprüft |
 | §14 | Die konkrete Gestaltungsrichtung (Farbtoken, Schriftrollen, Signaturelement) ist noch nicht gewählt |
 | §14 | Ob Qt Quick bei Sonnet tatsächlich mehr Durchsichtsrunden braucht als ein Web-Stack — Vermutung der Recherche, nicht gemessen |
+| §14 | Ob `recherche_hochwertige_UIs_mit_Claude.md` dauerhaft ins Repositorium gehört (liegt seit `5af0e86` versioniert, passt aber in keine der drei Dokumentrollen) |
 
 ---
 
@@ -3340,8 +3341,9 @@ hier steht, was dauerhaft gilt.
 
 Abschnitt 1 hat Qt Quick am 11.08.2026 entschieden und den Web-Hybrid **nach Aufwand**
 verworfen, nicht nach Möglichkeit. Eine Recherche vom 15.09.2026 zu hochwertigen
-KI-gebauten Oberflächen (`recherche_hochwertige_UIs_mit_Claude.md`, nicht versioniert —
-sie ist für Web-Frontends geschrieben und passt in keine der drei Dokumentrollen, E14)
+KI-gebauten Oberflächen (`recherche_hochwertige_UIs_mit_Claude.md`, datiertes
+Arbeitsmaterial im Repositorium seit `5af0e86` — sie ist für Web-Frontends geschrieben und
+passt in keine der drei Dokumentrollen, E14)
 brachte ein neues Argument auf den Tisch: Die Werkzeuge, mit denen ein Agent gute
 Oberflächen baut, sind für React/Tailwind/shadcn am dichtesten; für Qt/QML kommt die
 Recherche gar nicht vor.
@@ -3401,7 +3403,8 @@ Konsole; importiert den Kern, wird von beiden Oberflächen importiert, vom Kern 
 zweite Anwendungsfall (zwei Oberflächen) liegt vor. Was dagegen **Verkettung von
 Kernschritten** ist — Anki-Deck schreiben, Druckseite schreiben, Triage-Karte im Profil
 buchen — gehört nach Abschnitt 7 in `pipeline`, nicht nach `app/`; das schließt den
-offenen Punkt „Zurückschreiben der Anki-GUID hängt an der Kommandozeile" aus Abschnitt 7.
+offenen Punkt „Zurückschreiben der Anki-GUID hängt an der Kommandozeile" aus Abschnitt 7
+mit AP 2.
 
 ### Was aus der Recherche in die Oberfläche wandert
 
@@ -3409,7 +3412,7 @@ offenen Punkt „Zurückschreiben der Anki-GUID hängt an der Kommandozeile" aus
 |---|---|---|
 | Auf **eine** Ästhetik festlegen statt „modern"; Token-System (4–6 Farben, 2 Schriftrollen, Abstände, Signaturelement) | übernommen | `gui/qml/Theme.qml` als einzige Quelle |
 | Keine Standardschriften (Inter, Roboto, Systemschrift) | übernommen — mitgebrachte OFL-Schriften, Lizenz je Schrift belegt (Regel 15) | `NOTICE` |
-| Kompakter Design-Block in CLAUDE.md | übernommen, acht Zeilen, verweist hierher | CLAUDE.md |
+| Kompakter Design-Block in CLAUDE.md | übernommen, acht Zeilen, verweist hierher | AP 14 |
 | Screenshot-Verifikationsschleife (zwei Größen, Konsole/QML-Warnungen prüfen, gegen Akzeptanzkriterien) | übernommen: `tools/gui_screenshot.py`, 1280×800 und Mindestgröße, QML-Warnungen als Fehlschlag, „verifiziert heißt"-Listen je Bildschirm | CLAUDE.md, „Prüfen vor »fertig«" |
 | Zwei-Pass mit Selbstkritik („remove one accessory") | übernommen als eigenes AP nach dem ersten und nach dem letzten Oberflächen-Block | Gestaltungsdurchsicht (Opus) |
 | Writer/Reviewer mit frischem Kontext | ist bereits Hausordnung | dokumentation.md §10 |
@@ -3423,6 +3426,10 @@ offenen Punkt „Zurückschreiben der Anki-GUID hängt an der Kommandozeile" aus
 - **Ob Qt Quick für Desktop-Anwendungen bei Sonnet tatsächlich mehr Durchsichtsrunden
   braucht** als ein Web-Stack, ist eine Vermutung der Recherche, nicht an diesem Bestand
   gemessen
+- **Ob `recherche_hochwertige_UIs_mit_Claude.md` dauerhaft ins Repositorium gehört**, ist
+  nicht entschieden — sie liegt seit `5af0e86` versioniert, aber CLAUDE.md kennt heute nur
+  drei Dokumente und README.md als Schaufenster, kein viertes. Zu klären am Tor der
+  Phase 2 (Entscheidung Dominiks, 15.09.2026)
 
 ---
 

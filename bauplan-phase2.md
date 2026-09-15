@@ -241,10 +241,17 @@ ein, bevor Phase 2 neue dazulegt.
 
 ### E14 — Wohin mit der Recherche-Datei
 
-`recherche_hochwertige_UIs_mit_Claude.md` liegt unversioniert im Wurzelverzeichnis und
-passt in keine der drei Dokumentrollen. **Vorgabe:** nicht versionieren; was daraus gilt,
-steht in Abschnitt 7 dieses Plans und wandert mit E1/E11 nach technik.md §14 — mit dem
-Datum und dem Hinweis, dass die Recherche Web-Frontends meinte.
+`recherche_hochwertige_UIs_mit_Claude.md` liegt als datiertes Arbeitsmaterial versioniert
+im Wurzelverzeichnis (seit `5af0e86`) und passt in keine der drei Dokumentrollen. Was
+daraus gilt, steht in Abschnitt 7 dieses Plans und wandert mit E1/E11 nach technik.md §14
+— mit dem Datum und dem Hinweis, dass die Recherche Web-Frontends meinte. Ob die Datei
+dauerhaft ins Repositorium gehört, ist ein offener Punkt (technik.md §14).
+
+> **Nachtrag, 15.09.2026 (Durchsicht c3584dc, Befund 1):** Die Vorgabe „nicht
+> versionieren" oben war überholt, bevor sie geschrieben wurde — die Datei war zu diesem
+> Zeitpunkt bereits committet (`5af0e86`, vor `c3584dc`). Wer sich auf „unversioniert"
+> verließ, hätte sie fälschlich gelöscht oder aus der Versionierung genommen. Die
+> Rollenfrage bleibt offen, nur die Tatsachenbehauptung ist berichtigt.
 
 ---
 

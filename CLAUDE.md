@@ -34,6 +34,12 @@ Das gilt auch für diese Datei: Sie navigiert, sie dupliziert keine Begründunge
 Verweisform ist `technik.md §3, „Datenfalle"` — Nummer und Überschrift, nie eine
 Zeilennummer.
 
+Dazu, nur für die Dauer der laufenden Phase, das Arbeitsdokument
+[bauplan-phase2.md](bauplan-phase2.md): Es zerlegt Phase 2 in Arbeitspakete (Herkunftsangabe
+im Quelltext: `bauplan-phase2.md AP 7`) und fällt am Tor der Phase 2 weg — wie `bauplan.md`
+am Tor der Phase 1 (Blockquote unten). Was daraus dauerhaft gilt, wandert vorher in die drei
+Dokumente oben.
+
 > **`bauplan.md T13` im Quelltext ist eine Herkunftsangabe, kein Verweis.** Der Bauplan
 > hat die Phase 1 in die Teilaufgaben T1 bis T18 geschnitten und ist mit deren Abnahme am
 > 26.08.2026 weggefallen; was daraus dauerhaft gilt, steht in den drei Dokumenten oben.
@@ -106,7 +112,9 @@ Systemkodierung sonst still typografische Zeichen im Buchtext.
   Modellauflösung, Exportnamen, Triage-Buchung, Vorladen; ohne Qt, ohne Konsole).
   **Importrichtung:** `app/` importiert den Kern, wird von `cli/` und `gui/` importiert,
   vom Kern nie; `cli/` und `gui/` importieren sich nicht gegenseitig.
-  `tests/test_architecture.py` prüft alle Richtungen. Begründung: technik.md §14
+  `tests/test_architecture.py` soll ab AP 1 alle drei Richtungen prüfen — heute prüft
+  `GUI_PACKAGES` nur `PySide6`/`PyQt5`/`PyQt6`/`cli`, weder `app` noch `gui` kommen vor.
+  Begründung: technik.md §14
 - **Lizenz jeder neuen Bibliothek vor der Aufnahme prüfen** (Regel 15, starkes Copyleft)
 
 ## Prüfen vor „fertig" (technik.md §6)
@@ -140,13 +148,16 @@ Zwei Prüfregeln sind abgeschaltet, weil sie gegen die Sprachregel arbeiten (`RU
 melden Gedankenstrich und typografische Anführungszeichen). Wer sie wieder anschaltet,
 liest erst technik.md §6, „Zwei Prüfregeln arbeiten gegen die Hausordnung".
 
-**Ergänzung für die Oberfläche (seit Phase 2, technik.md §14).** Tests, die `PySide6`
-brauchen, tragen die Marke `needs_gui` und laufen mit `QT_QPA_PLATFORM=offscreen`
-(`conftest.py` setzt das, eine `QGuiApplication` je Testlauf). Das Tor allein reicht bei
-einem GUI-AP nicht: Dazu kommt die Screenshot-Prüfschleife — `tools/gui_screenshot.py
-<screen> <png>` rendert bei 1280×800 und bei der Mindestgröße, QML-Warnungen gelten als
-Fehlschlag, geprüft wird gegen eine vorab notierte „verifiziert heißt"-Liste des
-Bildschirms. Ohne sie meldet ein Agent auch bei kaputter Seite Erfolg.
+**Ergänzung für die Oberfläche (seit Phase 2, technik.md §14, ab AP 1).** Tests, die
+`PySide6` brauchen, sollen die Marke `needs_gui` tragen und mit
+`QT_QPA_PLATFORM=offscreen` laufen (`conftest.py` soll das setzen, eine
+`QGuiApplication` je Testlauf) — heute, vor AP 1, kennt `conftest.py` weder die Marke
+noch die Umgebungsvariable. Das Tor allein wird bei einem GUI-AP nicht reichen: Dazu
+kommt die Screenshot-Prüfschleife — `tools/gui_screenshot.py <screen> <png>` soll bei
+1280×800 und bei der Mindestgröße rendern, QML-Warnungen sollen als Fehlschlag gelten,
+geprüft werden soll gegen eine vorab notierte „verifiziert heißt"-Liste des Bildschirms;
+das Skript entsteht erst in AP 15. Ohne sie meldet ein Agent auch bei kaputter Seite
+Erfolg.
 
 **Nach den vier Befehlen folgt die Durchsicht.** Sie ist kein fünfter Befehl, sondern die
 Antwort auf eine andere Frage: Das Tor prüft **Form** — ob das Gebaute das Richtige tut,
@@ -166,8 +177,10 @@ Runden.
 **Die Durchsicht prüft gar nicht im Arbeitsbaum**, sondern gegen `git archive <commit>` in
 einem Wegwerfordner — `tools/en-de.sqlite3` und `tools/*.epub` gehören mit hinein. Die
 Gegenprobe: Die Schlusszeile von `pytest` muss genau **zwei** Übersprungene nennen
-(`needs_model`, `needs_wordfreq`) — meldet sie stattdessen rund fünfunddreißig, ist die
-Kopie missraten; meldet sie eine, steht `LIBREVERBUM_MODEL_URL` oder
+(`needs_model`, `needs_wordfreq`) — mit installiertem PySide6, dem Stand vor AP 1. Ab AP 1
+kommt `needs_gui` als dritte Marke dazu, sobald PySide6 in der Prüfumgebung **fehlt**; mit
+installiertem PySide6 bleibt es bei zwei. Meldet der Lauf stattdessen rund fünfunddreißig,
+ist die Kopie missraten; meldet er eine, steht `LIBREVERBUM_MODEL_URL` oder
 `LIBREVERBUM_WORDFREQ_PYTHON` noch in der Umgebung (falscher Alarm, kein falsches Grün).
 Begründung: dokumentation.md §10, „Woran sie prüft: gegen den Commit, nicht gegen den
 Arbeitsbaum".
@@ -255,7 +268,9 @@ Er steht in drei Quellen, die sich selbst nachführen — nicht hier:
   offenen Punkte: konzept.md, „Bewusst offen" für die inhaltlichen, technik.md, „Offene
   Punkte im Überblick" für die technischen — die Tabelle am Kopf von
   [technik.md](technik.md) verweist auf die einzelnen „Offene Punkte"-Abschnitte, ersetzt
-  aber deren Lektüre für den Kaltstart. Was dort steht, wird erst entschieden, dann gebaut
+  aber deren Lektüre für den Kaltstart. Was dort steht, wird erst entschieden, dann gebaut.
+  Innerhalb der laufenden Phase zerlegt [bauplan-phase2.md](bauplan-phase2.md) das in
+  Arbeitspakete — Vorlage, kein Ersatz für den Phasenplan; fällt am Tor der Phase 2 weg
 - **Was gerade jemand anderes bearbeitet:** `git status`. Es laufen regelmäßig zwei
   Bearbeiter gleichzeitig — fremde Änderungen im Arbeitsbaum sind kein Fehler und werden
   weder repariert noch mitcommittet
