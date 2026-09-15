@@ -6,10 +6,11 @@ Schritt 3 des Kernablaufs (konzept.md): das Schema anlegen und Kenntnis als Erei
 festhalten — pro Bedeutung, nicht pro Wort (technik.md §4, „Kernentscheidung: Kenntnis pro
 Bedeutung, nicht pro Wort", bauplan.md T8) —, daraus den Kenntnisstand ableiten und den
 Kapitelwortschatz dagegen abgleichen (bauplan.md T9). Dazu, für Schritt 6 (Export),
-`record_card`: die Anki-GUID beim Export in `card` mitschreiben (Regel 6) — ohne dieses
-Gegenstück weiß das Profil nach einem Export nicht, für welche Bedeutung schon eine Karte
-besteht, und ein zweiter Lauf erzeugte in Anki stumm eine Doppelnotiz (Befund mittel,
-Durchsicht T16).
+`record_card`: die Anki-GUID beim Export in `card` mitschreiben (Regel 6) — nicht, damit
+ein zweiter Lauf keine Doppelnotiz in Anki erzeugt (das verhindert bereits `anki.
+new_card_guid`s Stabilität, technik.md §8b), sondern damit der Anki-Rückkanal aus Phase 3
+später anschließbar bleibt, ohne alle bereits exportierten Decks neu erzeugen zu müssen
+(technik.md §4, „Jetzt billig, später teuer: die Anki-Kennung").
 
 Voraussetzungen
 ---------------
@@ -668,10 +669,11 @@ def compare_chapter_vocabulary(
 
 
 # REGEL (dokumentation.md §4 Regel 6, „Anki-GUID beim Export in card mitschreiben"):
-# Ohne diese Funktion wusste das Profil nach einem Export nicht, für welche Bedeutung
-# schon eine Karte besteht — ein zweiter Lauf erzeugte in Anki stumm eine Doppelnotiz,
-# und `anki.new_card_guid`s ganze Begründung (`anki.py:58-97`) hätte kein Gegenstück in
-# der Datenbank (Befund mittel, Durchsicht T16).
+# Nicht, um eine Doppelnotiz in Anki zu verhindern — das leistet bereits die Stabilität
+# von `anki.new_card_guid` (technik.md §8b) für sich. Ohne diese Funktion hätte der
+# Anki-Rückkanal aus Phase 3 keine im Profil gebuchte GUID, an der er eine Karte
+# wiederfinden könnte, und müsste alle bereits exportierten Decks neu erzeugen —
+# technik.md §4, „Jetzt billig, später teuer: die Anki-Kennung".
 def record_card(con: sqlite3.Connection, card: Card) -> int:
     """Schreibt Vorkommen und Karte einer exportierten `Card` fest — aufgerufen **nach**
     einem erfolgreichen `anki.export_deck` (`cli.export.write_exports`), mit derselben

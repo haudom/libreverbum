@@ -14,9 +14,10 @@ from typing import TYPE_CHECKING, Any, cast
 import pytest
 
 from cli import interaction
-from libreverbum import dictionary, epub, extraction, pipeline, profile
+from libreverbum import anki, dictionary, epub, extraction, pipeline, profile
 from libreverbum.entities import (
     Book,
+    Card,
     CardDirection,
     CefrLevel,
     Chapter,
@@ -2414,3 +2415,104 @@ def test_write_vocabulary_preset_against_the_real_dictionary(
     # dieselbe Vorrichtung wie oben für lemma_pos_pairs/senses.
     assert result.covered_lemmas == 1743
     assert result.total_lemmas == 2000
+
+
+# --------------------------------------------------------------------- export_cards (AP 2)
+#
+# bauplan-phase2.md AP 2: Der Dreischritt Anki-Deck schreiben → Druckseite schreiben →
+# profile.record_card je Karte verlässt cli.export.write_exports und wird
+# pipeline.export_cards (technik.md §7, „Die Importregel"). Geprüft wird hier die
+# Verkettung selbst, nicht nur mittelbar über cli.export.write_exports
+# (tests/test_cli_export.py).
+
+_EXPORT_BOOK = Book(title="Exportbuch", author="Autorin")
+
+
+def _export_occurrence(lemma_text: str = "watch") -> Occurrence:
+    return Occurrence(
+        book=_EXPORT_BOOK,
+        chapter_number=1,
+        lemma=Lemma(text=lemma_text, pos="NOUN"),
+        word_form=lemma_text,
+        example_sentence=f"He checked his {lemma_text} before leaving.",
+        frequency=2,
+        proper_noun_frequency=0,
+    )
+
+
+def _export_card(occurrence: Occurrence) -> Card:
+    # wikdict_lexentry ist Teil der GUID (anki.new_card_guid), zwei Karten mit
+    # verschiedener Grundform brauchen deshalb auch verschiedene Lexeintrag-Kennungen —
+    # sonst wiese anki.export_deck sie als Dublette zurück (Befund 2, Review T13).
+    sense = Sense(
+        lemma=occurrence.lemma,
+        translation="Uhr",
+        wikdict_sense=None,
+        wikdict_trans_list="Uhr | Armbanduhr",
+        wikdict_lexentry=f"eng/{occurrence.lemma.text}__Noun__1",
+    )
+    direction = CardDirection.EN_DE
+    guid = anki.new_card_guid(occurrence, sense, direction)
+    return Card(sense=sense, occurrence=occurrence, card_direction=direction, guid=guid)
+
+
+def test_export_cards_writes_a_card_row_for_each_card(tmp_path: Path) -> None:
+    """AP 2 (bauplan-phase2.md), Prüfung: Nach `export_cards` steht je Karte eine
+    `card`-Zeile (Regel 6, dokumentation.md §4) — geprüft an der Verkettung selbst, nicht
+    nur mittelbar über `cli.export.write_exports`.
+
+    Verfälschungsprobe: den `profile.record_card`-Aufruf aus `export_cards` entfernt →
+    dieser Test rot (`card_guids` bleibt leer)."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    interaction.ensure_chapter_row(con, _EXPORT_BOOK, 1, "Testkapitel")
+    cards = [_export_card(_export_occurrence()), _export_card(_export_occurrence("bank"))]
+
+    pipeline.export_cards(
+        con,
+        cards,
+        anki_path=tmp_path / "export.apkg",
+        printout_path=tmp_path / "export.html",
+        deck_name="Exportbuch - Kapitel 1",
+    )
+
+    card_guids = {row[0] for row in con.execute("SELECT guid FROM card").fetchall()}
+    assert card_guids == {card.guid for card in cards}
+
+
+def test_export_cards_writes_the_anki_deck_and_the_printout(tmp_path: Path) -> None:
+    """`export_cards` schreibt beide Exportdateien, nicht nur die Profilzeilen — dieselbe
+    Verkettung wie vorher in `cli.export.write_exports`, nur am neuen Ort."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    interaction.ensure_chapter_row(con, _EXPORT_BOOK, 1, "Testkapitel")
+    anki_path = tmp_path / "export.apkg"
+    printout_path = tmp_path / "export.html"
+
+    pipeline.export_cards(
+        con,
+        [_export_card(_export_occurrence())],
+        anki_path=anki_path,
+        printout_path=printout_path,
+        deck_name="Exportbuch - Kapitel 1",
+    )
+
+    assert anki_path.is_file()
+    assert "watch" in printout_path.read_text(encoding="utf-8")
+
+
+def test_export_cards_does_not_book_a_card_when_the_anki_export_fails(tmp_path: Path) -> None:
+    """Bricht `anki.export_deck` ab (hier: leere Kartenliste), bucht `export_cards` auch
+    keine Karte im Profil — dieselbe Reihenfolge wie vorher in `write_exports`
+    (`libreverbum/pipeline.py`, „Voraussetzungen")."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    interaction.ensure_chapter_row(con, _EXPORT_BOOK, 1, "Testkapitel")
+
+    with pytest.raises(ValueError, match="ohne Karten"):
+        pipeline.export_cards(
+            con,
+            [],
+            anki_path=tmp_path / "export.apkg",
+            printout_path=tmp_path / "export.html",
+            deck_name="Exportbuch - Kapitel 1",
+        )
+
+    assert con.execute("SELECT count(*) FROM card").fetchone()[0] == 0

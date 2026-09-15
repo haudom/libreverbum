@@ -2,15 +2,13 @@
 
 Aufgabe
 -------
-Formt die aus der Triage entstandenen `Card`-Objekte (`cli.interaction.run_triage_pass`)
-zu Aufrufen von `libreverbum.anki.export_deck` und `libreverbum.printout.write_printout`.
-Beide Kernfunktionen bekommen dabei nur, was sie laut ihren eigenen Voraussetzungen
-verlangen — dieses Modul wählt nur die Zielpfade und leitet `Card.sense`/`Card.occurrence`
-für die Druckseite in das dort erwartete Tupelpaar um (`printout.py`, „Voraussetzungen").
-Nach einem erfolgreichen `anki.export_deck` schreibt es außerdem je Karte
-`libreverbum.profile.record_card` — die Nachbesserung zum Befund mittel aus der
-T16-Durchsicht: Ohne diesen Schritt landete `card.guid` nie im Profil, obwohl
-`anki.new_card_guid` sie längst erzeugt (Regel 6, dokumentation.md §4).
+Wählt die Zielpfade für einen Kapitelexport (`export_paths`) und ruft darauf
+`libreverbum.pipeline.export_cards` auf, das die Verkettung der Kernschritte selbst trägt
+(Anki-Deck schreiben, Druckseite schreiben, je Karte die Anki-GUID ins Profil buchen —
+technik.md §7, „Die Importregel": „Wer mehrere Schritte kennt, ist `pipeline` — und sonst
+niemand"). Dieses Modul kennt deshalb selbst weder `anki` noch `printout` noch
+`profile.record_card` — es leitet `Card.sense`/`Card.occurrence` nur in das von
+`printout.write_printout` erwartete Tupelpaar um, mittelbar über `pipeline.export_cards`.
 
 Voraussetzungen
 ---------------
@@ -24,9 +22,8 @@ Liefert
 -------
 `export_paths` legt aus Buchtitel und Kapitelnummer einen dateisystemtauglichen
 Namensstamm an und sucht dazu das erste Namenspaar, das noch frei ist — ein zweiter Lauf
-über dasselbe Kapitel überschreibt nichts. `write_exports` ruft beide Kernexporte auf,
-schreibt danach je Karte die Anki-GUID ins Profil und liefert die beiden geschriebenen
-Pfade zurück.
+über dasselbe Kapitel überschreibt nichts. `write_exports` ruft `pipeline.export_cards`
+mit diesen Pfaden auf und liefert sie zurück.
 
 `partial=True` (technik.md §12, „Entschieden 15.09.2026: ein abgebrochener Lauf
 exportiert, was er hat") kennzeichnet einen **Teilexport** — geschrieben, wenn
@@ -45,7 +42,7 @@ import sqlite3
 from pathlib import Path
 from typing import NamedTuple
 
-from libreverbum import anki, printout, profile
+from libreverbum import pipeline
 from libreverbum.entities import Card
 
 # Alles außer Buchstaben, Ziffern, Bindestrich und Unterstrich wird zu „_" — ein Buchtitel
@@ -116,30 +113,27 @@ def write_exports(
     chapter_number: int,
     partial: bool = False,
 ) -> ExportPaths:
-    """Schreibt `cards` als Anki-Deck und als Druckseite (bauplan.md T16), danach je
-    Karte die Anki-GUID ins Profil (Regel 6, Befund mittel Durchsicht T16).
+    """Wählt die Zielpfade (`export_paths`) und ruft darauf `pipeline.export_cards` auf,
+    das den Export als Anki-Deck und als Druckseite samt der Anki-GUID-Buchung im Profil
+    verkettet (bauplan-phase2.md AP 2; vor AP 2 lag diese Verkettung hier, technik.md §7).
 
     Erwartet `cards` nichtleer — eine leere Triage-Ausbeute ist kein Fehlschlag
     (Regel 13 gilt für Fehler, nicht für eine gültige Nutzerentscheidung „nichts
     lernen"), aber auch keine sinnvolle Exportanfrage; das prüft und meldet der Aufrufer
-    (`cli.main`), bevor diese Funktion aufgerufen wird — `anki.export_deck` und
-    `printout.write_printout` brächen sonst mit derselben Meldung ab wie bei einem
-    echten Fehler.
-
-    `profile.record_card` läuft erst **nach** einem erfolgreichen `anki.export_deck`:
-    Bricht der Export ab (fehlende Übersetzung ohne die Marke `uncertain`, eine Karte, die
-    in ihrer Kartenrichtung nicht bildbar ist — `anki.card_obstacle` —, doppelte GUID im
-    selben Export; siehe `anki.export_deck`), steht im Profil nichts, was im Deck nicht
-    ebenso fehlt.
+    (`cli.main`), bevor diese Funktion aufgerufen wird — `pipeline.export_cards` bräche
+    sonst mit derselben Meldung ab wie bei einem echten Fehler (`anki.export_deck`).
 
     `partial=True` (technik.md §12, „Entschieden 15.09.2026 …") ist derselbe Export, nur
     mit weniger Karten und einem anderen Dateinamen (`export_paths`) — der Deckname bleibt
-    unverändert, `profile.record_card` läuft unverändert je Karte.
+    unverändert, die GUID-Buchung läuft unverändert je Karte.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     paths = export_paths(output_dir, book_title, chapter_number, partial=partial)
-    anki.export_deck(paths.anki_path, cards, deck_name=f"{book_title} - Kapitel {chapter_number}")
-    for card in cards:
-        profile.record_card(con, card)
-    printout.write_printout(paths.printout_path, [(card.occurrence, card.sense) for card in cards])
+    pipeline.export_cards(
+        con,
+        cards,
+        anki_path=paths.anki_path,
+        printout_path=paths.printout_path,
+        deck_name=f"{book_title} - Kapitel {chapter_number}",
+    )
     return paths

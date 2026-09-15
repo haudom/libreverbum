@@ -18,6 +18,14 @@ bekommt"). Auch dafür kennt nur `pipeline` `dictionary` (die Wortarten und Bede
 der eingefrorenen Liste, `wordfreq_en_5000.txt`) **und** `profile` (das Sammelschreiben,
 `profile.record_preset`) zugleich.
 
+Dazu, seit AP 2 (bauplan-phase2.md), `export_cards`: verkettet Schritt 6 — Anki-Deck
+schreiben (`anki.export_deck`), Druckseite schreiben (`printout.write_printout`) und je
+Karte die Anki-GUID ins Profil buchen (`profile.record_card`, Regel 6) — zu einem Aufruf.
+Vorher lag diese Verkettung in `cli.export.write_exports`, obwohl nach technik.md §7 nur
+`pipeline` mehrere Schrittmodule kennen darf; `cli.export.write_exports` ruft sie jetzt
+nur noch auf. Auch dafür kennt nur `pipeline` `anki`, `printout` **und** `profile`
+zugleich.
+
 Voraussetzungen
 ---------------
 `nlp` ist ein bereits geladenes spaCy-Modell (`extraction.load_nlp()`) — das Laden kostet
@@ -127,8 +135,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from libreverbum import dictionary, epub, extraction, profile, translation, triage
+from libreverbum import anki, dictionary, epub, extraction, printout, profile, translation, triage
 from libreverbum.entities import (
+    Card,
     CefrLevel,
     Chapter,
     Event,
@@ -1200,3 +1209,49 @@ def write_vocabulary_preset(
         covered_lemmas=covered_lemmas,
         total_lemmas=len(lemma_texts),
     )
+
+
+def export_cards(
+    con: sqlite3.Connection,
+    cards: Sequence[Card],
+    *,
+    anki_path: Path,
+    printout_path: Path,
+    deck_name: str,
+) -> None:
+    """Verkettet Schritt 6 zu **einem** Aufruf (AP 2, bauplan-phase2.md; technik.md §7,
+    „Die Importregel": „Wer mehrere Schritte kennt, ist `pipeline` — und sonst niemand"):
+    schreibt `cards` als Anki-Deck (`anki.export_deck`), bucht danach je Karte die
+    Anki-GUID im Profil (`profile.record_card`, Regel 6) und schreibt zuletzt die
+    Druckseite (`printout.write_printout`).
+
+    Die GUID wird gebucht, damit eine spätere Karte wiedergefunden werden kann, nicht um
+    eine doppelte Anki-Notiz zu verhindern (technik.md §4, „Jetzt billig, später teuer:
+    die Anki-Kennung"): `anki.new_card_guid` ist stabil, ein zweiter Export aktualisiert in
+    Anki ohnehin dieselbe Notiz. Ohne die Buchung im Profil ließe sich der Anki-Rückkanal
+    aus Phase 3 später nicht anschließen, ohne alle bereits exportierten Decks neu zu
+    erzeugen.
+
+    `record_card` läuft erst **nach** einem erfolgreichen `anki.export_deck`: Bricht der
+    Export ab (fehlende Übersetzung ohne die Marke `uncertain`, eine Karte, die in ihrer
+    Kartenrichtung nicht bildbar ist, doppelte GUID im selben Export — siehe
+    `anki.export_deck`), steht im Profil nichts, was im Deck nicht ebenso fehlt.
+
+    Vorher lag dieser Dreischritt in `cli.export.write_exports`, obwohl nur `pipeline`
+    nach technik.md §7 mehrere Schrittmodule zugleich kennen darf — mit dieser Verkettung
+    hier bekommt eine zweite Oberfläche die GUID-Buchung geschenkt, statt sie nachzubauen
+    (Regel 6, technik.md §7, offener Punkt „Zurückschreiben der Anki-GUID hängt an der
+    Kommandozeile").
+
+    Voraussetzungen wie bei `anki.export_deck` und `printout.write_printout` selbst:
+    `cards` nichtleer und aus **einem** Kapitel — geprüft und gemeldet vom Aufrufer
+    (`cli.export.write_exports`), nicht hier. `con` ist eine bereits geöffnete
+    Profilverbindung (`profile.open_profile`) mit bereits angelegter Kapitelzeile
+    (dieselbe Voraussetzung wie bei `profile.record_card`). Dateinamen, `_2`/`_3` und
+    `_teilexport` bleiben Sache des Aufrufers (`cli.export.export_paths`) — diese Funktion
+    kennt nur die beiden fertigen Zielpfade.
+    """
+    anki.export_deck(anki_path, cards, deck_name=deck_name)
+    for card in cards:
+        profile.record_card(con, card)
+    printout.write_printout(printout_path, [(card.occurrence, card.sense) for card in cards])

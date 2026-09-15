@@ -847,15 +847,19 @@ def test_record_card_links_the_occurrence_and_sense_rows(tmp_path: Path) -> None
 def test_record_card_is_idempotent_for_a_second_export_of_the_same_meaning(tmp_path: Path) -> None:
     """Der Nutzen von Regel 6 ist erst eingelöst, wenn ein zweiter Export derselben
     Bedeutung sich darauf stützen kann: `anki.new_card_guid` liefert dafür stets
-    dieselbe GUID (dokumentation.md, Bericht zu T16-Nachbesserung) — ein zweiter
-    `record_card`-Aufruf mit derselben Karte legt keine zweite `card`-Zeile an."""
+    dieselbe GUID (dokumentation.md, Bericht zu T16-Nachbesserung) — zwei **getrennt
+    erzeugte** `Card`-Objekte desselben Eintrags (zwei eigene `_card_for`-Aufrufe, nicht
+    dasselbe Objekt zweimal an `record_card` gereicht) legen zusammen keine zweite
+    `card`-Zeile an (technik.md §4, offener Punkt „Die beiden Idempotenz-Tests prüfen
+    nicht, was ihr Docstring behauptet")."""
     con = profile.open_profile(tmp_path / "profil.sqlite3")
     book_id = profile.ensure_book(con, _BOOK)
     _add_chapter(con, book_id)
-    card = _card_for(_occurrence())
+    first_card = _card_for(_occurrence())
+    second_card = _card_for(_occurrence())
 
-    first_id = profile.record_card(con, card)
-    second_id = profile.record_card(con, card)
+    first_id = profile.record_card(con, first_card)
+    second_id = profile.record_card(con, second_card)
 
     assert first_id == second_id
     assert con.execute("SELECT count(*) FROM card").fetchone()[0] == 1

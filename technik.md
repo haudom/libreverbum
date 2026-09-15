@@ -106,9 +106,7 @@ offen").
 | §3 | Ob Ollama dauerhaft die richtige Wahl ist oder `llama-server` mit Vulkan direkt |
 | §4 | Umgang mit gleichzeitigem Zugriff, falls eine Weboberfläche hinzukommt |
 | §4 | `book.language` und `lemma.language` beschlossen, nicht gebaut — mit der nächsten Schemafassung mitnehmen |
-| §4 | Regel-Kommentar über `profile.record_card` begründet falsch — zu berichtigen |
 | §4 | Profil-Identität einer Bedeutung schließt die Anki-GUID aus — Fallrisiko beim nächsten Wörterbuchbezug |
-| §4 | Die beiden Idempotenz-Tests prüfen nicht, was ihr Docstring behauptet |
 | §5 | Über-Lemmatisierung von Eigennamen — bei „Figuren & Orte" zu beachten |
 | §5 | Ob die Zwischenspeicher-Kennung eine Fassungsnummer der Berechnung braucht |
 | §6 | `encoding="utf-8"` maschinell erzwingen (`PLW1514`) |
@@ -116,8 +114,6 @@ offen").
 | §6 | Auslieferung (Nuitka, PyInstaller) |
 | §7 | Ob `pipeline` je Schritt eine eigene Zwischenablage braucht |
 | §7 | Die Oberfläche ist nicht aufgeteilt |
-| §7 | Zurückschreiben der Anki-GUID hängt an der Kommandozeile — muss bei der Qt-Oberfläche mitwandern |
-| §7 | Der einzige Ende-zu-Ende-Test prüft die Druckseite, nicht das Profil |
 | §8 | Der EPUB-3-Zweig läuft gegen keine Fremdquelle |
 | §8 | Der Pfad „Ebene > 0" der Einrückung läuft gegen keine Fremdquelle |
 | §8 | Anker innerhalb eines Dokuments als eigenes Kapitel? |
@@ -1270,22 +1266,12 @@ bemerkbar gewesen — eine Profildatei der Fassung 1 trägt dieselben Tabellenna
   kommen mit der nächsten Erhöhung von `user_version`, nicht als eigene Fassung (oben,
   „Entschieden 15.09.2026: Mehrsprachigkeit bleibt möglich"). Wer Fassung 3 baut, nimmt
   sie mit; ihre Zeile in der Spaltentabelle oben entsteht dann
-- **Der Regel-Kommentar über `profile.record_card` begründet falsch.** Er nennt als Grund,
-  „ein zweiter Lauf erzeugte in Anki stumm eine Doppelnotiz". Das trifft nicht zu und
-  widerspricht Abschnitt 8b: Weil `anki.new_card_guid` stabil ist, aktualisiert Anki dieselbe
-  Notiz. Der echte Grund steht oben unter „Jetzt billig, später teuer: die Anki-Kennung" —
-  der Rückkanal aus Phase 3. Zu berichtigen ist der Kommentar, nicht die Zeile darunter
 - **Die Profil-Identität einer Bedeutung umfasst `wikdict_trans_list`, die Anki-GUID
   bewusst nicht** (Abschnitt 8b, „Befund: die vorgegebene GUID bindet den Feldinhalt"). Zwei
   `sense`-Zeilen, die sich nur in der Übersetzungsliste unterscheiden, teilen sich damit
   still eine `card`-Zeile. Im heutigen Wörterbuch ist der Fall nirgends auslösbar (11.961
   Bedeutungen über 157.801 Zeilen geprüft); beim nächsten Wörterbuchbezug kann er entstehen,
   und dann ist er nicht mehr `leicht`
-- **Die beiden Idempotenz-Tests prüfen nicht, was ihr Docstring behauptet**
-  (`tests/test_profile.py`, `tests/test_cli_export.py`): Sie reichen **dasselbe**
-  `Card`-Objekt zweimal hinein und prüfen damit SQLites `UNIQUE(guid)`, nicht die Stabilität
-  von `anki.new_card_guid`. Zwei getrennt erzeugte Karten desselben Eintrags wären die
-  Zusicherung, um die es geht (dokumentation.md §5)
 
 ---
 
@@ -1920,15 +1906,6 @@ zweite Ausgabeliste daraus ist Ausgabe, keine Extraktion.
   vermutlich; gemessen ist es nicht
 - **Die Oberfläche ist nicht aufgeteilt.** Sie liegt außerhalb des Kernpakets, ihre
   Gliederung wird entschieden, wenn sie gebaut wird
-- **Das Zurückschreiben der Anki-GUID hängt an der Kommandozeile** (`cli/export.py`),
-  obwohl „verkettet wird allein in `pipeline`" oben etwas anderes verlangt. Unter Regel 14
-  ist das heute vertretbar — es gibt genau einen Aufrufer. **Beim Bau der Qt-Oberfläche muss
-  der Schritt mitwandern:** Eine zweite Oberfläche, die exportiert, ohne ihn nachzubauen,
-  verletzt Regel 6 lautlos, und bemerkt wird das erst am Anki-Rückkanal in Phase 3
-  (Abschnitt 4, „Jetzt billig, später teuer")
-- **Der einzige Ende-zu-Ende-Test prüft die Druckseite, nicht das Profil.** Eine Zusicherung
-  auf die `card`-Zeilen war in der Verfälschungsprobe zu T16 der wirksamste fehlende Zusatz:
-  Ein Durchlauf, der exportiert, ohne im Profil etwas zu hinterlassen, kommt heute grün durch
 
 ---
 

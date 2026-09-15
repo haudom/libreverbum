@@ -184,15 +184,20 @@ def test_a_second_export_of_the_same_meaning_does_not_duplicate_the_card_row(
     tmp_path: Path, profile_con: sqlite3.Connection
 ) -> None:
     """Der Nutzen von Regel 6 ist erst eingelöst, wenn ein zweiter Export derselben
-    Bedeutung sich darauf stützen kann: Zwei Aufrufe von `write_exports` mit derselben
-    Karte (dieselbe GUID) hinterlassen nur eine `card`-Zeile im Profil."""
-    card = _card_for(_occurrence())
+    Bedeutung sich darauf stützen kann: Zwei Aufrufe von `write_exports` mit zwei
+    **getrennt erzeugten** `Card`-Objekten desselben Eintrags (zwei eigene `_card_for`-
+    Aufrufe, nicht dasselbe Objekt zweimal übergeben) hinterlassen nur eine `card`-Zeile
+    im Profil — `anki.new_card_guid` liefert für denselben Eintrag beide Male dieselbe
+    GUID (technik.md §4, offener Punkt „Die beiden Idempotenz-Tests prüfen nicht, was ihr
+    Docstring behauptet")."""
+    erste_karte = _card_for(_occurrence())
+    zweite_karte = _card_for(_occurrence())
 
     export.write_exports(
-        profile_con, tmp_path / "erster", [card], book_title=_BOOK.title, chapter_number=1
+        profile_con, tmp_path / "erster", [erste_karte], book_title=_BOOK.title, chapter_number=1
     )
     export.write_exports(
-        profile_con, tmp_path / "zweiter", [card], book_title=_BOOK.title, chapter_number=1
+        profile_con, tmp_path / "zweiter", [zweite_karte], book_title=_BOOK.title, chapter_number=1
     )
 
     assert profile_con.execute("SELECT count(*) FROM card").fetchone()[0] == 1

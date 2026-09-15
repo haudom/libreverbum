@@ -984,7 +984,11 @@ def test_full_run_learns_a_word_and_an_expression_and_exports_them(
     Durchlauf über `cli.main.main`, an dessen Ende sowohl das gelernte Einzelwort
     "watch" als auch die gelernte Wendung "gave up" auf der Druckseite stehen — die
     Wendung reicht damit tatsächlich bis zum Export, nicht nur bis in die Triage-Liste.
-    """
+
+    Prüft daneben Regel 6 (technik.md §7, offener Punkt „Der einzige Ende-zu-Ende-Test
+    prüft die Druckseite, nicht das Profil"): Nach dem Lauf steht je exportierter Karte
+    eine Zeile in `card` — ein Durchlauf, der exportiert, ohne im Profil etwas zu
+    hinterlassen, kam vor dieser Zusicherung grün durch `pipeline.export_cards`."""
     data_dir = tmp_path / "data"
     _write_config(
         data_dir,
@@ -1023,6 +1027,12 @@ def test_full_run_learns_a_word_and_an_expression_and_exports_them(
     html = printouts[0].read_text(encoding="utf-8")
     assert "watch" in html
     assert "gave up" in html
+
+    con = profile.open_profile(data_dir / "profil.sqlite3")
+    try:
+        assert con.execute("SELECT count(*) FROM card").fetchone()[0] == 2
+    finally:
+        con.close()
 
 
 def test_full_run_uses_the_cover_banner_for_both_decks(
