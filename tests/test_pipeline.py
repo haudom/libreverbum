@@ -1124,7 +1124,8 @@ def test_run_chapter_processes_a_real_chapter_with_the_real_dictionary(
 
     Arbeitet auf einer **Kopie** von `tools/en-de.sqlite3` mit angelegtem Index
     (Auftragstext, „Achtung Laufzeit"): Ohne Index kostet ein Kapitel dieser Größe Minuten
-    (technik.md §3, „Nachtrag 17.08.2026"), und die Nutzerdatei bleibt unverändert.
+    (technik.md §3, „Der Engpass ist das Nachschlagen, nicht das Modell"), und die
+    Nutzerdatei bleibt unverändert.
 
     Befund 6 (Review T15): Die Schwellen `> 500` / `> 100` blieben weit unter dem
     tatsächlichen Bestand (1.410 Vorkommen, 91,6 % mit Auswahlliste, gemessen am 2. Kapitel

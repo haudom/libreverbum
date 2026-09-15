@@ -32,8 +32,9 @@ bei ``nlp_check.py``. Sie ist unvermeidlich: Gemessen werden soll, was T3 und T5
 tatsächlich liefern, nicht eine nachgebaute Näherung davon.
 
 Es liest **nur**: Das Wörterbuch wird in ein temporäres Verzeichnis kopiert und der Index
-aus ../technik.md §3, „Nachtrag 17.08.2026" auf der **Kopie** angelegt. Die Datei des
-Nutzers bleibt unangetastet; ohne Index kostete ein Kapitel 32 bis 44 s statt 1,1 s.
+aus ../technik.md §3, „Der Engpass ist das Nachschlagen, nicht das Modell" auf der
+**Kopie** angelegt. Die Datei des Nutzers bleibt unangetastet; ohne Index kostete ein
+Kapitel 32 bis 44 s statt 1,1 s.
 
 Die Kapitelgrenzen stammen aus der Textfassung, nicht aus der EPUB-Navigation (T12). Für
 diese Messung genügt das: Gefragt ist die Größenordnung je Kapitel, nicht die
@@ -172,7 +173,10 @@ def main() -> int:
         db_copy = os.path.join(workspace, "en-de.sqlite3")
         shutil.copyfile(args.db, db_copy)
         dictionary.ensure_index(pathlib.Path(db_copy))
-        print(f"Wörterbuch: Kopie von {args.db}, mit Index (technik.md §3, Nachtrag 17.08.2026)")
+        print(
+            f"Wörterbuch: Kopie von {args.db}, mit Index (technik.md §3, "
+            '„Der Engpass ist das Nachschlagen, nicht das Modell")'
+        )
 
         nlp = extraction.load_nlp()
         con = sqlite3.connect(db_copy)

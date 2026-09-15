@@ -496,8 +496,8 @@ def test_main_indexes_a_dictionary_that_was_placed_by_hand(
     tmp_path: Path, book_epub: Path, mini_dictionary_db: Path
 ) -> None:
     """Eine von Hand hinterlegte Wörterbuchdatei bringt die beiden Indizes nicht mit
-    (technik.md §3, „Nachtrag 17.08.2026") — der Start legt sie an, sonst kostet jedes
-    Kapitel 32 bis 44 s statt 1,1 s, und zwar lautlos.
+    (technik.md §3, „Der Engpass ist das Nachschlagen, nicht das Modell") — der Start legt
+    sie an, sonst kostet jedes Kapitel 32 bis 44 s statt 1,1 s, und zwar lautlos.
 
     Geprüft am Lauf, der an der abgelehnten Profilfrage endet: Der Index muss vorher
     entstanden sein, nicht erst beim ersten Nachschlagen."""

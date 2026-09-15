@@ -584,8 +584,9 @@ def _realistic_row_count_floor_disabled_for_the_mini_dictionary(
 ) -> None:
     """`mini_dictionary_db` hat absichtlich nur eine Handvoll Zeilen (bauplan.md T2). Die
     Plausibilitätsgrenze aus `_validate_schema` bezieht sich auf die echte Zeilenzahl von
-    WikDict (technik.md §3, 157.801 Zeilen; technik.md §2, Nachtrag 18.08.2026) und würde
-    sie sonst in jedem Erstbezug-Test hier als abgebrochen werten. Wer die Grenze selbst
+    WikDict (technik.md §3, 157.801 Zeilen; technik.md §2, „Keine Prüfsumme, weil WikDict
+    keine veröffentlicht") und würde sie sonst in jedem Erstbezug-Test hier als
+    abgebrochen werten. Wer die Grenze selbst
     prüfen will, hebt sie in seinem eigenen Test wieder an."""
     monkeypatch.setattr(dictionary, "_MIN_TRANSLATION_ROWS", 1)
 
@@ -594,8 +595,8 @@ def test_fetch_dictionary_downloads_verifies_and_indexes_a_missing_file(
     tmp_path: Path, fetch_server: _FetchServerDouble
 ) -> None:
     """bauplan.md T6: Fehlt die Datei, wird sie von der angegebenen Adresse bezogen, geprüft
-    (Vollständigkeit, Schema, Zeilenzahl) und danach indiziert (technik.md §3, „Nachtrag
-    17.08.2026")."""
+    (Vollständigkeit, Schema, Zeilenzahl) und danach indiziert (technik.md §3, „Der Engpass
+    ist das Nachschlagen, nicht das Modell")."""
     # REGEL (dokumentation.md §5, „ein Test gilt erst als Test…"): eigener Unterordner statt
     # tmp_path direkt — fetch_server hängt an mini_dictionary_db, die selbst schon
     # tmp_path/"en-de.sqlite3" anlegt. Ohne den Unterordner läge die Zieldatei zufällig
@@ -676,7 +677,8 @@ def test_implausibly_small_translation_table_is_a_visible_failure(
     """Befund 1 (Review T6): `PRAGMA table_info` liest nur das Schema (Seite 1) — eine
     schemarichtige, aber (nahezu) leere Tabelle bestünde die Schemaprüfung trotzdem. Die
     Zeilenzahl-Untergrenze aus `_validate_schema` fängt das unabhängig von der
-    Content-Length-Prüfung ab (technik.md §2, Nachtrag 18.08.2026)."""
+    Content-Length-Prüfung ab (technik.md §2, „Keine Prüfsumme, weil WikDict keine
+    veröffentlicht")."""
     monkeypatch.setattr(dictionary, "_MIN_TRANSLATION_ROWS", 1_000_000)
     target = tmp_path / "fetched" / "en-de.sqlite3"
 
@@ -693,8 +695,8 @@ def test_index_failure_during_download_leaves_no_file_at_the_final_path(
     """Befund 2 (Review T6): `ensure_index` läuft vor dem Umbenennen der Nebendatei —
     schlägt er fehl, bleibt weder an `path` noch als Nebendatei etwas liegen. Liefe er erst
     danach, stünde eine unindizierte Datei bereits an `path`, und `path.is_file()`
-    verhinderte beim nächsten Versuch jeden erneuten Download (technik.md §3, „Nachtrag
-    17.08.2026")."""
+    verhinderte beim nächsten Versuch jeden erneuten Download (technik.md §3, „Der Engpass
+    ist das Nachschlagen, nicht das Modell")."""
     target = tmp_path / "fetched" / "en-de.sqlite3"
 
     def _boom(path: Path) -> None:
@@ -728,8 +730,8 @@ def test_existing_file_gets_indexed_even_though_it_is_not_downloaded(
     tmp_path: Path, fetch_server: _FetchServerDouble, mini_dictionary_db: Path
 ) -> None:
     """bauplan.md T6: Auch eine von Hand hinterlegte Datei bringt den Index nicht mit
-    (technik.md §3, „Nachtrag 17.08.2026") — fetch_dictionary muss ihn trotzdem anlegen,
-    obwohl die Datei nicht neu geladen wird."""
+    (technik.md §3, „Der Engpass ist das Nachschlagen, nicht das Modell") —
+    fetch_dictionary muss ihn trotzdem anlegen, obwohl die Datei nicht neu geladen wird."""
     target = tmp_path / "fetched" / "en-de.sqlite3"
     target.parent.mkdir()
     target.write_bytes(mini_dictionary_db.read_bytes())
@@ -838,8 +840,9 @@ def test_index_is_created_on_a_file_that_already_carries_the_old_single_index(
 
 
 def test_index_turns_full_scan_into_indexed_search(mini_dictionary_db: Path) -> None:
-    """technik.md §3, „Nachtrag 17.08.2026": Ohne Index scannt die Abfrage aus
-    `dictionary.candidates` die volle Tabelle; mit Index sucht sie gezielt."""
+    """technik.md §3, „Der Engpass ist das Nachschlagen, nicht das Modell": Ohne Index
+    scannt die Abfrage aus `dictionary.candidates` die volle Tabelle; mit Index sucht sie
+    gezielt."""
     con = sqlite3.connect(mini_dictionary_db)
     try:
         plan_before = con.execute(
@@ -866,8 +869,8 @@ def test_nocase_index_turns_full_scan_into_indexed_search_for_multiword_candidat
 ) -> None:
     """Befund 2 (Review T7): Die case-insensitive Abfrage aus `_lookup_matches` (T7)
     braucht einen eigenen Index — der binäre `INDEX_NAME` passt nicht zu `COLLATE NOCASE`
-    und ließe die Abfrage sonst auf den vollen Scan zurückfallen (technik.md §3, „Nachtrag
-    17.08.2026": 32–44 s statt 1,1 s je Kapitel)."""
+    und ließe die Abfrage sonst auf den vollen Scan zurückfallen (technik.md §3, „Der
+    Engpass ist das Nachschlagen, nicht das Modell": 32–44 s statt 1,1 s je Kapitel)."""
     con = sqlite3.connect(mini_dictionary_db)
     try:
         plan_before = con.execute(
@@ -903,9 +906,9 @@ def test_source_notice_names_the_dictionary_source_and_its_licence() -> None:
 
 @pytest.mark.needs_dictionary
 def test_real_dictionary_has_no_index_on_written_rep(real_dictionary_path: Path) -> None:
-    """technik.md §3, „Nachtrag 17.08.2026": Die bezogene Datei bringt keinen Index mit —
-    geprüft an der echten Datei, nicht behauptet (dokumentation.md §5, „Woran geprüft
-    wird")."""
+    """technik.md §3, „Der Engpass ist das Nachschlagen, nicht das Modell": Die bezogene
+    Datei bringt keinen Index mit — geprüft an der echten Datei, nicht behauptet
+    (dokumentation.md §5, „Woran geprüft wird")."""
     con = sqlite3.connect(real_dictionary_path)
     try:
         indexes = [
@@ -916,9 +919,9 @@ def test_real_dictionary_has_no_index_on_written_rep(real_dictionary_path: Path)
     # Befund 6 (Review T6), erweitert um den zweiten Index aus Befund 2 (Review T7): nur
     # „kein fremder Index" prüfen. INDEX_NAME und INDEX_NAME_NOCASE stammen aus diesem
     # Projekt (ensure_index, bauplan.md T6) — läuft fetch_dictionary einmal auf der echten
-    # Datei, tragen sie sie danach dauerhaft, ohne dass das ein Widerspruch zum Nachtrag
-    # wäre. `assert indexes == []` schiede dann unwiderruflich fehl, wiederherstellbar nur
-    # durch erneutes Herunterladen der 20 MB.
+    # Datei, tragen sie sie danach dauerhaft, ohne dass das ein Widerspruch zur Aussage
+    # oben wäre. `assert indexes == []` schiede dann unwiderruflich fehl, wiederherstellbar
+    # nur durch erneutes Herunterladen der 20 MB.
     assert set(indexes) <= {dictionary.INDEX_NAME, dictionary.INDEX_NAME_NOCASE}
 
 

@@ -261,8 +261,8 @@ def test_rule_13_number_outside_the_valid_range_is_a_visible_failure(
 def test_long_candidate_list_is_rejected_before_sending_to_avoid_silent_truncation(
     model_server_double: ModelServerDouble,
 ) -> None:
-    """technik.md §3, Nachtrag 19.08.2026, „Datenfalle: der Server kürzt zu lange
-    Prompts still": Eine Auswahlliste, deren Prompt geschätzt über der sicheren Schwelle
+    """technik.md §3, „Datenfalle: der Server kürzt zu lange Prompts still": Eine
+    Auswahlliste, deren Prompt geschätzt über der sicheren Schwelle
     liegt (technik.md nennt `run` mit 48 Bedeutungen), wird nicht gesendet — der Server
     würde sie sonst ohne sichtbaren Hinweis kürzen und `usage.prompt_tokens` zeigte den
     gekürzten Wert als korrekt an."""

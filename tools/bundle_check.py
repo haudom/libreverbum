@@ -745,7 +745,10 @@ def main() -> int:
         db_copy = pathlib.Path(workspace) / "en-de.sqlite3"
         shutil.copyfile(args.db, db_copy)
         dictionary.ensure_index(db_copy)
-        print(f"Wörterbuch: Kopie von {args.db}, mit Index (technik.md §3, Nachtrag 17.08.2026)")
+        print(
+            f"Wörterbuch: Kopie von {args.db}, mit Index (technik.md §3, "
+            '„Der Engpass ist das Nachschlagen, nicht das Modell")'
+        )
 
         nlp = extraction.load_nlp()
         merged = collect_words(chapters, nlp)

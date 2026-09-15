@@ -358,19 +358,18 @@ Sperre wird, ist vorzusehen:
   und Namensnennung
 - Möglichkeit, eine **von Hand hinterlegte** Datenbankdatei zu verwenden, damit der
   Betrieb auf Rechnern ohne Internetzugang möglich bleibt
-- Vollständigkeitsprüfung des Downloads statt einer Prüfsumme — siehe Nachtrag
-  18.08.2026
+- Vollständigkeitsprüfung des Downloads statt einer Prüfsumme — siehe „Keine Prüfsumme,
+  weil WikDict keine veröffentlicht" unten
 
-### Nachtrag 18.08.2026: keine Prüfsumme, weil WikDict keine veröffentlicht
+### Keine Prüfsumme, weil WikDict keine veröffentlicht
 
-Der Bauplan verlangt für T6 eine Prüfsumme gegen beschädigte Downloads — so auch die
-ursprüngliche Fassung der Liste oben. Geprüft am 17.08.2026: WikDict veröffentlicht zur
-Datei keine Prüfsumme, weder als `.sha256`- oder `.md5`-Datei neben ihr noch als Hash im
-HTTP-Header — nginx liefert nur eine `ETag`, die sich als Zeitstempel und Dateigröße
-entpuppt. Ohne veröffentlichten Referenzwert prüft eine selbst mitgeführte Konstante
-nichts; sie behauptete nur Sicherheit, ohne ein unabhängiges Gegenüber zu haben. Ein
-Aufrufparameter dafür hätte auch nie einen echten Aufrufer bekommen — ein Schalter ohne
-zweiten Anwendungsfall (Regel 14).
+Geprüft am 17.08.2026: WikDict veröffentlicht zur Datei keine Prüfsumme, weder als
+`.sha256`- oder `.md5`-Datei neben ihr noch als Hash im HTTP-Header — nginx liefert nur
+eine `ETag`, die sich als Zeitstempel und Dateigröße entpuppt. Ohne veröffentlichten
+Referenzwert prüft eine selbst mitgeführte Konstante nichts; sie behauptete nur
+Sicherheit, ohne ein unabhängiges Gegenüber zu haben. Ein Aufrufparameter dafür hätte
+auch nie einen echten Aufrufer bekommen — ein Schalter ohne zweiten Anwendungsfall
+(Regel 14).
 
 Abgesichert wird der Bezug stattdessen über zwei Prüfungen in `dictionary.py`:
 
@@ -386,27 +385,24 @@ als gültiges Wörterbuch liegen bleibt. Was es nicht leistet: Schutz gegen eine
 vollständige, aber absichtlich manipulierte Datei — dafür fehlt weiterhin ein
 unabhängiges Gegenüber.
 
-### Nachtrag 27.08.2026: der Bezug läuft beim Start, die Startprüfung nur bis zum Index
+### Der Bezug läuft beim Start, die Startprüfung nur bis zum Index
 
-**Wer** die Datei besorgt, war bis dahin offen. `dictionary.fetch_dictionary` gab es seit
-T6, aufgerufen hat es aber allein `tools/coverage_check.py`; `cli.main` verwies bei
-fehlender Datei nur auf dieses Messskript. Der Erstbezug war damit ein Handgriff außerhalb
-des Programms, und die in der Liste oben verlangte Anzeige samt Lizenzhinweis hatte keinen
-Ort, an dem sie erscheinen konnte. Seit dem 27.08.2026 fragt `cli.main` bei fehlendem
-Wörterbuch selbst nach, zeigt dabei `dictionary.SOURCE_NOTICE` und bezieht die Datei nach
+`cli.main` fragt bei fehlendem Wörterbuch selbst nach, zeigt dabei
+`dictionary.SOURCE_NOTICE` und bezieht die Datei über `dictionary.fetch_dictionary` nach
 Bestätigung. Vorgabe bei bloßem Enter ist **Zustimmung** — anders als bei der Profilfrage
 (`cli.main._confirm_new_profile`), weil ein Wörterbuch wiederbeschaffbar ist und ein
 Lernstand nicht.
 
 **Ist die Datei da, läuft nicht `fetch_dictionary`, sondern nur `ensure_index`.** Der
-Unterschied ist die Zeilenzahlprüfung aus dem Nachtrag oben: Sie ist eine Aussage über
+Unterschied ist die Zeilenzahlprüfung aus dem Abschnitt oben: Sie ist eine Aussage über
 einen **Bezug** (kam der Download vollständig an?), nicht über jeden Start. Auf jeden Start
 angewandt schlösse sie jedes bewusst kleiner gehaltene Wörterbuch aus — die Testattrappen
 des Projekts fielen mit ihren neun Zeilen als Erste durch. Was beim Start zählt, ist der
-Index: Eine von Hand hinterlegte Datei bringt ihn nicht mit (Abschnitt 3, „Nachtrag
-17.08.2026"), und ohne ihn kostet jedes Kapitel 32 bis 44 s statt 1,1 s, ohne dass
-irgendetwas darauf hinwiese — der stille Fehlschlag aus Regel 13, nur als Laufzeit statt
-als falschem Ergebnis. Gemessen am 27.08.2026 gegen `tools/en-de.sqlite3` (26,9 MB): Der
+Index: Eine von Hand hinterlegte Datei bringt ihn nicht mit (Abschnitt 3, „Der Engpass ist
+das Nachschlagen, nicht das Modell"), und ohne ihn kostet jedes Kapitel 32 bis 44 s statt
+1,1 s, ohne dass irgendetwas darauf hinwiese — der stille Fehlschlag aus Regel 13, nur als
+Laufzeit statt als falschem Ergebnis. Gemessen am 27.08.2026 gegen `tools/en-de.sqlite3`
+(26,9 MB): Der
 Abgleich beider Indizes kostet, wenn sie bereits liegen, **0,9 bis 1,4 ms je Start**; der
 volle `fetch_dictionary` mit Zeilenzählung 4 bis 8 ms.
 
@@ -415,22 +411,17 @@ volle `fetch_dictionary` mit Zeilenzählung 4 bis 8 ms.
 Der Kernablauf zählt Häufigkeiten **im Buch selbst**; externe Listen werden erst für
 den Buch-Schwierigkeitscheck in Phase 2 gebraucht. Zwei Punkte dazu:
 
-- WikDict liefert bereits `importance`-Werte pro Eintrag. Für die Sortierung in der
-  Triage genügt das voraussichtlich schon
-- Für alles darüber hinaus: **`wordfreq`** (Code Apache 2.0, Daten CC BY-SA 4.0) — seit dem
-  31.08.2026 tatsächlich im Einsatz, als eingefrorene Datei statt als Abhängigkeit
+- WikDict liefert bereits `importance`-Werte pro Eintrag; für die **Sortierung** in der
+  Triage genügt das. Für die **Vorbelegung** des Grundwortschatzes (Abschnitt 11) taugt
+  `importance` dagegen nicht: Es misst, wie gut ein Begriff in Wiktionary belegt ist — `the`
+  steht auf Rang 1.125, die Ränge 1 bis 50 gehen an `water`, `cat`, `dog`. An einem echten
+  Kapitel gemessen wären damit 18 von 25 in der Triage gezeigten Einträgen längst vorbelegt
+  gewesen, mit `wordfreq` 4 — gemessen und verworfen
+- Für die Vorbelegung deshalb **`wordfreq`** (Code Apache 2.0, Daten CC BY-SA 4.0) — seit
+  dem 31.08.2026 tatsächlich im Einsatz, als eingefrorene Datei statt als Abhängigkeit
   (Abschnitt 11). Einschränkung: Der Datenstand endet bei etwa 2021 und wird nicht
   fortgeschrieben — der Autor hat das Projekt eingestellt, weil KI-erzeugte Texte das
   Web als Quelle verdorben haben. Für Buchvokabular ist dieser Stand eher ein Vorteil
-
-> **Nachtrag 31.08.2026 — externe Häufigkeitsdaten sind nötig geworden, und `importance`
-> trägt sie nicht.** Die Vorbelegung des Grundwortschatzes (Abschnitt 11) braucht eine
-> Rangfolge nach **Texthäufigkeit**. `importance` ist keine: Es misst, wie gut ein Begriff
-> in Wiktionary belegt ist — `the` steht auf Rang 1.125, die Ränge 1 bis 50 gehen an
-> `water`, `cat`, `dog`. An einem echten Kapitel gemessen wären damit 18 von 25 in der
-> Triage gezeigten Einträgen längst vorbelegt gewesen, mit `wordfreq` 4. Der erste
-> Aufzählungspunkt oben gilt unverändert für die **Sortierung** in der Triage; die
-> Vorbelegung ist eine andere Frage, und für sie ist `importance` gemessen und verworfen.
 
 ### Offene Punkte
 
@@ -455,8 +446,9 @@ Denkschritt abgeschaltet, Temperatur auf 0. Antwortform per JSON-Schema erzwunge
 Anfrage je Wort.**
 
 Bis zum 26.08.2026 stand hier Granite 4.1 8B; der Wechsel samt der neuen
-Temperaturfestlegung ist im Nachtrag vom 26.08.2026 begründet. Betriebsart und übrige
-Einstellungen bleiben unverändert.
+Temperaturfestlegung ist unten unter „Trefferquote und Zeit bei fester Temperatur — 40
+echte Einträge über `pipeline.run_chapter`" begründet. Betriebsart und übrige Einstellungen
+bleiben unverändert.
 
 ### Hardware
 
@@ -488,11 +480,14 @@ Geprüft wurden bewusst schwierige Paare, jeweils in beiden Richtungen:
 `light` (Licht/leicht), `watch` (Uhr), `draw` (zeichnen).
 
 Bei rund einer Sekunde je Wort und höchstens 25 neuen Wörtern pro Kapitel liegt die
-Übersetzungsdauer eines Kapitels im Bereich **einer halben Minute**. Geschwindigkeit ist
-damit kein Kriterium mehr für die **Wahl des Modells** — wohl aber im Schritt davor, siehe
-den Nachtrag unten.
+Übersetzungsdauer eines Kapitels im Bereich **einer halben Minute** — die Messung unten,
+„Trefferquote und Zeit bei fester Temperatur — 40 echte Einträge über
+`pipeline.run_chapter`", zeigt mit 0,21 bis 3,01 s/Wort ein genaueres und durchweg
+schnelleres Bild; das Budget hält damit erst recht. Geschwindigkeit ist kein Kriterium mehr
+für die **Wahl des Modells** — wohl aber im Schritt davor, siehe unten „Der Engpass ist das
+Nachschlagen, nicht das Modell".
 
-### Nachtrag 17.08.2026: der Engpass ist das Nachschlagen, nicht das Modell
+### Der Engpass ist das Nachschlagen, nicht das Modell
 
 Gemessen an `tools/en-de.sqlite3` mit `dictionary.candidates()`:
 
@@ -515,7 +510,7 @@ nicht bei T5. Und **kein Zwischenspeicher**: Regel 14 verlangt für einen solche
 gemessenen Anlass, und die Messung zeigt auf den fehlenden Index, nicht auf einen zweiten
 Datenbestand.
 
-### Nachtrag 18.08.2026: zwei Drittel der Grundformen eines Kapitels sind mehrdeutig
+### Zwei Drittel der Grundformen eines Kapitels sind mehrdeutig
 
 Die erste der beiden Zahlen, die Entscheidung 10 offen hielt. Gemessen mit
 [`tools/ambiguity_check.py`](tools/ambiguity_check.py) an beiden Romanen, jedes Kapitel
@@ -569,9 +564,8 @@ Dauerhaft verloren geht dabei nichts: Das Profil führt Kenntnis je Bedeutung (A
 die zweite Bedeutung erscheint im nächsten Kapitel als „neue Bedeutung eines bekannten
 Wortes" (Abnahmekriterium 6).
 
-### Nachtrag 01.09.2026: der Modellserver bedient ein Gespräch zur Zeit
+### Der Modellserver bedient ein Gespräch zur Zeit
 
-Festgehalten, weil es in keinem der drei Dokumente stand und eine ganze Messreihe trägt:
 llama-server, LM Studio und Ollama arbeiten eingehende Anfragen **nacheinander** ab, nicht
 nebenläufig. Solange nur der Kapiteldurchlauf fragte, war das gleichgültig — seit dem
 Vorladen (Abschnitt 12) fragen zwei Fäden zugleich, und dann ist es die tragende
@@ -584,7 +578,7 @@ schlicht nicht — bei der Durchsicht von 1cfb1e4 kostete genau das einen Fehlve
 der gemessene Wert (7,39 s statt 3,85 s für den ersten Wendungsblock nach einem Abbruch)
 überhaupt reproduzierbar war.
 
-### Nachtrag 19.08.2026: Bündeln lohnt nicht — T11 fragt je Wort einzeln
+### Bündeln lohnt nicht — eine Anfrage je Wort
 
 Die zweite der beiden Zahlen, die Entscheidung 10 offen hielt, und damit die Sperre
 auf T11. Gemessen mit [`tools/bundle_check.py`](tools/bundle_check.py) an
@@ -625,30 +619,24 @@ die Promptgröße ist **vor** dem Senden zu schätzen. Bündelgröße 32 und 64 
 und tragen zur Antwort oben nichts bei. **Das gilt auch im Betrieb**, weil T11 denselben
 Endpunkt anspricht; bei Einzelanfragen (rund 550 Token) ist der Abstand groß.
 
-#### Warum die Festlegung von Qwen 3.5 auf Granite 4.1 wechselt
+#### Geprüft und verworfen: Qwen 3.5, `gemma4:e2b`, `ornith:9b`
 
-In der gewählten Betriebsart liegen `granite4.1:8b` (1,63 s/Wort) und `gemma4:e4b` (1,82)
-gleichauf, `qwen3.5:9b` (6,29) ist rund viermal langsamer — ohne dafür etwas zu leisten:
-In `sense_check.py` erreichen alle drei 11 von 11, und in der Übereinstimmung liegt Qwen
-nicht vorn. Gewählt ist `granite4.1:8b`: schnellste Antwort bei Einzelanfragen,
-ausdrücklich auf strukturierte JSON-Ausgabe hin gebaut, kleinste Datei.
-**`gemma4:e4b` ist der dokumentierte Zweitplatzierte** — gleichauf einzeln, deutlich
-besser, sobald gebündelt würde. Der Wechsel ist billig: Der Modellname steht in
-`config.toml` (Abschnitt 9), nicht im Code.
-
-Zwei weitere Kandidaten sind ausgeschieden: `gemma4:e2b` erreicht in `sense_check.py` nur
-9 von 11, und `ornith:9b` ist ein agentisches Coding-Modell auf Qwen-3.5-Unterbau — das
-langsamste im Feld und in der Redewendungsprobe unbrauchbar, weil es den
-Gutenberg-Lizenzkopf als Wendungen ausgibt.
+In der gewählten Betriebsart ist `qwen3.5:9b` (6,29 s/Wort) rund viermal langsamer als
+`granite4.1:8b` und `gemma4:e4b` (1,63 bzw. 1,82 s/Wort) — ohne dafür etwas zu leisten: In
+`sense_check.py` erreichen alle drei 11 von 11, und in der Übereinstimmung liegt Qwen nicht
+vorn. Zwei weitere Kandidaten sind ebenso ausgeschieden: `gemma4:e2b` erreicht in
+`sense_check.py` nur 9 von 11, und `ornith:9b` ist ein agentisches Coding-Modell auf
+Qwen-3.5-Unterbau — das langsamste im Feld und in der Redewendungsprobe unbrauchbar, weil
+es den Gutenberg-Lizenzkopf als Wendungen ausgibt.
 
 > **`sense_check.py` trennt nicht mehr.** Vier von fünf geprüften Modellen erreichen dort
 > 11/11 — der Test ist zum Rauchtest geworden. Eine Aussage über die Trefferqualität
-> zwischen Granite und Gemma braucht eine größere Stichprobe, sinnvollerweise **nach T11
-> und über dessen echten Prompt**, nicht über einen nachgebauten. **Erledigt am
-> 26.08.2026** — siehe unten, „Nachtrag 26.08.2026: Trefferquote und Zeit bei fester
-> Temperatur, 40 echte Einträge über `pipeline.run_chapter`".
+> zwischen den verbleibenden Kandidaten braucht eine größere Stichprobe, sinnvollerweise
+> **über den echten T11-Prompt**, nicht über einen nachgebauten — siehe unten,
+> „Trefferquote und Zeit bei fester Temperatur — 40 echte Einträge über
+> `pipeline.run_chapter`".
 
-### Nachtrag 26.08.2026: Trefferquote und Zeit bei fester Temperatur, 40 echte Einträge über `pipeline.run_chapter`
+### Trefferquote und Zeit bei fester Temperatur — 40 echte Einträge über `pipeline.run_chapter`
 
 Gemessen am 26.08.2026 an `tools/dorian_gray.epub` Kapitel 10 über `pipeline.run_chapter`:
 40 echte Einträge (26 Wörter, 14 Wendungen), das Urteil richtig / falsche Bedeutung /
@@ -688,11 +676,11 @@ Fehlerart im ganzen Feld. `qwen3.5:9b` scheidet mit der niedrigsten Trefferquote
 bei gleichzeitig höchster Zeit (3,01 s/Wort) aus.
 
 > **Damit ist Entscheidung 3 überarbeitet: `gemma4:e4b` statt `granite4.1:8b`.** Die
-> vorherige Fassung stand oben unter „Warum die Festlegung von Qwen 3.5 auf Granite 4.1
-> wechselt" und beruhte auf `sense_check.py` (11/11, keine Trennung mehr möglich); diese
+> vorherige Fassung stand oben unter „Geprüft und verworfen: Qwen 3.5, `gemma4:e2b`,
+> `ornith:9b`" und beruhte auf `sense_check.py` (11/11, keine Trennung mehr möglich); diese
 > Messung liefert die dort angemahnte größere Stichprobe über den echten T11-Prompt.
 
-#### Zeit: Nachtrag zu „rund eine Sekunde je Wort"
+#### Die Zeit je Wort hängt von der Reihenfolge der Läufe ab
 
 Die Messung unter „Gemessene Ergebnisse" oben datiert vom 11.08.2026 und lief nur an
 wenigen bewertbaren Einzelfällen, ohne Kaltstart und Modell getrennt auszuweisen. Die
@@ -729,10 +717,9 @@ die die Tabelle oben „übervorsichtig" nennt; festgehalten, weil es genau die 
 denen eine lange Auswahlliste auf viele blasse Bedeutungen führt — derselbe Verdacht, dem der
 offene Punkt „Sehr lange Auswahllisten" unten nachgeht.
 
-### Nachtrag 26.08.2026: was der Wortartfilter kürzt — und was er kostet
+### Was der Wortartfilter kürzt — und was er kostet
 
-Der Messauftrag aus T18: Bis hierher stand über die Wortart als Vorfilter eine Vermutung
-(„halbiert lange Listen"), gestützt auf zwei Einzelwerte. Gemessen wurde sie am
+Die Wirkung der Wortart als Vorfilter ist gemessen, nicht bloß vermutet: Gemessen am
 26.08.2026 am Stand `87b0bbf` über `tools/en-de.sqlite3`, `tools/dorian_gray.epub` (22
 Kapitel) und `tools/sherlock.epub` (13 Kapitel mit Fließtext), gelesen über
 `epub.read_structure`/`read_chapter` und ausgewertet über
@@ -759,7 +746,8 @@ die Abschnitt 8c für die Druckkapazität festhält.
 | ohne Filter | 4,1 % | 19,8 % | 16,4 % | 32,5 % | 19,4 % | 7,8 % |
 
 **Die Kürzung reicht von 0 % bis 48 %, nicht „halbiert".** Die sechs längsten Listen aus
-dem Nachtrag 18.08.2026 oben, wörterbuchseitig und damit buchunabhängig:
+„Zwei Drittel der Grundformen eines Kapitels sind mehrdeutig" oben, wörterbuchseitig und
+damit buchunabhängig:
 
 | Wort | mit Filter | ohne Filter | WikDict nach Wortart |
 |---|---|---|---|
@@ -831,7 +819,8 @@ bringt `granite4.1:8b` dafür gar keine Modelfile-Parameter mit — Ollamas Vorg
 greift bei diesem Modell unverändert; `gemma4:e4b`, `gemma4:26b` und `qwen3.5:9b` bringen
 dagegen `temperature 1` mit. Dieselbe Auswahl aus derselben nummerierten Liste lief also
 je nach Modell zwischen 0,8 und 1,0 — und die Abnahme zu T17 ist zweimal genau daran
-gescheitert (oben, „Nachtrag 26.08.2026", „Die «keine passt»-Quote…").
+gescheitert (oben, „Die «keine passt»-Quote bei Wendungen misst die Kandidatenbildung,
+nicht das Modell").
 
 Wiederholbarkeit gemessen am 26.08.2026 an `dorian_gray.epub` Kapitel 10
 (`granite4.1:8b`, 8 Einträge × 10 Wiederholungen): Bei Ollamas Vorgabe blieben 4 von 8
@@ -930,13 +919,15 @@ Siehe Abschnitt „Warum die Reihenfolge zwingend ist".
   Markierung bei Unsicherheit ohnehin vor
 - **Sehr lange Auswahllisten**: `run` hat 48 Bedeutungen, `draw` 16, `light` 14. Ob das
   die Trefferquote drückt, ist noch nicht gemessen — das braucht den Modellserver und einen
-  Goldstandard je Beleg. Die **Verkürzung** durch den Wortartfilter ist dagegen seit dem
-  Nachtrag 26.08.2026 oben gemessen und keine Vermutung mehr: Sie reicht von 0 % (`get`) bis
+  Goldstandard je Beleg. Die **Verkürzung** durch den Wortartfilter ist dagegen seit „Was
+  der Wortartfilter kürzt — und was er kostet" oben gemessen und keine Vermutung mehr: Sie
+  reicht von 0 % (`get`) bis
   48 % (`run`), wirkt auf den langen Listen am stärksten (Median über 10 Bedeutungen: 13 auf
   8) und macht nur **10,6 %** der ohne Filter mehrdeutigen Vorkommen eindeutig. Der
   Modellaufruf entfällt also selten
 - **Was der Wortartfilter jenseits der 3,3 % kostet, ist nicht beziffert.** Die 3,3 % leere
-  Auswahllisten aus dem Nachtrag 26.08.2026 oben sind eine Untergrenze; der Fall einer
+  Auswahllisten aus „Was der Wortartfilter kürzt — und was er kostet" oben sind eine
+  Untergrenze; der Fall einer
   nicht-leeren, aber falsch-wortartigen Liste — das Modell wählt daraus eine falsche
   Bedeutung, ohne dass eine Wörterbuchlücke sichtbar wird — ist darin **nicht** enthalten
   und ohne Goldstandard je Beleg nicht seriös zu messen. Der Punkt bleibt offen; erledigt ist
@@ -953,8 +944,9 @@ Siehe Abschnitt „Warum die Reihenfolge zwingend ist".
   Wort, das drinsteht, und T11 markiert es `uncertain` — **eine Modellunsicherheit verdeckt
   dann einen Zuordnungsfehler**. T11 hat den zweiten Versuch ohne Wortartfilter bewusst
   **nicht** gebaut (`translation.choose_sense`, Regel 14: kein Mechanismus ohne gemessenen
-  Anlass). Der Anlass liegt seit dem Nachtrag 26.08.2026 oben vor — **1.076 Vorkommen** über
-  35 Kapitel, an einer zweiten Stichprobe wieder 3,3 % —, die Entscheidung darüber steht aus
+  Anlass). Der Anlass liegt seit „Was der Wortartfilter kürzt — und was er kostet" oben
+  vor — **1.076 Vorkommen** über 35 Kapitel, an einer zweiten Stichprobe wieder 3,3 % —, die
+  Entscheidung darüber steht aus
 - **Redewendungserkennung** über Textfenster ist noch nicht geprüft. Der bisherige Test
   betrifft nur die Bedeutungsauswahl bei Einzelwörtern
 - Ob **Ollama** dauerhaft die richtige Wahl ist oder `llama-server` mit Vulkan direkt.
@@ -1010,7 +1002,8 @@ sieben Bedeutungen, von denen *Uhr* und *Wache* nichts miteinander zu tun haben.
 #### Wie sich das mit „eine Triage-Entscheidung je Wort genügt" verträgt
 
 Beide Sätze stehen seit dem 18.08.2026 nebeneinander — „eine Triage-Entscheidung je Wort
-genügt" (Abschnitt 3, „Nachtrag 18.08.2026") und „Kenntnis pro Bedeutung" hier —, ohne dass
+genügt" (Abschnitt 3, „Zwei Drittel der Grundformen eines Kapitels sind mehrdeutig") und
+„Kenntnis pro Bedeutung" hier —, ohne dass
 gesagt war, wie sie zusammengehen. Sie waren die Bruchstelle, an der der schwere Befund vom
 25.08.2026 lag; **aufgelöst ist sie seit dem Umbau vom selben Tag:**
 
@@ -1340,7 +1333,7 @@ Wer pro Grundform filtert, verliert `red` und `orange` vollständig aus der Tria
 passt zur Datenablage aus Abschnitt 4: Kenntnis hängt an der Bedeutung, und `occurrence`
 ist ohnehin die Ebene, auf der Belegsatz und Häufigkeit geführt werden.
 
-### Nachtrag 17.08.2026: nur fünf Wortarten kommen in die Wortliste
+### Nur fünf Wortarten kommen in die Wortliste
 
 Vorher wurde allein `AUX` ausgesteuert, und damit standen `the`, `his` und `by` in der
 Triage. Seit dem 17.08.2026 gilt eine **erlaubte Liste**: In die Wortliste kommen nur
@@ -1363,7 +1356,7 @@ Der Filter ist zugleich der Grund, warum **T4 auf der Abhängigkeitsanalyse arbe
 und nicht auf der Wortliste: Die Partikel der getrennten Verb-Partikel-Paare sind `ADP` und
 `PART` — aus der Wortliste sind sie damit verschwunden.
 
-### Nachtrag 25.08.2026: Anteilsschwellwert statt striktem Kleiner-Zeichen
+### Regel 12 gilt mit einem Anteilsschwellwert über das ganze Buch
 
 Der Filter aus dem Abschnitt „Neuer Befund" oben wirkt korrekt je Vorkommen, filterte aber
 zu schwach: „Lernvokabel bleibt, was mindestens ein nicht-eigennamiges Vorkommen hat"
@@ -1373,7 +1366,7 @@ Vorkommen von „Dorian" als PROPN (Anteil 0,96) — das eine übrige Vorkommen 
 Titelfigur selbst als Lernvokabel durchzulassen, bis auf Rang 4 der nach Häufigkeit
 sortierten Triage. „Sibyl" in Kapitel 7 traf denselben Fall (26 von 28, 0,93).
 
-**Regel 12 gilt jetzt mit einem Anteilsschwellwert:** Ein Vorkommen bleibt Lernvokabel,
+**Regel 12 gilt seither mit einem Anteilsschwellwert:** Ein Vorkommen bleibt Lernvokabel,
 solange der Anteil eigennamiger Belege am Gesamtvorkommen unter 0,90 bleibt
 (`extraction._PROPER_NOUN_RATIO_THRESHOLD`). Gemessen über alle Kapitel von
 `tools/dorian_gray.epub` und `tools/sherlock.epub` (36 Kapitel, 361 Grundformen mit
@@ -1389,21 +1382,16 @@ Schwelle), „mother" 0,71, „duchess" 0,35 —, alle unter 0,90.
 
 Zwei Nachbarwerte wurden mitgemessen: 0,80 risse zusätzlich „lady" mit (0,80 in Kapitel 17
 erfüllt „≥"), 0,95 ließe „Sibyl" in Kapitel 7 (0,93) unberührt. 0,90 ist der Kompromiss,
-den keiner der beiden Nachbarwerte bietet. **Der Filter wirkt seit dem 26.08.2026 auf den
-buchweiten Anteil** (Nachtrag unten), nicht mehr auf den Anteil des einzelnen Kapitels —
-die Vermutung, ein buchweiter Wert risse „lady" mit herein, hat sich beim Nachmessen nicht
-bestätigt.
+den keiner der beiden Nachbarwerte bietet.
 
-### Nachtrag 26.08.2026: Buchweiter Anteil statt je Kapitel angewendet
+**Geprüft und verworfen: der Anteil je Kapitel.** Sibyls zweites Vorkommen (Kapitel 10, 13
+von 16, Anteil 0,81) blieb unter der Schwelle und damit Lernvokabel, mit dem Belegsatz
+„Sibyl dead!" — spaCy vertaggt drei elliptische Ausrufe dieses Kapitels („Sibyl dead!",
+„Did Sibyl—?", „Sibyl!") als NOUN statt PROPN, Tagger-Fehler in Ein-Wort-Ausrufen, kein
+Sprachbefund. Der Anteil **je Kapitel** kann diesen Fall nicht lösen: Ein einzelnes Kapitel
+mit wenigen Vorkommen kippt durch drei Fehltaggings vollständig.
 
-Sibyls zweites Vorkommen (Kapitel 10, 13 von 16, Anteil 0,81) blieb unter der Schwelle und
-damit Lernvokabel, mit dem Belegsatz „Sibyl dead!" — spaCy vertaggt drei elliptische
-Ausrufe dieses Kapitels („Sibyl dead!", „Did Sibyl—?", „Sibyl!") als NOUN statt PROPN,
-Tagger-Fehler in Ein-Wort-Ausrufen, kein Sprachbefund. Der Anteil **je Kapitel** kann
-diesen Fall nicht lösen: Ein einzelnes Kapitel mit wenigen Vorkommen kippt durch drei
-Fehltaggings vollständig.
-
-**Regel 12 wendet den Schwellwert jetzt auf den Anteil über das ganze Buch an**
+**Regel 12 wendet den Schwellwert deshalb auf den Anteil über das ganze Buch an**
 (`extraction.book_proper_noun_ratios`, angewendet in `extract_vocabulary`), nicht mehr auf
 den Anteil des einzelnen Kapitels — der Schwellwert selbst bleibt 0,90. Gemessen an
 `tools/dorian_gray.epub` und `tools/sherlock.epub` (36 Kapitel, mit `extract_vocabulary`
@@ -1438,9 +1426,10 @@ Buchs, nicht nur das gewählte — `pipeline.run_chapter` liest dafür alle Kapi
 vorab ein. Gemessen an den beiden EPUBs unter `tools/`: rund 22 s (`dorian_gray.epub`, 22
 Kapitel) beziehungsweise 29 s (`sherlock.epub`, 13 Kapitel mit Fließtext) — gegenüber den
 rund 1,1 s, die `run_chapter` zuvor für Nachschlagen und Profilabgleich allein brauchte
-(„Nachtrag 17.08.2026" oben). Ein Kapitel, das nur aus Vorspann, Impressum oder — bei einem
-reinen Bildband — ganz ohne Fließtext besteht, trägt nichts zur Statistik bei und wird
-übersprungen (dieselbe Meldung, die `epub.read_chapter` dafür schon liefert).
+(Abschnitt 3, „Der Engpass ist das Nachschlagen, nicht das Modell"). Ein Kapitel, das nur
+aus Vorspann, Impressum oder — bei einem reinen Bildband — ganz ohne Fließtext besteht,
+trägt nichts zur Statistik bei und wird übersprungen (dieselbe Meldung, die
+`epub.read_chapter` dafür schon liefert).
 
 ### Entschieden 15.09.2026: Zwischenspeicher für den buchweiten Eigennamenanteil
 
@@ -1529,9 +1518,9 @@ ein Dateizugriff).
   15.09.2026**, siehe oben, „Entschieden 15.09.2026: Zwischenspeicher für den buchweiten
   Eigennamenanteil"
 - ~~Ob die Wortart als Vorfilter für lange Auswahllisten taugt~~ — **gemessen am
-  26.08.2026** (Abschnitt 3, „Nachtrag 26.08.2026: was der Wortartfilter kürzt — und was er
-  kostet"): Sie taugt dafür, aber schwächer als angenommen. Was daran offen bleibt, steht in
-  den Offenen Punkten von Abschnitt 3, nicht mehr hier
+  26.08.2026** (Abschnitt 3, „Was der Wortartfilter kürzt — und was er kostet"): Sie taugt
+  dafür, aber schwächer als angenommen. Was daran offen bleibt, steht in den Offenen
+  Punkten von Abschnitt 3, nicht mehr hier
 - **Ob die Kennung des Zwischenspeichers eine Fassungsnummer der Berechnung selbst braucht**
   (Befund 6, Durchsicht 8e3d054) — zusätzlich zu EPUB-Bytes, spaCy- und Modellfassung —, die
   bei einer Änderung an `extraction.book_proper_noun_ratios`, an
@@ -1593,9 +1582,10 @@ Geprüft am 12.08.2026, wie in Abschnitt 1 gefordert **vor** der Aufnahme:
 
 Kein starkes Copyleft, keine Einschränkung für eine spätere quelloffene Veröffentlichung.
 
-Nachtrag zu Abschnitt 1: PySide6 wird auf PyPI nicht schlicht „unter LGPL" angeboten,
-sondern als Wahl aus `LGPL-3.0-only`, `GPL-2.0-only` und `GPL-3.0-only`. LGPL ist davon
-eine — die Aussage dort bleibt richtig, sie beschreibt nur eine von drei Möglichkeiten.
+*Zur Lizenztabelle in Abschnitt 1: PySide6 wird auf PyPI nicht schlicht „unter LGPL"
+angeboten, sondern als Wahl aus `LGPL-3.0-only`, `GPL-2.0-only` und `GPL-3.0-only`. LGPL
+ist davon eine — die Aussage dort bleibt richtig, sie beschreibt nur eine von drei
+Möglichkeiten.*
 
 ### Warum diese und keine anderen
 
@@ -1662,7 +1652,7 @@ Liste in jedem Lauf da, ohne dass jemand daran denken muss — dieselbe Falle, d
 dokumentation.md §10, „Woran sie prüft: gegen den Commit, nicht gegen den Arbeitsbaum" als
 Anweisung an den Menschen beschreibt, hier als Anzeige im Werkzeug.
 
-### Nachtrag 17.08.2026: `mypy --strict` trägt die spaCy-Typen
+### `mypy --strict` trägt die spaCy-Typen
 
 Ob die strenge Typprüfung mit spaCy im Spiel noch trägt, stand hier als offener Punkt und
 war der Grund, warum Phase 1 mit `extraction` und `dictionary` begonnen hat. Mit dem ersten Modul ist
@@ -2459,7 +2449,7 @@ Korrektur einer Übersetzung und wird mit ihr entschieden, nicht davor.
 | Schlüssel | Zweck | Vorgabe |
 |---|---|---|
 | `model.url` | Adresse des Modellservers | `http://localhost:11434/v1` |
-| `model.name` | Modellname | `gemma4:e4b` — die Empfehlung aus Abschnitt 3, Entscheidung 3 (Nachtrag 26.08.2026); leer lassen nimmt stattdessen das erste, das der Server nennt |
+| `model.name` | Modellname | `gemma4:e4b` — die Empfehlung aus Abschnitt 3, Entscheidung 3 (siehe „Trefferquote und Zeit bei fester Temperatur — 40 echte Einträge über `pipeline.run_chapter`"); leer lassen nimmt stattdessen das erste, das der Server nennt |
 | `paths.dictionary`, `paths.profile` | abweichende Ablage | leer — dann das Verzeichnis oben |
 | `triage.order` | Reihenfolge, in der `pipeline.resolve_triage_entries` Einträge vor der Triage auflöst (`"new_words_first"` oder `"frequency"`) — seit dem 25.08.2026, weil Regel 14 (dokumentation.md §4) einen zweiten Anwendungsfall verlangt und der vorliegt: Der Nutzer will die teilweise bekannten Wörter wahlweise gleichberechtigt neben den neuen sehen, statt sie grundsätzlich zurückzustellen. Gemessen am echten Server (`granite4.1:8b`, `sherlock.epub` Kapitel 2, 1410 Wort- und 212 Wendungseinträge, vier Durchläufe je Einstellung, wachsendes Profil, 25.08.2026): `new_words_first` 39 bis 44 Modellaufrufe je Kapitel (44 bis 64 s), `frequency` 39 bis 112 (21 bis 37 s). Bei 1410 Worteinträgen und `limit = 25` erreicht `new_words_first` die Gruppe der teilweise bekannten Einträge dabei praktisch nie — „neue Bedeutung eines bekannten Wortes" (konzept.md §5) erschien in den vier Läufen 0-mal, unter `frequency` 0-, 5-, 1- und 8-mal. Wer die Vorgabe belässt, schaltet den `bank`-Fall aus konzept.md §5 also faktisch ab | `new_words_first` |
 
@@ -2612,7 +2602,8 @@ gewählte Stufe trägt mit einem Tastendruck tausende ungesehene Behauptungen in
 Hand (konzept.md §4, „Der erste Durchlauf je Buch ist ein Kalibrierdurchlauf"). „Keine
 Angabe" muss deshalb
 ausgeschrieben werden — anders als beim Wörterbuchbezug, wo Enter Zustimmung bedeutet
-(Abschnitt 2, „Nachtrag 27.08.2026"), und aus demselben Grund, aus dem die Leereingabe in
+(Abschnitt 2, „Der Bezug läuft beim Start, die Startprüfung nur bis zum Index"), und aus
+demselben Grund, aus dem die Leereingabe in
 der Triage bis zur Behebung am 14.09.2026 eine Falle war (Abschnitt 9, „Offene Punkte").
 
 Geschrieben wird in **einer** Transaktion (`profile.record_preset`) — ganz oder gar nicht.
@@ -2986,8 +2977,9 @@ Einträge eines Kapitels durchgesehen. Wer die Zusicherung „häufigste zuerst"
 
 ### Vorladen: der nächste Block entsteht, während der Nutzer entscheidet
 
-Ein Block kostet rund `limit` Modellaufrufe zu je rund 0,5 s (Abschnitt 3, „Nachtrag
-26.08.2026") — rund zwölf Sekunden Stillstand vor jedem Block, wenn er erst nach der
+Ein Block kostet rund `limit` Modellaufrufe zu je rund 0,5 s (Abschnitt 3, „Trefferquote
+und Zeit bei fester Temperatur — 40 echte Einträge über `pipeline.run_chapter`") — rund
+zwölf Sekunden Stillstand vor jedem Block, wenn er erst nach der
 Fortsetzungsfrage entsteht. Das ist genau die Zeit, die konzept.md schon am 26.08.2026 als
 frei benannt hat: „ein Modellaufruf je Nachrücker fällt in die Zeit, in der der Nutzer
 ohnehin liest." Der nächste Block wird deshalb angestoßen, **sobald der aktuelle
@@ -3137,8 +3129,8 @@ lang stumm weiter, weil der Eigennamenfilter das ganze Buch durch spaCy schickt 
 5, „Kosten: Der buchweite Wert braucht einen vollen spaCy-Lauf über jedes Kapitel"). Auf dem
 Bildschirm stand die ganze Zeit eine Meldung, die längst nicht mehr zutraf — der stumme
 Abschnitt war der stille Fehlschlag aus Regel 13, nur als Laufzeit statt als falschem
-Ergebnis (derselbe Mechanismus wie beim fehlenden Wörterbuchindex, Abschnitt 2, Nachtrag
-27.08.2026). Deshalb wird überhaupt gemeldet.
+Ergebnis (derselbe Mechanismus wie beim fehlenden Wörterbuchindex, Abschnitt 2, „Der Bezug
+läuft beim Start, die Startprüfung nur bis zum Index"). Deshalb wird überhaupt gemeldet.
 
 Der Kern gibt trotzdem nichts selbst aus: Die Architekturregel aus Abschnitt 1 verbietet
 einen deutschen Text in `libreverbum/`, und `resolve_triage_entries` macht mit seinem

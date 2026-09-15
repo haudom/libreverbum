@@ -388,7 +388,8 @@ def test_homographs_are_distinguished_by_pos_abbreviation(tmp_path: Path) -> Non
     """Befund 4, Review T14: Zwei Vorkommen derselben Wortform, aber verschiedener
     Wortart (`saw` als NOUN und VERB), sind auf der Druckseite an einem Wortart-Kürzel
     unterscheidbar, nicht nur an der Übersetzung — zwei Drittel der Grundformen eines
-    Kapitels sind mehrdeutig (technik.md §3, Nachtrag 18.08.2026)."""
+    Kapitels sind mehrdeutig (technik.md §3, „Zwei Drittel der Grundformen eines Kapitels
+    sind mehrdeutig")."""
     path = tmp_path / "kapitelliste.html"
     saw_noun = _entry("saw", "Säge", pos="NOUN", lemma_text="saw")
     saw_verb = _entry("saw", "sah", pos="VERB", lemma_text="saw")

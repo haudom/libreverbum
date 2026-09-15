@@ -144,8 +144,8 @@ dafür **vor** der Triage aufgelöst, und „kenne ich" bucht auf sie — Kenntn
 Bedeutung geführt ([technik.md](technik.md) §4, „Kernentscheidung: Kenntnis pro Bedeutung,
 nicht pro Wort"). Das kostet einen Modellaufruf je gezeigtem Eintrag und ist trotzdem nicht
 verhandelbar: Zwei Drittel der Grundformen eines Kapitels sind mehrdeutig
-([technik.md](technik.md) §3, „Nachtrag 18.08.2026: zwei Drittel der Grundformen eines
-Kapitels sind mehrdeutig"), und wer `watch` ohne Bedeutungsangabe sieht, drückt „kenne ich"
+([technik.md](technik.md) §3, „Zwei Drittel der Grundformen eines Kapitels sind
+mehrdeutig"), und wer `watch` ohne Bedeutungsangabe sieht, drückt „kenne ich"
 für die Uhr, während der Text die Wache meint.
 
 Geprüft und verworfen ist dagegen eine Stellung ohne Modellaufruf, nur Wörterbuch: Sie zeigt
@@ -218,8 +218,8 @@ Die Kapitelliste trägt je Zeile **Wortform, Wortart und Übersetzung** (Wendung
 Einzelwortart und bekommen keine), Buch und Kapitel stehen als Überschrift darüber. Die
 Wortart ist dort kein Beiwerk, sondern der Grund, warum die Felder hier ebenso benannt sind
 wie die der Karte: Zwei Drittel der Grundformen eines Kapitels sind mehrdeutig
-([technik.md](technik.md) §3, „Nachtrag 18.08.2026: zwei Drittel der Grundformen eines
-Kapitels sind mehrdeutig"), und wer auf dem Blatt eine Grundform ohne Wortart liest, hängt die
+([technik.md](technik.md) §3, „Zwei Drittel der Grundformen eines Kapitels sind
+mehrdeutig"), und wer auf dem Blatt eine Grundform ohne Wortart liest, hängt die
 Übersetzung an die falsche Lesart — der stille Fehler, gegen den Abschnitt 5 gebaut ist, und
 bemerken kann der Leser ihn nicht. Belegsatz und Verschlagwortung bleiben dagegen der Karte
 vorbehalten: Auf das Blatt kommt, was in eine 85-mm-Spalte passt

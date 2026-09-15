@@ -64,7 +64,8 @@ liest inzwischen **das ganze Buch** ein, um den buchweiten Eigennamenanteil vorz
 (`extraction.book_proper_noun_ratios`, technik.md §5, REGEL bei `extraction.
 _PROPER_NOUN_RATIO_THRESHOLD`) — ein voller spaCy-Lauf je Kapitel, rund 22 respektive 29 s
 für die beiden EPUBs unter `tools/` (siehe Bericht zur Abnahme), statt der zuvor rund 1,1 s
-(technik.md §3, „Nachtrag 17.08.2026") für Nachschlagen und Profilabgleich allein. Ohne
+(technik.md §3, „Der Engpass ist das Nachschlagen, nicht das Modell") für Nachschlagen und
+Profilabgleich allein. Ohne
 diese Vorarbeit ließe sich der `Sibyl`-Fall aus Kapitel 10 nicht auflösen: Ein Tagger-Fehler
 in drei Vorkommen eines einzelnen Kapitels verfälscht dessen eigenen Anteil, der buchweite
 Anteil bleibt davon unberührt. **Netzlos** bleibt sie trotzdem — kein Modellserver ist dafür
@@ -101,8 +102,9 @@ Bedeutungen (`entities.Sense` samt `wikdict_`-Feldern), weil Kenntnis pro Bedeut
 wird, nicht pro Wort (technik.md §4, „Kernentscheidung: Kenntnis pro Bedeutung, nicht pro
 Wort"). Begründet in konzept.md, „Der Kernablauf".
 
-Eine Grundform ganz ohne Wörterbucheintrag (7,2 % je Kapitel, technik.md §3, Nachtrag
-18.08.2026) bekommt in `entries` denselben Platzhalter wie `dictionary.
+Eine Grundform ganz ohne Wörterbucheintrag (7,2 % je Kapitel, technik.md §3, „Zwei Drittel
+der Grundformen eines Kapitels sind mehrdeutig") bekommt in `entries` denselben Platzhalter
+wie `dictionary.
 particle_verb_candidates` für ein Phrasal Verb ohne Treffer: einen einzelnen `Sense` mit
 `uncertain=True` und ohne jedes `wikdict_`-Feld, statt einer leeren `candidates`-Liste
 (Befund mittel, zweite T16-Durchsicht). Vor dieser Behebung stand dieser Platzhalter nur in
@@ -253,8 +255,9 @@ class ChapterProgress:
 # --------------------- Zwischenspeicher für den buchweiten Eigennamenanteil (15.09.2026)
 #
 # Entschieden am 15.09.2026 (technik.md §5, „Entschieden 15.09.2026: Zwischenspeicher für
-# den buchweiten Eigennamenanteil"): Der offene Punkt aus dem Nachtrag vom 26.08.2026 ist
-# damit beantwortet. Die Funktionen liegen hier und nicht in einem eigenen Modul (Regel 14,
+# den buchweiten Eigennamenanteil"): Der offene Punkt aus „Regel 12 gilt mit einem
+# Anteilsschwellwert über das ganze Buch" (26.08.2026) ist damit beantwortet. Die
+# Funktionen liegen hier und nicht in einem eigenen Modul (Regel 14,
 # dokumentation.md §4) — `pipeline` stellt als einziger Ort die Kapitelliste ohnehin
 # zusammen, um `extraction.book_proper_noun_ratios` aufzurufen.
 
@@ -618,8 +621,9 @@ class ResolvedEntry:
     volle Auswahlliste aus `VocabularyEntry.candidates` —, dazu ihr Kenntnisstand.
 
     Ersetzt die Auswahlliste in der Anzeige durch die aufgelöste Bedeutung (technik.md §3,
-    Nachtrag 18.08.2026: „Die gewählte Bedeutung samt Belegsatz gehört also in die
-    Anzeige — das ist Darstellung, keine zweite Entscheidung"). `status` ist nie `KNOWN`:
+    „Zwei Drittel der Grundformen eines Kapitels sind mehrdeutig": „Die gewählte Bedeutung
+    samt Belegsatz gehört also in die Anzeige — das ist Darstellung, keine zweite
+    Entscheidung"). `status` ist nie `KNOWN`:
     Eine auf `KNOWN` aufgelöste Bedeutung fällt in `resolve_triage_entries` weg, bevor ein
     `ResolvedEntry` für sie entsteht (konzept.md, Abnahmekriterium 6)."""
 
@@ -689,17 +693,19 @@ class TriageResolution:
 
 
 def _all_candidates_known(entry: VocabularyEntry) -> bool:
-    """Der kostenlose Vorfilter aus technik.md §3, Nachtrag 18.08.2026 („eine
-    Triage-Entscheidung je Wort genügt"): Ein Eintrag gilt als vollständig bekannt, wenn er
-    mindestens einen Kandidaten hat und **jeder** davon `VocabularyStatus.KNOWN` trägt. Ist
+    """Der kostenlose Vorfilter aus technik.md §3, „Zwei Drittel der Grundformen eines
+    Kapitels sind mehrdeutig" („eine Triage-Entscheidung je Wort genügt"): Ein Eintrag gilt
+    als vollständig bekannt, wenn er mindestens einen Kandidaten hat und **jeder** davon
+    `VocabularyStatus.KNOWN` trägt. Ist
     jede mögliche Bedeutung bereits bekannt, ist es auch die, die das Modell wählen würde —
     ohne dass dafür eine Anfrage nötig wäre.
 
     Geprüft über `bool(entry.candidates)`, weil `all()` über eine leere Menge
     stillschweigend wahr wäre (Befund schwer 1, zweite T16-Durchsicht: die vormalige
     `cli.interaction._is_known` verglich stattdessen `any(...)` gegen dieses `all(...)` auf
-    der Schreibseite — bei 65,8 % mehrdeutigen Grundformen je Kapitel [technik.md §3,
-    Nachtrag 18.08.2026] traf das die meisten Wörter). Seit `run_chapter` auch für eine
+    der Schreibseite — bei 65,8 % mehrdeutigen Grundformen je Kapitel [technik.md §3, „Zwei
+    Drittel der Grundformen eines Kapitels sind mehrdeutig"] traf das die meisten Wörter).
+    Seit `run_chapter` auch für eine
     leere Auswahlliste einen Platzhalter in `candidates` führt (Moduldocstring, letzter
     Absatz), deckt dieselbe Prüfung auch ein Wort ganz ohne Wörterbucheintrag ab."""
     return bool(entry.candidates) and all(
@@ -830,7 +836,8 @@ def resolve_triage_entries(
        `frequency` dagegen 0, 5, 1 und 8). Der `bank`-Fall aus konzept.md §5 ist auf der
        Vorgabe damit faktisch abgeschaltet, nicht nur seltener.
     3. In dieser Reihenfolge löst `_resolve_sense` je Eintrag die gemeinte Bedeutung auf
-       (eine Anfrage je Wort, kein Bündeln — technik.md §3, Nachtrag 19.08.2026). Wählt das
+       (eine Anfrage je Wort, kein Bündeln — technik.md §3, „Bündeln lohnt nicht — eine
+       Anfrage je Wort"). Wählt das
        Modell dabei „keine passt", obwohl echte Wörterbuchkandidaten vorlagen, liefert
        `_resolve_sense` `None`: Der Eintrag wird übersprungen, ohne einen Platz von `limit`
        zu verbrauchen, ohne Profilabgleich und ohne Buchung — gezählt in

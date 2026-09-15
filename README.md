@@ -99,8 +99,8 @@ Herkunft und Lizenz — WikDict EN→DE, aus Wiktionary über DBnary erzeugt, CC
 fragt einmalig nach; rund 20 MB. Wer die Datei schon hat, legt sie ins Datenverzeichnis
 oder trägt sie unter `paths.dictionary` in `config.toml` ein: Die beiden Indizes, die sie
 von Hand kopiert nicht mitbringt, legt der Start dann selbst an. **Sie sind der Unterschied
-zwischen 1,1 s und 40 s pro Kapitel** ([technik.md](technik.md) §3, „Nachtrag
-17.08.2026").
+zwischen 1,1 s und 40 s pro Kapitel** ([technik.md](technik.md) §3, „Der Engpass ist das
+Nachschlagen, nicht das Modell").
 
 ## Benutzen
 

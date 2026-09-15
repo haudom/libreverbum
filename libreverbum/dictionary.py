@@ -326,7 +326,8 @@ def _lookup_matches(dictionary_path: Path, lemmas: Sequence[Lemma]) -> list[list
     # tools/en-de.sqlite3: `written_rep = 'new york'` liefert 0 Zeilen, `= 'new york'
     # COLLATE NOCASE` die echte Zeile). Der zugehörige Index (`ensure_index`,
     # `INDEX_NAME_NOCASE`) hält die Abfrage dabei auf `SEARCH` statt `SCAN` — ohne ihn
-    # kollationiert SQLite bei jeder Zeile neu (technik.md §3, „Nachtrag 17.08.2026").
+    # kollationiert SQLite bei jeder Zeile neu (technik.md §3, „Der Engpass ist das
+    # Nachschlagen, nicht das Modell").
 
     # REGEL (Befund 5, Review T7): Eine einzige Verbindung für die gesamte Liste, nicht
     # eine je Kandidat — gemessen an einer Kopie von tools/en-de.sqlite3 mit Index, ein
@@ -422,15 +423,17 @@ SOURCE_NOTICE = (
     f"{DICTIONARY_URL}."
 )
 
-# Der Index aus technik.md §3, „Nachtrag 17.08.2026" — siehe ensure_index für die Messung.
+# Der Index aus technik.md §3, „Der Engpass ist das Nachschlagen, nicht das Modell" —
+# siehe ensure_index für die Messung.
 # Trägt `candidates` (T5); dessen Abfrage vergleicht `written_rep` binär, nicht case-
 # insensitiv (Befund 2, Review T7, „nur berichtet, nicht geändert" — siehe Bericht).
 INDEX_NAME = "idx_translation_written_rep"
 
 # REGEL (Befund 2, Review T7): Zweiter Index, eigens für den case-insensitiven Vergleich in
 # `_lookup_matches` (T7). Ein `COLLATE NOCASE`-Vergleich kann den Index ohne diese eigene
-# Kollation nicht benutzen und fiele auf den vollen Scan zurück (technik.md §3, „Nachtrag
-# 17.08.2026": 32–44 s statt 1,1 s je Kapitel) — derselbe Kostenunterschied wie beim
+# Kollation nicht benutzen und fiele auf den vollen Scan zurück (technik.md §3, „Der
+# Engpass ist das Nachschlagen, nicht das Modell": 32–44 s statt 1,1 s je Kapitel) —
+# derselbe Kostenunterschied wie beim
 # unindizierten `candidates`, nur ausgelöst durch die fehlende Kollation statt durch einen
 # fehlenden Index.
 INDEX_NAME_NOCASE = "idx_translation_written_rep_nocase"
@@ -438,9 +441,10 @@ INDEX_NAME_NOCASE = "idx_translation_written_rep_nocase"
 _EXPECTED_TABLE = "translation"
 _EXPECTED_COLUMNS = frozenset({"lexentry", "sense", "written_rep", "trans_list", "score"})
 
-# REGEL (technik.md §2, Nachtrag 18.08.2026): Untergrenze für _validate_schema, deutlich
-# unter den 157.801 Zeilen der echten Datei (technik.md §3), aber hoch genug, dass eine
-# leere oder grob unvollständige, aber schemarichtige Tabelle nicht als gültig durchgeht.
+# REGEL (technik.md §2, „Keine Prüfsumme, weil WikDict keine veröffentlicht"): Untergrenze
+# für _validate_schema, deutlich unter den 157.801 Zeilen der echten Datei (technik.md
+# §3), aber hoch genug, dass eine leere oder grob unvollständige, aber schemarichtige
+# Tabelle nicht als gültig durchgeht.
 _MIN_TRANSLATION_ROWS = 100_000
 
 
@@ -452,8 +456,9 @@ def ensure_index(path: Path) -> None:
     anschließender Sortierung im Speicher; ohne den zweiten (`INDEX_NAME_NOCASE`) tut
     dasselbe jede case-insensitive Abfrage aus `_lookup_matches` (T7), weil `COLLATE
     NOCASE` den binären Index nicht benutzen kann. Größenordnung und Wirkung: technik.md
-    §3, „Nachtrag 17.08.2026". `CREATE INDEX IF NOT EXISTS` macht den Aufruf für beide
-    ungefährlich, wenn er ein zweites Mal auf derselben Datei läuft — etwa weil die Datei
+    §3, „Der Engpass ist das Nachschlagen, nicht das Modell". `CREATE INDEX IF NOT EXISTS`
+    macht den Aufruf für beide ungefährlich, wenn er ein zweites Mal auf derselben Datei
+    läuft — etwa weil die Datei
     schon von Hand hinterlegt war oder noch den alten, einzelnen Index aus einem früheren
     Aufruf trägt: Der zweite Index entsteht dann zusätzlich, nicht anstelle des ersten.
 
@@ -496,7 +501,7 @@ def _validate_schema(path: Path) -> None:
     gültiges Wörterbuch liegen. `PRAGMA table_info` allein liest nur das Schema (Seite 1);
     eine schemarichtige, aber leere oder stark gekürzte Tabelle bestünde ohne die
     Zeilenzahlprüfung trotzdem. Was diese Prüfung leistet und was nicht: technik.md §2,
-    Nachtrag 18.08.2026."""
+    „Keine Prüfsumme, weil WikDict keine veröffentlicht"."""
     try:
         con = sqlite3.connect(path)
         try:
@@ -570,7 +575,8 @@ def fetch_dictionary(path: Path, *, url: str = DICTIONARY_URL) -> None:
     Existiert `path` bereits — heruntergeladen oder von Hand hinterlegt (technik.md §2,
     „Warum nicht mitgeliefert") —, wird nicht neu geladen, aber Schema und Index werden
     trotzdem geprüft beziehungsweise angelegt: Auch eine von Hand kopierte WikDict-Datei
-    bringt den Index nicht mit (technik.md §3, „Nachtrag 17.08.2026"). Fehlt sie, wird sie
+    bringt den Index nicht mit (technik.md §3, „Der Engpass ist das Nachschlagen, nicht das
+    Modell"). Fehlt sie, wird sie
     von `url` bezogen und geprüft — vollständig (`Content-Length` in `_download`), im
     erwarteten Schema und mit plausibler Zeilenzahl (`_validate_schema`) — und erst danach
     indiziert und an `path` sichtbar. Bis dahin liegt sie unter einer Nebendatei (`path`
@@ -579,7 +585,7 @@ def fetch_dictionary(path: Path, *, url: str = DICTIONARY_URL) -> None:
     Nebendatei auf und bricht danach mit einer deutschen Meldung ab, statt ihn nur zu
     protokollieren. Ohne veröffentlichten Referenzwert prüft dieser Bezug keine
     Prüfsumme — Begründung und was die Prüfungen stattdessen leisten: technik.md §2,
-    Nachtrag 18.08.2026.
+    „Keine Prüfsumme, weil WikDict keine veröffentlicht".
     """
     if path.is_file():
         _validate_schema(path)

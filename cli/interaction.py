@@ -49,7 +49,8 @@ Vor dieser Behebung bucht(e) dieses Modul „kenne ich" auf `candidates[0]`
 (`_representative_sense`, entfallen), während der Vorfilter **alle** Kandidaten `KNOWN`
 verlangte (`_is_known`, ebenfalls entfallen) — Schreib- und Leseseite maßen an
 verschiedenen Bedeutungen. Da 65,8 % der Grundformen eines Kapitels mehrdeutig sind
-(technik.md §3, Nachtrag 18.08.2026), verfehlte der Vorfilter die meisten bereits bekannten
+(technik.md §3, „Zwei Drittel der Grundformen eines Kapitels sind mehrdeutig"), verfehlte
+der Vorfilter die meisten bereits bekannten
 Wörter: Abnahmekriterium 6 „beim zweiten Durchlauf … nicht erneut abgefragt" galt nur
 zufällig, für eindeutige Wörter wie `watch`. Die Auflösung, welche Bedeutung ein Kapitel
 tatsächlich meint, braucht das Modell (`translation.choose_sense`) — und *das* ist Sache des
@@ -579,7 +580,8 @@ def run_triage_pass(
     gebucht wird (`entry.sense` in `_individual_phase`/`_bulk_phase`) — vor der Behebung
     bucht(e) dieses Modul „kenne ich" auf `candidates[0]`, während der Vorfilter *alle*
     Kandidaten verlangte, und verfehlte bei 65,8 % mehrdeutigen Grundformen je Kapitel
-    (technik.md §3, Nachtrag 18.08.2026) die meisten bereits bekannten Wörter.
+    (technik.md §3, „Zwei Drittel der Grundformen eines Kapitels sind mehrdeutig") die
+    meisten bereits bekannten Wörter.
 
     Zwei Zählungen werden gemeldet, nicht verschwiegen (Regel 13): laut Vorfilter bereits
     bekannt (`resolution.known`) und erst nach dem Auflösen als bekannt erkannt

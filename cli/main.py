@@ -659,7 +659,8 @@ def _run(
         # bewusst kleiner gehaltenes Wörterbuch fiele sonst bei jedem Aufruf durch.
         # `ensure_index` ist der Teil, der hier zählt: Eine von Hand hinterlegte Datei
         # bringt die beiden Indizes nicht mit, und ohne sie kostet jedes Kapitel 32 bis
-        # 44 s statt 1,1 s (technik.md §3, „Nachtrag 17.08.2026") — lautlos.
+        # 44 s statt 1,1 s (technik.md §3, „Der Engpass ist das Nachschlagen, nicht das
+        # Modell") — lautlos.
         dictionary.ensure_index(cfg.dictionary_path)
 
     # Vor der Bestätigung festgehalten: Danach steht mit `_confirm_new_profile`s eigenem

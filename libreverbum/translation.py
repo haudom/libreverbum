@@ -11,7 +11,7 @@ Anfrage über die OpenAI-kompatible Schnittstelle, `/v1/chat/completions`, mit
 Einstellung: Temperatur auf 0") und der Antwortform per JSON-Schema erzwungen. Ein
 Bündelmechanismus ist bewusst nicht gebaut: Er wählt bei 23 bis 37 % der Wörter eine
 andere Bedeutung als der Einzellauf und entfällt deshalb ersatzlos (technik.md §3,
-Nachtrag 19.08.2026; bauplan.md, Tor 0, E10).
+„Bündeln lohnt nicht — eine Anfrage je Wort"; bauplan.md, Tor 0, E10).
 
 Voraussetzungen
 ---------------
@@ -103,8 +103,8 @@ DEFAULT_TIMEOUT: float = 120
 # würde eine drohende Kürzung gerade verdecken).
 _CHARS_PER_TOKEN = 4
 
-# REGEL (technik.md §3, „Datenfalle: der Server kürzt zu lange Prompts still", Nachtrag
-# 19.08.2026): Ollama kürzt Prompts über rund 4.096 Token still und meldet dabei den
+# REGEL (technik.md §3, „Datenfalle: der Server kürzt zu lange Prompts still"): Ollama
+# kürzt Prompts über rund 4.096 Token still und meldet dabei den
 # gekürzten Wert in usage.prompt_tokens — eine Prüfung danach kann die Kürzung deshalb nie
 # sehen, die Promptgröße muss vor dem Senden geschätzt werden. Gemessen: 3.000 gesendete
 # Token kamen noch unverändert an (prompt_tokens 3.015), 5.000 wurden auf rund 2.050
@@ -323,16 +323,16 @@ def choose_sense(
     timeout: float = DEFAULT_TIMEOUT,
 ) -> Sense:
     """Wählt für `occurrence` die im Belegsatz gemeinte Bedeutung aus `sense_candidates`
-    (bauplan.md T11). Je Wort eine Anfrage, kein Bündeln (technik.md §3, Nachtrag
-    19.08.2026).
+    (bauplan.md T11). Je Wort eine Anfrage, kein Bündeln (technik.md §3, „Bündeln lohnt
+    nicht — eine Anfrage je Wort").
 
     Ist `sense_candidates` leer, wird **nicht** angefragt, sondern unmittelbar `uncertain`
     zurückgegeben (Regel 11: „Kandidaten ohne Wörterbucheintrag werden uncertain
     markiert"). Ein zweiter Versuch ohne Wortartfilter ist bewusst nicht gebaut: Regel 14
     verlangt dafür einen gemessenen Anlass. Der liegt seit dem 26.08.2026 vor — 1.076 von
     32.549 Vorkommen (3,3 %) bekommen eine leere Auswahlliste, obwohl das Stichwort im
-    Wörterbuch steht (technik.md §3, „Nachtrag 26.08.2026: was der Wortartfilter kürzt — und
-    was er kostet") —, entschieden ist er nicht: technik.md §3, offener Punkt „Die Wortart
+    Wörterbuch steht (technik.md §3, „Was der Wortartfilter kürzt — und was er kostet") —,
+    entschieden ist er nicht: technik.md §3, offener Punkt „Die Wortart
     als Filter schließt mehr aus als gedacht". Der Punkt bleibt hier ein Verweis, kein Code.
     """
     if not sense_candidates:
