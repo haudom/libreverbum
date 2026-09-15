@@ -310,7 +310,7 @@ def test_acceptance_6_a_second_run_does_not_ask_about_words_marked_known(
     Ein erreichbarer Modellserver ist seit der zweiten T16-Durchsicht (Befund schwer 1)
     nötig, obwohl in diesem Test nie „will ich lernen" gewählt wird: Die Bedeutung wird
     seither vor **jeder** Triage-Entscheidung aufgelöst (`pipeline.resolve_triage_entries`,
-    konzept.md Nachtrag 17.08.2026), auch für „kenne ich" und „überspringen" — andere
+    konzept.md, „Der Kernablauf"), auch für „kenne ich" und „überspringen" — andere
     Wörter im Kapitel (`bank`, `draw`, „give up") brauchen dafür ein Modell, selbst wenn
     dieser Test nur `watch` beobachtet.
 

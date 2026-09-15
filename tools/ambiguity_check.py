@@ -3,7 +3,7 @@
 
 Hintergrund
 -----------
-Entscheidung 10 (../konzept.md, Nachtrag beim Kernablauf) stellt die Bedeutungen vor die
+Entscheidung 10 (../konzept.md, „Der Kernablauf") stellt die Bedeutungen vor die
 Triage. Damit hängt an einer Zahl, *was* die Triage überhaupt anzeigt: Genügt eine
 Entscheidung je Wort, oder muss sie bei einem nennenswerten Teil der Wörter je Bedeutung
 getroffen werden? Die Frage gehört zu Entscheidung 10 und sperrte dort die Teilaufgaben

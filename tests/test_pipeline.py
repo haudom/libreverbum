@@ -456,7 +456,7 @@ def test_run_chapter_marks_every_candidate_unknown_against_a_fresh_profile(
 def test_run_chapter_reflects_a_known_event_recorded_before_the_run(
     pipeline_epub: Path, mini_dictionary_db: Path, profile_path: Path, nlp: Language
 ) -> None:
-    """konzept.md, Nachtrag 18.08.2026 beim Kernablauf: Der Abgleich gegen das Profil
+    """konzept.md, „Der Kernablauf": Der Abgleich gegen das Profil
     läuft nach dem Nachschlagen, gegen die aufgelöste Bedeutung. Ein vorab eingetragenes
     `known`-Ereignis zur Straßen-Bedeutung muss beim nächsten Durchlauf als `KNOWN`
     zurückkommen — Abnahmekriterium 6: bekannte Wörter werden nicht erneut abgefragt."""

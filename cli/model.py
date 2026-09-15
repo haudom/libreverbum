@@ -92,7 +92,7 @@ def cached_resolver(url: str, configured_name: str) -> Callable[[], str]:
     dort aufgerufen, wo `pipeline._resolve_sense` tatsächlich eine Bedeutung auflöst. Seit
     der zweiten T16-Durchsicht (Befund schwer 1) ist das nicht mehr nur „will ich lernen":
     Die Bedeutung wird für jeden verbleibenden Eintrag vor der Triage aufgelöst, auch für
-    „kenne ich" und „überspringen" (konzept.md, Nachtrag 17.08.2026 beim Kernablauf). Kein
+    „kenne ich" und „überspringen" (konzept.md, „Der Kernablauf"). Kein
     Zwischenspeicher über einen Lauf hinaus (dokumentation.md §4 Regel 14): Die Liste lebt
     nur in dieser einen Closure.
     """

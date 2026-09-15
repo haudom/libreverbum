@@ -99,8 +99,7 @@ Der Abgleich gegen das Profil in `run_chapter` läuft **nach** dem Nachschlagen 
 Wörterbuch, nicht davor: `profile.compare_chapter_vocabulary` erwartet aufgelöste
 Bedeutungen (`entities.Sense` samt `wikdict_`-Feldern), weil Kenntnis pro Bedeutung geführt
 wird, nicht pro Wort (technik.md §4, „Kernentscheidung: Kenntnis pro Bedeutung, nicht pro
-Wort"). Begründet und für T15 ausdrücklich festgehalten in konzept.md, Nachtrag 18.08.2026
-beim Kernablauf: „damit T15 die Reihenfolge nicht neu entscheidet."
+Wort"). Begründet in konzept.md, „Der Kernablauf".
 
 Eine Grundform ganz ohne Wörterbucheintrag (7,2 % je Kapitel, technik.md §3, Nachtrag
 18.08.2026) bekommt in `entries` denselben Platzhalter wie `dictionary.

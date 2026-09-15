@@ -16,7 +16,8 @@ Voraussetzungen
 ---------------
 `entries` sind bereits übersetzt oder als `uncertain` bestätigt (Abschnitt „Wie mit
 `uncertain` verfahren wird" unten) und gehören zu **einem** Kapitel: dieselbe Annahme wie
-bei `triage.defer_beyond_word_limit` (konzept.md §4, „Nachtrag 01.09.2026"), hier erneut
+bei `triage.defer_beyond_word_limit` (konzept.md §4, „Blockweise Triage mit
+Fortsetzungsfrage"), hier erneut
 geprüft (`_ensure_single_chapter`), weil dieses Modul nach technik.md §7, „Die
 Importregel" nur `entities` importieren darf und weder `triage` noch `dictionary` selbst
 kennen darf.
@@ -36,8 +37,9 @@ Wie mit mehr als MAX_ENTRIES Einträgen verfahren wird
 Bis zum 01.09.2026 war das ein sichtbarer Fehlschlag: Die Wortobergrenze pro Kapitel
 (konzept.md §4) garantierte, dass nie mehr als `MAX_ENTRIES` Einträge ankamen, also wies
 `write_printout` mehr sichtbar zurück (Regel 13). Die blockweise Triage (konzept.md §4,
-„Nachtrag 01.09.2026") hat diese Garantie aufgehoben — wer mehrere Blöcke durchgeht, kann
-mehr als `MAX_ENTRIES` Karten haben. Der Abbruch ist deshalb zum **Seitenumbruch**
+„Blockweise Triage mit Fortsetzungsfrage") hat diese Garantie aufgehoben — wer mehrere
+Blöcke durchgeht, kann mehr als `MAX_ENTRIES` Karten haben. Der Abbruch ist deshalb zum
+**Seitenumbruch**
 geworden (technik.md §12, „Folge: die Druckseite bricht um, statt abzubrechen";
 Abnahmekriterium 5): `_group_entries` schneidet die sortierte Liste in Gruppen zu
 höchstens `MAX_ENTRIES`, jede Gruppe bekommt einen eigenen Blatt-Container mit eigener
@@ -151,9 +153,8 @@ from libreverbum.entities import Occurrence, Sense
 # §8c, ist die Messung zu wiederholen.
 #
 # (Befund 5, Durchsicht 4fa3c8e): Der Verweis im Moduldocstring, Abschnitt
-# „Voraussetzungen", zeigte zuvor auf „konzept.md §4, »Obergrenze pro Kapitel«" — einen
-# Anker, den es seit dem Nachtrag 01.09.2026 in konzept.md §4 nicht mehr gibt (dort nur
-# noch als zitierte alte Fassung). Nachgezogen auf „konzept.md §4, »Nachtrag 01.09.2026«".
+# „Voraussetzungen", zeigte auf einen inzwischen weggefallenen Anker. Nachgezogen auf
+# „konzept.md §4, »Blockweise Triage mit Fortsetzungsfrage«".
 MAX_ENTRIES = 33
 
 
@@ -214,9 +215,9 @@ def _pos_label(pos: str) -> str | None:
         raise ValueError(f"Kein Wortart-Kürzel für {pos!r} hinterlegt.") from error
 
 
-# (Befund 5, Durchsicht 4fa3c8e): Der Verweis zeigte zuvor auf „konzept.md §4, »pro
-# Kapitel«" — einen Anker, den es seit dem Nachtrag 01.09.2026 in konzept.md §4 nicht mehr
-# gibt (dort nur noch als zitierte alte Fassung). Nachgezogen auf den gültigen Stand.
+# (Befund 5, Durchsicht 4fa3c8e): Der Verweis zeigte auf einen inzwischen weggefallenen
+# Anker. Nachgezogen auf den gültigen Stand (konzept.md §4, „Blockweise Triage mit
+# Fortsetzungsfrage").
 def _ensure_single_chapter(entries: Sequence[tuple[Occurrence, Sense]]) -> None:
     """Bricht sichtbar ab, wenn `entries` Vorkommen aus mehr als einem Kapitel enthält —
     dieselbe Prüfung wie `triage._ensure_single_chapter`, hier eigenständig geschrieben,

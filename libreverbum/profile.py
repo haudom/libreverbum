@@ -20,7 +20,7 @@ Kern kennt auch keine Vorgabe für den Pfad selbst; den setzt der Aufrufer (tech
 
 `compare_chapter_vocabulary` erwartet bereits aufgelöste Bedeutungen (`entities.Sense`
 samt `wikdict_`-Feldern) und läuft deshalb erst, nachdem „Bedeutungen beschaffen" den
-Kapitelwortschatz angereichert hat (konzept.md, Nachtrag 18.08.2026 beim Kernablauf) —
+Kapitelwortschatz angereichert hat (konzept.md, „Der Kernablauf") —
 ein Abgleich auf Grundformebene könnte „neue Bedeutung eines bekannten Wortes" gar nicht
 erkennen (technik.md §4, „Kernentscheidung: Kenntnis pro Bedeutung, nicht pro Wort").
 
@@ -97,7 +97,7 @@ class VocabularyStatus(StrEnum):
     `NEW_MEANING_OF_KNOWN_WORD` ist der Grund für diese Kennzeichnung (konzept.md §5,
     „Mehrdeutigkeit"): Eine andere Bedeutung derselben Grundform ist bereits bekannt, diese
     hier noch nicht — ohne die Kennzeichnung würde der Nutzer „kenne ich" für eine
-    Bedeutung drücken, die er noch nie gesehen hat (konzept.md, Nachtrag beim Kernablauf)."""
+    Bedeutung drücken, die er noch nie gesehen hat (konzept.md, „Der Kernablauf")."""
 
     UNKNOWN = "unknown"
     KNOWN = "known"

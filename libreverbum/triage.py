@@ -9,8 +9,8 @@ davorstehenden Wörtern zugleich einlösen. Die einzelne Entscheidung je Wort tr
 Nutzer und liegt außerhalb dieses Moduls.
 
 (Befund 8, Durchsicht 1cfb1e4): Eine Wortobergrenze pro Kapitel gibt es seit dem
-01.09.2026 nicht mehr (technik.md §12, konzept.md §4, „Nachtrag 01.09.2026 — aus der
-Obergrenze ist eine Blockgröße geworden") — an ihre Stelle ist die Blockgröße aus
+01.09.2026 nicht mehr (technik.md §12, konzept.md §4, „Blockweise Triage mit
+Fortsetzungsfrage") — an ihre Stelle ist die Blockgröße aus
 `cli.interaction` (`WORD_BLOCK_SIZE`, `EXPRESSION_BLOCK_SIZE`) getreten, die den
 Kapitelwortschatz portioniert statt ihn zu kürzen. `defer_beyond_word_limit` unten
 rechnet die abgeschaffte Obergrenze weiterhin korrekt aus, hat aber außerhalb ihrer

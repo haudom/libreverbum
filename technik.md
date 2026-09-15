@@ -1966,11 +1966,11 @@ Zwei Beobachtungen daraus:
 
 Beim Calibre-Konvertat heißt das vier „Kapitel" zu je rund 30.000 Wörtern. Die Triage
 bleibt benutzbar, weil sie in Blöcken läuft und der Nutzer nach jedem gefragt wird
-(konzept.md §4, „Nachtrag 01.09.2026"; bis dahin stand hier die Wortobergrenze, die
-dieselbe Wirkung hatte); die Zusage des Konzepts,
+(konzept.md §4, „Blockweise Triage mit Fortsetzungsfrage"; bis dahin stand hier die
+Wortobergrenze, die dieselbe Wirkung hatte); die Zusage des Konzepts,
 danach ein Kapitel am Stück zu lesen, wird sie nicht. Der saubere Weg führt über die
-Quelle: Calibre kann für solche Dateien ein Inhaltsverzeichnis erzeugen. Der Nachtrag zu
-Abnahmekriterium 1 in konzept.md hält das fest.
+Quelle: Calibre kann für solche Dateien ein Inhaltsverzeichnis erzeugen. Abnahmekriterium 1
+in konzept.md hält das mit dem Verweis auf Schritt 1 fest.
 
 ### Befund 18.08.2026: wie viel Vorspann die Heuristik wegnimmt
 
@@ -2274,8 +2274,8 @@ Maximum 199.
 
 > **Damit trägt Abnahmekriterium 5 eine Messung.** Bis hierher war „passt auf ein Blatt"
 > eine Ableitung aus der Wortobergrenze von 25 Wörtern (konzept.md, Schritt 4). Die Grenze
-> trägt das Kriterium weiterhin — beurteilt wurde sie bei der Abnahme T17 (konzept.md,
-> Schritt 4, Nachtrag 26.08.2026: sie bleibt bei 25).
+> trägt das Kriterium weiterhin — beurteilt wurde sie bei der Abnahme T17 (konzept.md
+> §4, „Der erste Durchlauf je Buch ist ein Kalibrierdurchlauf": sie bleibt bei 25).
 
 Diese Rechnung ergab `MAX_ENTRIES = 36`. Seit dem Nachtrag unten gilt das nicht mehr —
 geprüft und gültig ist **33** (`libreverbum/printout.py`).
@@ -2525,7 +2525,8 @@ den Fehler deshalb zuerst woanders.
     Sammelaktion **ganz**, statt nachzufragen; `_ask_action` daneben fragt bei ungültiger
     Eingabe erneut. Für den Nutzer bedeutet der Vertipper 25 Einzelfragen statt eines
     Tastendrucks — und beim ersten Durchlauf je Buch ist genau dieser Tastendruck der ganze
-    Zweck (konzept.md, Schritt 4, Nachtrag 26.08.2026)~~ — **behoben am 14.09.2026**
+    Zweck (konzept.md §4, „Der erste Durchlauf je Buch ist ein Kalibrierdurchlauf")~~ —
+    **behoben am 14.09.2026**
     (Nutzerentscheidung): Enter bleibt die ausdrückliche Ablehnung „keine Sammelaktion" und
     liefert weiterhin sofort `set()`; jede andere ungültige Antwort — keine Zahl oder
     außerhalb der Liste — führt stattdessen zu einer erneuten Frage, die die eingegebene
@@ -2608,7 +2609,8 @@ entscheidet das Wörterbuch beim Nachschlagen, nicht die Liste.
 Leereingabe ist dabei keine Antwort. Beide Antworten sind teuer und ungleich teuer: Eine
 gewählte Stufe trägt mit einem Tastendruck tausende ungesehene Behauptungen ins Profil,
 „keine Angabe" verzichtet ganz darauf und verlangt später einen Kalibrierdurchlauf von
-Hand (konzept.md, Schritt 4, Nachtrag 26.08.2026). „Keine Angabe" muss deshalb
+Hand (konzept.md §4, „Der erste Durchlauf je Buch ist ein Kalibrierdurchlauf"). „Keine
+Angabe" muss deshalb
 ausgeschrieben werden — anders als beim Wörterbuchbezug, wo Enter Zustimmung bedeutet
 (Abschnitt 2, „Nachtrag 27.08.2026"), und aus demselben Grund, aus dem die Leereingabe in
 der Triage bis zur Behebung am 14.09.2026 eine Falle war (Abschnitt 9, „Offene Punkte").
@@ -2631,7 +2633,8 @@ Abnahmekriterium und trotzdem den Zweck des Programms.
 
 > Ein leeres Profil ist kein neutraler Ausgangszustand. Es ist die Behauptung, der Nutzer
 > könne kein einziges englisches Wort — und der erste Durchlauf je Buch geht dafür als
-> Kalibrierdurchlauf drauf (konzept.md, Schritt 4, Nachtrag 26.08.2026).
+> Kalibrierdurchlauf drauf (konzept.md §4, „Der erste Durchlauf je Buch ist ein
+> Kalibrierdurchlauf").
 
 ### `wordfreq` statt WikDicts `importance` — gemessen
 
@@ -2912,8 +2915,8 @@ Kern bildet auf dem Wendungsweg nach derselben Vorschrift Grundformen aus mehrer
 
 ## 12. Blockweise Triage mit Vorladen — entschieden
 
-> Entschieden am 01.09.2026. Inhaltliche Seite: konzept.md §4, „Nachtrag 01.09.2026 — aus
-> der Obergrenze ist eine Blockgröße geworden".
+> Entschieden am 01.09.2026. Inhaltliche Seite: konzept.md §4, „Blockweise Triage mit
+> Fortsetzungsfrage".
 
 **Die Triage läuft in Blöcken.** Ein Block sind 25 Worteinträge (11 Wendungen), aufgelöst,
 angezeigt, durchentschieden; danach die **Fortsetzungsfrage**, und bei „ja" der nächste
@@ -2939,7 +2942,8 @@ Erfindung, sondern fällt mit der Anzeigeeinheit zusammen.
 
 `WORD_BLOCK_SIZE = 25` ist dieselbe Zahl wie die frühere Wortobergrenze, aber nicht mehr
 dieselbe Aussage: Sie beschränkt nichts, sie portioniert. Beurteilt ist sie in der Praxis
-(konzept.md §4, „Nachtrag 26.08.2026") und bleibt deshalb stehen.
+(konzept.md §4, „Der erste Durchlauf je Buch ist ein Kalibrierdurchlauf") und bleibt
+deshalb stehen.
 
 `EXPRESSION_BLOCK_SIZE = 11` **verliert dagegen seine bisherige Herleitung.** Sie lautete
 `printout.MAX_ENTRIES - WORD_LIMIT` — was die Triage durchlässt, muss zusammen auf ein Blatt

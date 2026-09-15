@@ -80,7 +80,7 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | Sprachniveau (nach GER, A1–C1, für die Vorbelegung) | `cefr_level` (`CefrLevel`) — **nicht** `level`, das ist die Gliederungsebene der Navigation |
 | unbekannt / bekannt / neue Bedeutung eines bekannten Wortes (Abgleich Kapitelwortschatz ↔ Profil) | `unknown` / `known` / `new_meaning_of_known_word` (`VocabularyStatus`, in `libreverbum/profile.py` — **nicht** `entities.py`, wo `KnowledgeState`, `Origin`, `CardDirection` und `CefrLevel` liegen) |
 | Triage, Sammelaktion, Wortobergrenze | `triage`, `bulk_mark`, `word_limit` |
-| Block (eine Portion der Triage), Blockgröße | `block`, `block_size` — die Zahl, nach der die Fortsetzungsfrage kommt (konzept.md §4, „Nachtrag 01.09.2026"); **nicht** `limit`, das im Kern weiterhin die Obergrenze **eines** Aufrufs ist |
+| Block (eine Portion der Triage), Blockgröße | `block`, `block_size` — die Zahl, nach der die Fortsetzungsfrage kommt (konzept.md §4, „Blockweise Triage mit Fortsetzungsfrage"); **nicht** `limit`, das im Kern weiterhin die Obergrenze **eines** Aufrufs ist |
 | Fortsetzungsfrage (nach jedem Block) | `ask_continue` |
 | Vorladen (des nächsten Blocks, während der Nutzer entscheidet) | `prefetch` |
 | noch nicht geprüfte Einträge (der Rest nach einem Block) | `remaining` |
@@ -399,11 +399,13 @@ guten Namen, wird stattdessen umbenannt.
 Zwei Fälle, die auseinanderzuhalten sind.
 
 **Nachtrag bei Erkenntnis.** War die alte Aussage plausibel und schlüge sie jemand sonst
-erneut vor, bleibt sie stehen und bekommt einen datierten Nachtrag. Der Musterfall ist
+erneut vor, bleibt sie stehen und bekommt einen datierten Nachtrag. Der Musterfall war
 der Nachtrag zum LLM-Ansatz bei Wendungen (konzept.md, Abschnitt 5): „Wendungen ohne
-Wörterbucheintrag bleiben dem LLM allein überlassen" klingt einleuchtend — ohne die
-Notiz, dass die Messung genau daran gescheitert ist, wird es wieder so gebaut. Der
-Nachtrag kostet acht Zeilen und spart einen Messdurchlauf.
+Wörterbucheintrag bleiben dem LLM allein überlassen" klang einleuchtend — ohne die Notiz,
+dass die Messung genau daran gescheitert ist, wäre es wieder so gebaut worden. Der
+Nachtrag kostete acht Zeilen und sparte einen Messdurchlauf; mit dem Einfalten der
+Phase-1-Nachträge (15.09.2026) ist die Aussage in den Fließtext gewandert, im alten
+Wortlaut nachzulesen mit `git show b663678:konzept.md`.
 
 **Überschreiben bei ersetzter Festlegung.** Benennungen, Formalia und abgelöste
 Entscheidungen werden im Text geändert. Die Historie hat Git. Niemand wird `bedeutung`

@@ -55,7 +55,7 @@ zufällig, für eindeutige Wörter wie `watch`. Die Auflösung, welche Bedeutung
 tatsächlich meint, braucht das Modell (`translation.choose_sense`) — und *das* ist Sache des
 Kerns (technik.md §7: „`translation` als einziger Ort mit Modellzugriff"), nicht der
 Oberfläche. `pipeline.resolve_triage_entries` löst deshalb **vor** der Triage auf, wie es
-konzept.md, Nachtrag 17.08.2026 verlangt: „Die Triage kommt nach dem Beschaffen der
+konzept.md, „Der Kernablauf" verlangt: „Die Triage kommt nach dem Beschaffen der
 Bedeutungen." Schreib- und Leseseite sind seither dieselbe Stelle: `resolve_triage_entries`
 prüft den Kenntnisstand der aufgelösten Bedeutung selbst (`pipeline._all_candidates_known`
 für den Vorfilter, ein frischer `profile.compare_chapter_vocabulary`-Aufruf je aufgelöster
@@ -80,9 +80,10 @@ Begründung:
   Ohne eigenen Deckel wäre das dem Zufall überlassen
 
 Aus der Wortobergrenze ist seit dem 01.09.2026 eine Blockgröße geworden (konzept.md §4,
-„Nachtrag 01.09.2026 — aus der Obergrenze ist eine Blockgröße geworden"): `WORD_BLOCK_SIZE`
+„Blockweise Triage mit Fortsetzungsfrage"): `WORD_BLOCK_SIZE`
 bleibt bei 25 — die Abnahme T17 hat die Zahl weder gestrichen noch zur Einstellung gemacht,
-sondern in der Praxis beurteilt und bestätigt (konzept.md §4, „Nachtrag 26.08.2026") —, aber
+sondern in der Praxis beurteilt und bestätigt (konzept.md §4, „Der erste Durchlauf je Buch
+ist ein Kalibrierdurchlauf") —, aber
 sie begrenzt nichts mehr, sie portioniert. `EXPRESSION_BLOCK_SIZE` ist ein eigenes Literal
 (11), siehe der Kommentar dort und technik.md §12, „Was die Blockgrößen bedeuten — und
 warum 11 bleibt".
@@ -175,10 +176,10 @@ from libreverbum.profile import VocabularyStatus
 ReadLine = Callable[[str], str]
 WriteLine = Callable[[str], None]
 
-# konzept.md §4, „Nachtrag 01.09.2026 — aus der Obergrenze ist eine Blockgröße geworden":
+# konzept.md §4, „Blockweise Triage mit Fortsetzungsfrage":
 # WORD_BLOCK_SIZE beschränkt nichts mehr, sie portioniert. Die Zahl selbst (25) ist beurteilt
-# und bestätigt (konzept.md §4, „Nachtrag 26.08.2026 — die Obergrenze bleibt bei 25") — kein
-# Schalter dafür (dokumentation.md §4 Regel 14).
+# und bestätigt (konzept.md §4, „Der erste Durchlauf je Buch ist ein Kalibrierdurchlauf") —
+# kein Schalter dafür (dokumentation.md §4 Regel 14).
 WORD_BLOCK_SIZE = 25
 
 # technik.md §12, „Was die Blockgrößen bedeuten — und warum 11 bleibt": Wendungen sind
