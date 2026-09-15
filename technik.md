@@ -1659,8 +1659,9 @@ Anweisung an den Menschen beschreibt, hier als Anzeige im Werkzeug.
 ### `mypy --strict` trägt die spaCy-Typen
 
 Ob die strenge Typprüfung mit spaCy im Spiel noch trägt, stand hier als offener Punkt und
-war der Grund, warum Phase 1 mit `extraction` und `dictionary` begonnen hat. Mit dem ersten Modul ist
-die Frage beantwortet: **ja**. spaCy liefert `py.typed` mit, mypy löst `token.pos_`,
+war der Grund, warum Phase 1 mit `extraction` und `dictionary` begonnen hat. Mit dem
+ersten Modul ist die Frage beantwortet: **ja**. spaCy liefert `py.typed` mit, mypy löst
+`token.pos_`,
 `token.lemma_` und `sent.text` zu `str` auf und `token.is_alpha` zu `bool`;
 `extraction.py` besteht `strict` ohne eine einzige Ausnahme.
 
@@ -1954,7 +1955,8 @@ Zwei Beobachtungen daraus:
 
 > **Regel:** Kapitel kommen aus der Navigation (`nav.xhtml` oder `toc.ncx`), gezählt nach
 > eindeutigen Zielen; ein Kapitel reicht von seinem Ziel bis zum nächsten und umfasst alle
-> Dokumente der Lesereihenfolge dazwischen. Fehlt die Navigation, gilt jedes Dokument der
+> Dokumente der Lesereihenfolge dazwischen („Ein Kapitel ist nicht ein Dokument" unten
+> belegt den zweiten Halbsatz). Fehlt die Navigation, gilt jedes Dokument der
 > Lesereihenfolge als ein Kapitel — zusammen mit einem sichtbaren Hinweis, dass die Grenzen
 > nicht aus dem Buch stammen.
 
@@ -2167,10 +2169,11 @@ und korrigierbar — der still überschriebene Lernfortschritt der Gegenseite w�
 
 ### Ein Wort ohne Wörterbucheintrag kostet nicht mehr den ganzen Export
 
-Am 01.09.2026 aus einem Kapiteldurchlauf gemeldet: Ein „lernen" auf `jabbar` — ein Wort, das WikDict nicht
-führt — ließ `cli.export.write_exports` abbrechen, und weil `anki.export_deck` der **erste**
-der beiden Exporte ist, entstand gar keine Datei: kein Deck, keine Druckseite, auch nicht
-für die übrigen Karten. Die Triage war da bereits vollständig durchlaufen.
+Am 01.09.2026 aus einem Kapiteldurchlauf gemeldet: Ein „lernen" auf `jabbar` — ein Wort,
+das WikDict nicht führt — ließ `cli.export.write_exports` abbrechen, und weil
+`anki.export_deck` der **erste** der beiden Exporte ist, entstand gar keine Datei: kein
+Deck, keine Druckseite, auch nicht für die übrigen Karten. Die Triage war da bereits
+vollständig durchlaufen.
 
 Zwei Dinge trafen zusammen:
 
@@ -2901,8 +2904,8 @@ Kern bildet auf dem Wendungsweg nach derselben Vorschrift Grundformen aus mehrer
   Partikelverb wie `give up` entstünde beides, und die `VERB`-Fassung träfe die Vorbelegung
   nicht. Heute greift das nicht — keiner der neun Mehrworteinträge der eingefrorenen Liste
   entsteht auf dem Partikelweg (an 28 echten Kapiteln geprüft, es sind Kontraktionen und
-  Präpositionalfügungen), und die Liste ist per SHA-256 eingefroren. Eine neu erzeugte
-  Liste mit einem echten Partikelverb wäre hier nachzuziehen
+  Präpositionalfügungen), und die Liste ist per SHA-256 eingefroren. Eine neu erzeugte Liste
+  mit einem echten Partikelverb wäre hier nachzuziehen
 
 ---
 
@@ -2963,13 +2966,14 @@ Blockgröße ist eine Entscheidung der Bedienung und steht deshalb in `cli`, nic
 
 **Die Häufigkeitsordnung gilt innerhalb eines Blocks, nicht über deren Folge.** Unter der
 Vorgabe `order = "new_words_first"` legt `resolve_triage_entries` erst alle sicheren
-Treffer vor, dann die teilweise bekannten (Abschnitt 9, „Einstellungen: `config.toml`") — jede Gruppe
-für sich nach Häufigkeit. Ein Folgeaufruf bildet dieselbe Verkettung auf dem Rest, und
-sobald die sicheren Treffer aufgebraucht sind, **springt der nächste Block an die Spitze
-der teilweise bekannten zurück**. Gemessen an `tools/sherlock.epub` Kapitel 2 (1410
-Worteinträge, 963 sichere / 447 teilweise bekannte, `limit = 25`, Durchsicht von d4f10fc):
-Block 38 endet bei Häufigkeit 1, **Block 39 beginnt bei 41** („have"), Block 40 bei 16
-(„more"). Unter `order = "frequency"` tritt der Sprung in 57 Blöcken kein einziges Mal auf.
+Treffer vor, dann die teilweise bekannten (Abschnitt 9, „Einstellungen: `config.toml`") —
+jede Gruppe für sich nach Häufigkeit. Ein Folgeaufruf bildet dieselbe Verkettung auf dem
+Rest, und sobald die sicheren Treffer aufgebraucht sind, **springt der nächste Block an
+die Spitze der teilweise bekannten zurück**. Gemessen an `tools/sherlock.epub` Kapitel 2
+(1410 Worteinträge, 963 sichere / 447 teilweise bekannte, `limit = 25`, Durchsicht von
+d4f10fc): Block 38 endet bei Häufigkeit 1, **Block 39 beginnt bei 41** („have"), Block 40
+bei 16 („more"). Unter `order = "frequency"` tritt der Sprung in 57 Blöcken kein einziges
+Mal auf.
 
 Das ist hingenommen und nicht übersehen: Es geht nichts verloren, die Auswahlstrategie ist
 am 25.08.2026 mit Messwerten so entschieden, und wer Block 39 erreicht, hat rund 950
@@ -3426,13 +3430,18 @@ Am gebauten Code aus T4 gegengemessen (19.08.2026, an denselben zwei Romanen): *
 (Sherlock) und **22 %** (Dorian Gray) statt 21 % und 19 % — die Überschrift trägt damit
 weiterhin, der getrennte Anteil ist eher größer als kleiner geworden.
 
-Offen bleibt ein anderer: **394 Vorkommen mit Partikel haben keinen
-Wörterbucheintrag** — `take up`, `throw down`, `bring in`, `start off`. Sie gehören
-nach Regel 10 als `uncertain` markiert, nicht verworfen.
+Offen bleibt ein anderer: **394 Vorkommen mit Partikel haben keinen Wörterbucheintrag** —
+`take up`, `throw down`, `bring in`, `start off`. Sie gehören nach Regel 10 als
+`uncertain` markiert, nicht verworfen.
 
 Eine Zahl aus einem Detektor ohne Wortartbestimmung ist dabei nur eine Obergrenze, keine
-Messung — die erste Zählung vom 11.08.2026 hatte ohne Wortartbestimmung noch „rund 51 %"
-ergeben, mehr als das Doppelte der Zahl oben.
+Messung: Die erste Zählung vom 11.08.2026 lief über
+[`tools/mwe_check.py`](tools/mwe_check.py), zählte **196 zusammenhängend gegen 205
+getrennt** und ergab damit „rund 51 %, etwa die Hälfte, nicht ein Randfall" — mehr als das
+Doppelte der gemessenen 21 %/19 %. Ursache ist die Schwäche, die das Skript an sich selbst
+vermerkt: Es sucht Verb und Partikel ohne Wortartbestimmung im Satzzusammenhang und zählt
+Wortpaare mit, die gar kein Phrasal Verb bilden. Wer die 51 % zitiert, zitiert eine
+Obergrenze.
 
 ### Das LLM darf Wendungen nicht frei suchen
 

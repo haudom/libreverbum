@@ -315,11 +315,10 @@ def _read_ncx(archive: zipfile.ZipFile, href: str) -> list[tuple[str, str, int]]
 def _read_ncx_points(
     parent: ElementTree.Element, level: int, base: str, entries: list[tuple[str, str, int]]
 ) -> None:
-    """Tiefensuche in Dokumentreihenfolge über verschachtelte `navPoint` (technik.md §8,
-    „Ein Kapitel ist nicht ein Dokument"): je `navPoint` sein eigener Eintrag, dazu — falls
-    vorhanden —
-    seine verschachtelten `navPoint` eine Ebene tiefer. `_deduplicate_by_target` stützt
-    sich auf die unveränderte Reihenfolge (Sherlock-Fall 18→14)."""
+    """Tiefensuche in Dokumentreihenfolge über verschachtelte `navPoint` (technik.md §8, „Ein
+    Kapitel ist nicht ein Dokument"): je `navPoint` sein eigener Eintrag, dazu — falls vorhanden —
+    seine verschachtelten `navPoint` eine Ebene tiefer. `_deduplicate_by_target` stützt sich auf
+    die unveränderte Reihenfolge (Sherlock-Fall 18→14)."""
     for point in parent.findall("ncx:navPoint", _NS):
         label_element = point.find("ncx:navLabel/ncx:text", _NS)
         content = point.find("ncx:content", _NS)

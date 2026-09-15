@@ -1425,10 +1425,10 @@ def test_read_chapter_keeps_a_paragraph_boundary_between_adjacent_paragraphs(
 def test_read_chapter_reads_the_text_of_every_document_in_a_multi_document_chapter(
     mini_epub_with_navigation: Path,
 ) -> None:
-    """technik.md §8, „Ein Kapitel ist nicht ein Dokument": `read_chapter` liest alle
-    Dokumente eines Kapitels und fügt ihren Fließtext mit einer
-    Absatzgrenze zusammen wie zwischen zwei Blockelementen — chapter3.xhtml gehört zum
-    zweiten Kapitel dieser Vorrichtung und muss im gelesenen Text enthalten sein."""
+    """technik.md §8, „Ein Kapitel ist nicht ein Dokument": `read_chapter` liest alle Dokumente
+    eines Kapitels und fügt ihren Fließtext mit einer Absatzgrenze zusammen wie zwischen zwei
+    Blockelementen — chapter3.xhtml gehört zum zweiten Kapitel dieser Vorrichtung und muss im
+    gelesenen Text enthalten sein."""
     structure = epub.read_structure(mini_epub_with_navigation)
 
     chapter = epub.read_chapter(mini_epub_with_navigation, structure.book, structure.chapters[1])
@@ -2117,10 +2117,10 @@ def test_count_chapter_words_reports_zero_for_a_chapter_that_is_pure_boilerplate
 def test_count_chapter_words_counts_every_document_of_a_multi_document_chapter(
     mini_epub_with_navigation: Path,
 ) -> None:
-    """technik.md §8, „Ein Kapitel ist nicht ein Dokument": ein mehrdokumentiges Kapitel
-    wird über alle seine Dokumente gezählt, nicht nur über sein
-    Navigationsziel — chapter2.xhtml und chapter3.xhtml gehören beide zum zweiten Kapitel
-    dieser Vorrichtung (Kommentar bei `_NAV_ENTRIES` in tests/conftest.py)."""
+    """technik.md §8, „Ein Kapitel ist nicht ein Dokument": ein mehrdokumentiges Kapitel wird über
+    alle seine Dokumente gezählt, nicht nur über sein Navigationsziel — chapter2.xhtml und
+    chapter3.xhtml gehören beide zum zweiten Kapitel dieser Vorrichtung (Kommentar bei
+    `_NAV_ENTRIES` in tests/conftest.py)."""
     structure = epub.read_structure(mini_epub_with_navigation)
     second_chapter = structure.chapters[1]
     assert second_chapter.documents == ["OEBPS/chapter2.xhtml", "OEBPS/chapter3.xhtml"]
@@ -2143,9 +2143,8 @@ def test_count_chapter_words_counts_every_document_of_a_multi_document_chapter(
 def test_count_chapter_words_reports_unknown_not_zero_for_a_missing_document(
     tmp_path: Path,
 ) -> None:
-    """technik.md §8, „Ein Kapitel ist nicht ein Dokument": Ein Kapitel mit fehlendem
-    Dokument im Archiv
-    liefert unbekannt (`None`), nicht `0` — `0` sähe aus wie ein leeres Kapitel und wäre
+    """technik.md §8, „Ein Kapitel ist nicht ein Dokument": Ein Kapitel mit fehlendem Dokument im
+    Archiv liefert unbekannt (`None`), nicht `0` — `0` sähe aus wie ein leeres Kapitel und wäre
     der stille Fehlschlag aus Regel 13. Die übrigen Kapitel bekommen trotzdem ihre Zahl."""
     path = tmp_path / "one_missing_document.epub"
     _write_single_document_epub(path, document="OEBPS/chapter1.xhtml", xhtml=_MARKUP_NOISE_XHTML)
@@ -2243,10 +2242,10 @@ def test_book_two_and_three_span_their_two_split_documents_each(real_dune_epub_p
 def test_chapter_word_counts_match_the_measured_table_in_technik_md(
     real_dune_epub_path: Path,
 ) -> None:
-    """technik.md §8, „Ein Kapitel ist nicht ein Dokument": Die gemessene Tabelle —
-    78.774 / 63.513 / 64.637
-    Wörter für die drei Mehrdokument-Kapitel — ist die Gegenprobe, dass die Anzeige
-    (`count_chapter_words`) und die Dokumentliste (`documents`) dasselbe Kapitel meinen."""
+    """technik.md §8, „Ein Kapitel ist nicht ein Dokument": Die gemessene Tabelle — 78.774 /
+    63.513 / 64.637 Wörter für die drei Mehrdokument-Kapitel — ist die Gegenprobe, dass die
+    Anzeige (`count_chapter_words`) und die Dokumentliste (`documents`) dasselbe Kapitel
+    meinen."""
     structure = epub.read_structure(real_dune_epub_path)
 
     counts = epub.count_chapter_words(real_dune_epub_path, structure.chapters)
@@ -2261,11 +2260,9 @@ def test_chapter_word_counts_match_the_measured_table_in_technik_md(
 def test_read_chapter_includes_text_from_the_third_split_document_of_book_one(
     real_dune_epub_path: Path,
 ) -> None:
-    """technik.md §8, „Ohne die vollständige Dokumentliste wäre das ein stiller Verlust":
-    Ohne diese Regel läge rund 63 % des Buchs außerhalb jedes Kapitels — der Text des
-    dritten Dokuments
-    von „Book 1 DUNE" (`part2_split_002.xhtml`) muss jetzt über `read_chapter` erreichbar
-    sein."""
+    """technik.md §8, „Ohne die vollständige Dokumentliste wäre das ein stiller Verlust": Ohne
+    diese Regel läge rund 63 % des Buchs außerhalb jedes Kapitels — der Text des dritten Dokuments
+    von „Book 1 DUNE" (`part2_split_002.xhtml`) muss jetzt über `read_chapter` erreichbar sein."""
     structure = epub.read_structure(real_dune_epub_path)
     book_one = next(chapter for chapter in structure.chapters if chapter.title == "Book 1 DUNE")
 
