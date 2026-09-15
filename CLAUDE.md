@@ -90,7 +90,7 @@ darüber, *woran* geprüft wird:
 **Dateien immer mit `encoding="utf-8"` öffnen.** Unter Windows zerstört die
 Systemkodierung sonst still typografische Zeichen im Buchtext.
 
-## Architektur (technik.md §1 und §7)
+## Architektur (technik.md §1, §7 und §14)
 
 - **Python als einzige Sprache**, Oberfläche Qt Quick über PySide6
 - Der **Kern** — EPUB-Einlesen, Wortschatzextraktion, Profil, Übersetzung, Export — ist
@@ -100,6 +100,13 @@ Systemkodierung sonst still typografische Zeichen im Buchtext.
 - **Modulkarte und Importregel:** zehn Module entlang der sechs Schritte des Kernablaufs.
   Jeder Schritt importiert nur `entities`, verkettet wird allein in `pipeline`. Die Karte
   sagt, wo etwas hingehört — Module entstehen, wenn sie gebraucht werden, nicht vorab
+- **Drei Pakete neben dem Kern:** `cli/` (Kommandozeile, Phase 1, seit Phase 2
+  eingefroren mit den Ausnahmen `--chapters` und `--assess`), `gui/` (Qt-Oberfläche,
+  Phase 2) und `app/` (Anwendungsschicht — Datenverzeichnis, `config.toml`,
+  Modellauflösung, Exportnamen, Triage-Buchung, Vorladen; ohne Qt, ohne Konsole).
+  **Importrichtung:** `app/` importiert den Kern, wird von `cli/` und `gui/` importiert,
+  vom Kern nie; `cli/` und `gui/` importieren sich nicht gegenseitig.
+  `tests/test_architecture.py` prüft alle Richtungen. Begründung: technik.md §14
 - **Lizenz jeder neuen Bibliothek vor der Aufnahme prüfen** (Regel 15, starkes Copyleft)
 
 ## Prüfen vor „fertig" (technik.md §6)
@@ -132,6 +139,14 @@ pytest             # führt Tests aus
 Zwei Prüfregeln sind abgeschaltet, weil sie gegen die Sprachregel arbeiten (`RUF001`–`003`
 melden Gedankenstrich und typografische Anführungszeichen). Wer sie wieder anschaltet,
 liest erst technik.md §6, „Zwei Prüfregeln arbeiten gegen die Hausordnung".
+
+**Ergänzung für die Oberfläche (seit Phase 2, technik.md §14).** Tests, die `PySide6`
+brauchen, tragen die Marke `needs_gui` und laufen mit `QT_QPA_PLATFORM=offscreen`
+(`conftest.py` setzt das, eine `QGuiApplication` je Testlauf). Das Tor allein reicht bei
+einem GUI-AP nicht: Dazu kommt die Screenshot-Prüfschleife — `tools/gui_screenshot.py
+<screen> <png>` rendert bei 1280×800 und bei der Mindestgröße, QML-Warnungen gelten als
+Fehlschlag, geprüft wird gegen eine vorab notierte „verifiziert heißt"-Liste des
+Bildschirms. Ohne sie meldet ein Agent auch bei kaputter Seite Erfolg.
 
 **Nach den vier Befehlen folgt die Durchsicht.** Sie ist kein fünfter Befehl, sondern die
 Antwort auf eine andere Frage: Das Tor prüft **Form** — ob das Gebaute das Richtige tut,
@@ -282,7 +297,11 @@ die davon abhängen, tragen `needs_dictionary`, `needs_model`, `needs_epub`,
     ihren eigenen Commit
   - **Ein Commit je abgeschlossener Sache**, nicht je Sitzung. Liegen zwei Anliegen im
     Arbeitsbaum, werden es zwei Commits
-  - Auf `main` und **ohne zu pushen**. Veröffentlichen bleibt eine eigene Entscheidung
+  - **Seit Phase 2 (E2, technik.md §14) auf dem Zweig `phase-2`**, alle Commits der
+    Phase dorthin, weiterhin **ohne zu pushen**. Veröffentlichen bleibt eine eigene
+    Entscheidung. `main` bleibt bis zum Tor der Phase 2 der abgenommene Stand der
+    Phase 1 und wird dort per Fast-Forward nachgezogen. Diese Zeile fällt am Tor der
+    Phase 2 zurück auf „auf `main`"
   - **Nur die eigenen Dateien werden gestagt** — `git add` mit den Dateien namentlich, nie
     `git add -A` und nie `git commit -a`; `git status --short` vor und nach dem Commit.
     Es laufen regelmäßig zwei Bearbeiter gleichzeitig (siehe „Aktueller Stand" oben), und

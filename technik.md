@@ -26,6 +26,7 @@ am saubersten auf:
 | 11 | Vorbelegung des Grundwortschatzes | **entschieden** (31.08.2026) |
 | 12 | Blockweise Triage mit Vorladen | **entschieden** (01.09.2026) |
 | 13 | Konsolenausgabe während des Kapiteldurchlaufs | **entschieden** (02.09.2026) |
+| 14 | Oberfläche — Aufteilung und Anwendungsschicht (E1–E4) | **entschieden** (15.09.2026) |
 
 Frage 5 stand anfangs nicht auf der Liste. Sie ist aus Frage 2 entstanden, deren Messung
 mit der Folgerung endete, nicht die Datenquelle sei der Engpass, sondern die
@@ -66,6 +67,13 @@ Zwischen dem Laden des Sprachmodells und dem ersten sichtbaren Triage-Eintrag bl
 Bildschirmausgabe bis zum 02.09.2026 unverändert bei „Lade Sprachmodell …" stehen, während
 `run_chapter` 22 bis 29 s lang das ganze Buch analysierte (Abschnitt 5) — der stille
 Fehlschlag aus Regel 13. Siehe Abschnitt 13.
+
+Frage 14 stammt aus dem Übergang in Phase 2: Mit `gui/` gibt es zum ersten Mal eine zweite
+Oberfläche, und vier Vorfragen blockierten den Start der Phase (`bauplan-phase2.md`,
+Abschnitt 1, E1 bis E4) — ob Qt Quick trotz einer Recherche zu web-basierten
+KI-Werkzeugen die richtige Wahl bleibt, wie die beiden Oberflächen sich die Arbeit
+teilen und wo Phase 2 versioniert wird. Alle vier sind am 15.09.2026 entschieden. Siehe
+Abschnitt 14.
 
 Frage 2 stand bewusst weit oben, weil sie das Konzept hätte kippen können: Ein freies,
 offline nutzbares EN→DE-Wörterbuch mit sauberer Lizenz **und** Bedeutungsangaben ist
@@ -130,6 +138,8 @@ offen").
 | §12 | Ob ein Folgelauf die Triage-Ereignisse des Kapitels wiederverwendet |
 | §13 | Ob die Zählung nach Kapiteln bei einem ungleich verteilten Buch noch etwas aussagt |
 | §13 | Bei nur einem Kapitel: Fortschritt oder Ruckeln — nicht an echten Nutzern geprüft |
+| §14 | Die konkrete Gestaltungsrichtung (Farbtoken, Schriftrollen, Signaturelement) ist noch nicht gewählt |
+| §14 | Ob Qt Quick bei Sonnet tatsächlich mehr Durchsichtsrunden braucht als ein Web-Stack — Vermutung der Recherche, nicht gemessen |
 
 ---
 
@@ -3312,6 +3322,107 @@ Einträge schweigt weiter.
 - **Bei einem Buch mit nur einem Kapitel** zeigen `READING_BOOK` und `ANALYZING_BOOK` je
   genau eine Zeile mit „1 von 1" — ob das noch als Fortschritt wahrgenommen wird oder nur
   als Ruckeln, ist nicht an einem echten Nutzer geprüft
+
+---
+
+## 14. Oberfläche — Aufteilung und Anwendungsschicht — entschieden
+
+**Qt Quick über PySide6 bleibt die Oberflächentechnik (E1). Phase 2 läuft auf dem Zweig
+`phase-2`, ohne Push (E2). Die Kommandozeile ist eingefroren, mit zwei Ausnahmen (E3). Ein
+drittes Paket `app/` trägt, was beide Oberflächen brauchen und der Kern nicht kennen darf
+(E4).** Vier Entscheidungen von Dominik, 15.09.2026, auf Vorlage von
+`bauplan-phase2.md`, Abschnitt 1 — die vollständige Abwägung (Tabellen, verworfene
+Alternativen im Einzelnen) stand dort und fällt mit dem Tor der Phase 2 weg, wenn das
+Dokument gelöscht wird (danach nachzulesen mit `git log --all -- bauplan-phase2.md`);
+hier steht, was dauerhaft gilt.
+
+### E1 — Qt Quick bleibt, der Web-Hybrid wird erneut verworfen
+
+Abschnitt 1 hat Qt Quick am 11.08.2026 entschieden und den Web-Hybrid **nach Aufwand**
+verworfen, nicht nach Möglichkeit. Eine Recherche vom 15.09.2026 zu hochwertigen
+KI-gebauten Oberflächen (`recherche_hochwertige_UIs_mit_Claude.md`, nicht versioniert —
+sie ist für Web-Frontends geschrieben und passt in keine der drei Dokumentrollen, E14)
+brachte ein neues Argument auf den Tisch: Die Werkzeuge, mit denen ein Agent gute
+Oberflächen baut, sind für React/Tailwind/shadcn am dichtesten; für Qt/QML kommt die
+Recherche gar nicht vor.
+
+**Entschieden: Qt Quick bleibt.** Was die Recherche als wirksamsten Hebel nennt — eine
+explizite Gestaltungsrichtung mit Token statt „modern" zu sagen, eine
+Screenshot-Prüfschleife, die Trennung von Bauen und Prüfen — ist technikneutral und mit
+Qt zu haben (Stufe 1 der Recherche vollständig; Stufe 2/3 — shadcn, Storybook, Figma —
+entfällt). Was dem Hybrid gegenüberstand: eine zweite Werkzeugkette (Node ist auf der
+Entwicklungsmaschine nicht installiert), eine Prozessgrenze quer durch die Anwendung, und
+eine Desktop-Auslieferung des Hybrids wäre ein eigenes Projekt (pywebview/Tauri) geworden
+— gegen eine bereits dokumentierte Entscheidung. Verworfen ist also der Hybrid als
+**Aufwand**, nicht als Möglichkeit: Die Architekturregel aus Abschnitt 1 hält die Tür
+weiter offen, und `app/` (E4) wäre auch für einen späteren HTTP-Dienst die richtige
+Stelle.
+
+Übernommen aus der Recherche, und wohin: siehe die Tabelle unten, „Was aus der Recherche
+in die Oberfläche wandert".
+
+### E2 — Zweig `phase-2`
+
+Block A des Bauplans baut die Export-Verkettung in den Kern um und löst die
+Anwendungsschicht aus `cli/` heraus — beides berührt `cli/`, während Block B den Kern
+erweitert. Ein eigener Zweig hält die funktionierende Kommandozeile der Phase 1 auf
+`main` leicht verfügbar, während Phase 2 daran baut.
+
+**Entschieden:** Zweig `phase-2`, alle Commits der Phase dorthin, kein Push. `main`
+bleibt bis zum Tor der Phase 2 der abgenommene Stand der Phase 1 und wird dort per
+Fast-Forward nachgezogen (CLAUDE.md, „Arbeitsweise"). Die Durchsicht gegen `git archive
+<commit>` (dokumentation.md §10) funktioniert auf jedem Zweig unverändert. Bei der
+Gelegenheit gelöscht: der Zweig `language-rule-rollout` (12.08.2026), vollständig in
+`main` enthalten (`git branch --merged main`).
+
+### E3 — Kommandozeile eingefroren, mit zwei Ausnahmen
+
+Bekommt `cli/` jede neue Funktion der Phase 2 ebenfalls, oder bleibt sie der Zugang der
+Phase 1, der nur weiter funktioniert? Alles doppelt zu bauen hieße, jede
+Bedienentscheidung zweimal zu treffen.
+
+**Entschieden: eingefroren.** Die Kommandozeile bleibt lauffähig — alle ihre Tests bleiben
+grün, Kernänderungen werden dort nachgezogen —, neue Bedienung entsteht in `gui/`. Zwei
+Ausnahmen, wo die Kommandozeile das billigere Prüfgeschirr für eine Kernfunktion ist:
+`--chapters` (Kapitelbereich, AP 5 des Bauplans) und `--assess` (Schwierigkeitscheck,
+AP 7).
+
+### E4 — Anwendungsschicht `app/`
+
+Mit `gui/` gibt es zum ersten Mal zwei Oberflächen. Was beide brauchen und der Kern nach
+Abschnitt 9 nicht kennen darf — Vorgabe des Datenverzeichnisses, `config.toml`, Auflösung
+des Modellnamens, Dateinamen der Exporte, Buchung einer Triage-Entscheidung, Vorladefaden
+— lag bis dahin in `cli/`. Eine Oberfläche, die die andere importiert, wäre möglich, aber
+schief.
+
+**Entschieden:** ein drittes Paket `app/` neben `cli/` und `gui/` — ohne Qt, ohne
+Konsole; importiert den Kern, wird von beiden Oberflächen importiert, vom Kern nie
+(`tests/test_architecture.py` prüft alle drei Richtungen). Regel 14 ist erfüllt: Der
+zweite Anwendungsfall (zwei Oberflächen) liegt vor. Was dagegen **Verkettung von
+Kernschritten** ist — Anki-Deck schreiben, Druckseite schreiben, Triage-Karte im Profil
+buchen — gehört nach Abschnitt 7 in `pipeline`, nicht nach `app/`; das schließt den
+offenen Punkt „Zurückschreiben der Anki-GUID hängt an der Kommandozeile" aus Abschnitt 7.
+
+### Was aus der Recherche in die Oberfläche wandert
+
+| Empfehlung der Recherche | Hier | Wo |
+|---|---|---|
+| Auf **eine** Ästhetik festlegen statt „modern"; Token-System (4–6 Farben, 2 Schriftrollen, Abstände, Signaturelement) | übernommen | `gui/qml/Theme.qml` als einzige Quelle |
+| Keine Standardschriften (Inter, Roboto, Systemschrift) | übernommen — mitgebrachte OFL-Schriften, Lizenz je Schrift belegt (Regel 15) | `NOTICE` |
+| Kompakter Design-Block in CLAUDE.md | übernommen, acht Zeilen, verweist hierher | CLAUDE.md |
+| Screenshot-Verifikationsschleife (zwei Größen, Konsole/QML-Warnungen prüfen, gegen Akzeptanzkriterien) | übernommen: `tools/gui_screenshot.py`, 1280×800 und Mindestgröße, QML-Warnungen als Fehlschlag, „verifiziert heißt"-Listen je Bildschirm | CLAUDE.md, „Prüfen vor »fertig«" |
+| Zwei-Pass mit Selbstkritik („remove one accessory") | übernommen als eigenes AP nach dem ersten und nach dem letzten Oberflächen-Block | Gestaltungsdurchsicht (Opus) |
+| Writer/Reviewer mit frischem Kontext | ist bereits Hausordnung | dokumentation.md §10 |
+| Web-Stack React + Tailwind + shadcn, Chrome-DevTools-/Playwright-/shadcn-MCP, Storybook, Figma, Lighthouse/axe | **nicht** übernommen — Web-Werkzeuge, siehe E1; Kontrast wird aus den Token gerechnet statt mit axe gemessen | — |
+
+### Offene Punkte
+
+- **Die konkrete Gestaltungsrichtung** (Farbtoken, Schriftrollen, Signaturelement) ist mit
+  E1 bis E4 noch nicht gewählt — das ist ein eigener Schritt mit drei vorgelegten
+  Richtungen, aus denen Dominik wählt, bevor Code entsteht
+- **Ob Qt Quick für Desktop-Anwendungen bei Sonnet tatsächlich mehr Durchsichtsrunden
+  braucht** als ein Web-Stack, ist eine Vermutung der Recherche, nicht an diesem Bestand
+  gemessen
 
 ---
 

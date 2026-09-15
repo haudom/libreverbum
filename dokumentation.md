@@ -116,6 +116,22 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | Zwischenspeicher (Wegwerfwert, ohne Nutzerwert selbst neu berechenbar — bisher nur für den buchweiten Eigennamenanteil, technik.md §5, „Entschieden 15.09.2026") | `cache`, `cache_dir` |
 | Einstellungen | `config` |
 | Ausgangssprache (die Sprache, die gelernt wird: des Buchs, der Grundform; Kürzel nach ISO 639-1, heute nur `en`) | `language` (Spalte an `book` und `lemma`, beschlossen 15.09.2026, kommt mit der nächsten Schemafassung — technik.md §4, „Entschieden 15.09.2026: Mehrsprachigkeit bleibt möglich") — **nicht** `lang`, und nicht die Zielsprache: die ist Deutsch und hat keine Spalte |
+| Anwendungsschicht (was beide Oberflächen teilen und der Kern nicht kennt) | `app` (technik.md §14) |
+| Qt-Oberfläche | `gui` |
+| Ansichtsmodell (Zustand und Übergänge eines Bildschirms, ohne QML) | `view_model` |
+| Arbeiter, Hintergrundfaden der Oberfläche | `worker` |
+| Gestaltungsvorgaben, Token | `theme` (`Theme.qml`) |
+| Bildschirm, Ansicht | `screen` |
+| Abdeckung | `coverage` |
+| Schwierigkeit (eines Buchs) | `difficulty` |
+| Lesezeichen (Druckformat) | `bookmark` |
+| Figuren & Orte | `proper_noun_list` |
+| Sicherung / Ausleiten | `backup` / `dump` |
+| Einstufungstest | `placement_test` |
+| Anki-Import | `anki_import`, Herkunft `Origin.IMPORT` |
+| Kapitelbereich | `chapter_range` |
+| Einrichtung, Erstlauf | `setup` |
+| Kapitel ohne Fließtext (Vorspann, Impressum, Bildband) | `ChapterWithoutTextError`, `skip_reason` |
 
 Neue Begriffe kommen hierher, **bevor** der erste Bezeichner damit entsteht.
 
