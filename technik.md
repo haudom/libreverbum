@@ -395,16 +395,16 @@ Lernstand nicht.
 
 **Ist die Datei da, läuft nicht `fetch_dictionary`, sondern nur `ensure_index`.** Der
 Unterschied ist die Zeilenzahlprüfung aus dem Abschnitt oben: Sie ist eine Aussage über
-einen **Bezug** (kam der Download vollständig an?), nicht über jeden Start. Auf jeden Start
-angewandt schlösse sie jedes bewusst kleiner gehaltene Wörterbuch aus — die Testattrappen
-des Projekts fielen mit ihren neun Zeilen als Erste durch. Was beim Start zählt, ist der
-Index: Eine von Hand hinterlegte Datei bringt ihn nicht mit (Abschnitt 3, „Der Engpass ist
-das Nachschlagen, nicht das Modell"), und ohne ihn kostet jedes Kapitel 32 bis 44 s statt
-1,1 s, ohne dass irgendetwas darauf hinwiese — der stille Fehlschlag aus Regel 13, nur als
-Laufzeit statt als falschem Ergebnis. Gemessen am 27.08.2026 gegen `tools/en-de.sqlite3`
-(26,9 MB): Der
-Abgleich beider Indizes kostet, wenn sie bereits liegen, **0,9 bis 1,4 ms je Start**; der
-volle `fetch_dictionary` mit Zeilenzählung 4 bis 8 ms.
+einen **Bezug** (kam der Download vollständig an?), nicht über jeden Start. Auf jeden
+Start angewandt schlösse sie jedes bewusst kleiner gehaltene Wörterbuch aus — die
+Testattrappen des Projekts fielen mit ihren neun Zeilen als Erste durch. Was beim Start
+zählt, ist der Index: Eine von Hand hinterlegte Datei bringt ihn nicht mit (Abschnitt 3,
+„Der Engpass ist das Nachschlagen, nicht das Modell"), und ohne ihn kostet jedes Kapitel
+32 bis 44 s statt 1,1 s, ohne dass irgendetwas darauf hinwiese — der stille Fehlschlag aus
+Regel 13, nur als Laufzeit statt als falschem Ergebnis. Gemessen am 27.08.2026 gegen
+`tools/en-de.sqlite3` (26,9 MB): Der Abgleich beider Indizes kostet, wenn sie bereits
+liegen, **0,9 bis 1,4 ms je Start**; der volle `fetch_dictionary` mit Zeilenzählung 4 bis
+8 ms.
 
 ### Häufigkeitsdaten — unkritisch
 
@@ -412,7 +412,9 @@ Der Kernablauf zählt Häufigkeiten **im Buch selbst**; externe Listen werden er
 den Buch-Schwierigkeitscheck in Phase 2 gebraucht. Zwei Punkte dazu:
 
 - WikDict liefert bereits `importance`-Werte pro Eintrag; für die **Sortierung** in der
-  Triage genügt das. Für die **Vorbelegung** des Grundwortschatzes (Abschnitt 11) taugt
+  Triage dürfte das genügen — gemessen ist es nicht, und benutzt wird es dafür bisher auch
+  nicht: Sortiert wird nach Häufigkeit im Buch beziehungsweise nach `triage.order`
+  (Abschnitt 9). Für die **Vorbelegung** des Grundwortschatzes (Abschnitt 11) taugt
   `importance` dagegen nicht: Es misst, wie gut ein Begriff in Wiktionary belegt ist — `the`
   steht auf Rang 1.125, die Ränge 1 bis 50 gehen an `water`, `cat`, `dog`. An einem echten
   Kapitel gemessen wären damit 18 von 25 in der Triage gezeigten Einträgen längst vorbelegt
@@ -479,17 +481,18 @@ Geprüft wurden bewusst schwierige Paare, jeweils in beiden Richtungen:
 `bank` (Ufer/Bank), `lie` (liegen/lügen), `spring` (Frühling/Feder),
 `light` (Licht/leicht), `watch` (Uhr), `draw` (zeichnen).
 
-Bei rund einer Sekunde je Wort und höchstens 25 neuen Wörtern pro Kapitel liegt die
-Übersetzungsdauer eines Kapitels im Bereich **einer halben Minute** — die Messung unten,
-„Trefferquote und Zeit bei fester Temperatur — 40 echte Einträge über
-`pipeline.run_chapter`", zeigt mit 0,21 bis 3,01 s/Wort ein genaueres und durchweg
-schnelleres Bild; das Budget hält damit erst recht. Geschwindigkeit ist kein Kriterium mehr
-für die **Wahl des Modells** — wohl aber im Schritt davor, siehe unten „Der Engpass ist das
-Nachschlagen, nicht das Modell".
+Die Zeitangabe „rund eine Sekunde" ist seit dem 26.08.2026 überholt: Gemessen wird je
+Einstellung getrennt, und die Spanne ist weit — 0,48 s/Wort für die empfohlene Einstellung
+(`gemma4:e4b`, T = 0), 3,01 s/Wort für `qwen3.5:9b` (unten, „Trefferquote und Zeit bei
+fester Temperatur — 40 echte Einträge über `pipeline.run_chapter`"). Bei 25 neuen Wörtern
+je Kapitel liegt die Übersetzungsdauer damit für die Empfehlung bei rund **zwölf
+Sekunden**, für das langsamste geprüfte Modell aber bei über einer Minute. Geschwindigkeit
+ist kein Kriterium mehr für die **Wahl des Modells** — wohl aber im Schritt davor, siehe
+unten „Der Engpass ist das Nachschlagen, nicht das Modell".
 
 ### Der Engpass ist das Nachschlagen, nicht das Modell
 
-Gemessen an `tools/en-de.sqlite3` mit `dictionary.candidates()`:
+Gemessen am 17.08.2026 an `tools/en-de.sqlite3` mit `dictionary.candidates()`:
 
 | | |
 |---|---|
@@ -512,7 +515,7 @@ Datenbestand.
 
 ### Zwei Drittel der Grundformen eines Kapitels sind mehrdeutig
 
-Die erste der beiden Zahlen, die Entscheidung 10 offen hielt. Gemessen mit
+Die erste der beiden Zahlen, die Entscheidung 10 offen hielt. Gemessen am 18.08.2026 mit
 [`tools/ambiguity_check.py`](tools/ambiguity_check.py) an beiden Romanen, jedes Kapitel
 einzeln — 32 Kapitel, 32.409 Grundformen — über `extraction.extract_vocabulary` (T3) und
 `dictionary.candidates` (T5), also nach den dort geltenden Regeln samt Regel 1:
@@ -575,13 +578,13 @@ der Nutzer wartet, weil beide dieselbe Warteschlange belegen.
 **Wer das nachmisst, braucht eine Attrappe, die ebenso serialisiert.** Eine
 `ThreadingHTTPServer`-Attrappe bedient beide Fäden gleichzeitig und zeigt den Effekt
 schlicht nicht — bei der Durchsicht von 1cfb1e4 kostete genau das einen Fehlversuch, bevor
-der gemessene Wert (7,39 s statt 3,85 s für den ersten Wendungsblock nach einem Abbruch)
-überhaupt reproduzierbar war.
+der am 01.09.2026 gemessene Wert (7,39 s statt 3,85 s für den ersten Wendungsblock nach
+einem Abbruch) überhaupt reproduzierbar war.
 
 ### Bündeln lohnt nicht — eine Anfrage je Wort
 
 Die zweite der beiden Zahlen, die Entscheidung 10 offen hielt, und damit die Sperre
-auf T11. Gemessen mit [`tools/bundle_check.py`](tools/bundle_check.py) an
+auf T11. Gemessen am 19.08.2026 mit [`tools/bundle_check.py`](tools/bundle_check.py) an
 `tools/sherlock.txt`: 64 mehrdeutige Grundformen über `extraction.extract_vocabulary` und
 `dictionary.candidates`, dieselbe Stichprobe für jedes Modell und jede Bündelgröße,
 Bündelgröße 1 als Grundlinie.
@@ -917,23 +920,21 @@ Siehe Abschnitt „Warum die Reihenfolge zwingend ist".
   dass das Modell sonst kein Mittel hat, einen Fehler der Vorstufe zu melden. Mit dieser
   Möglichkeit wird aus einem stillen Fehler ein markierter Eintrag — das Konzept sieht
   Markierung bei Unsicherheit ohnehin vor
-- **Sehr lange Auswahllisten**: `run` hat 48 Bedeutungen, `draw` 16, `light` 14. Ob das
-  die Trefferquote drückt, ist noch nicht gemessen — das braucht den Modellserver und einen
+- **Sehr lange Auswahllisten**: `run` hat 48 Bedeutungen, `draw` 16, `light` 14. Ob das die
+  Trefferquote drückt, ist noch nicht gemessen — das braucht den Modellserver und einen
   Goldstandard je Beleg. Die **Verkürzung** durch den Wortartfilter ist dagegen seit „Was
   der Wortartfilter kürzt — und was er kostet" oben gemessen und keine Vermutung mehr: Sie
-  reicht von 0 % (`get`) bis
-  48 % (`run`), wirkt auf den langen Listen am stärksten (Median über 10 Bedeutungen: 13 auf
-  8) und macht nur **10,6 %** der ohne Filter mehrdeutigen Vorkommen eindeutig. Der
-  Modellaufruf entfällt also selten
+  reicht von 0 % (`get`) bis 48 % (`run`), wirkt auf den langen Listen am stärksten (Median
+  über 10 Bedeutungen: 13 auf 8) und macht nur **10,6 %** der ohne Filter mehrdeutigen
+  Vorkommen eindeutig. Der Modellaufruf entfällt also selten
 - **Was der Wortartfilter jenseits der 3,3 % kostet, ist nicht beziffert.** Die 3,3 % leere
   Auswahllisten aus „Was der Wortartfilter kürzt — und was er kostet" oben sind eine
-  Untergrenze; der Fall einer
-  nicht-leeren, aber falsch-wortartigen Liste — das Modell wählt daraus eine falsche
-  Bedeutung, ohne dass eine Wörterbuchlücke sichtbar wird — ist darin **nicht** enthalten
-  und ohne Goldstandard je Beleg nicht seriös zu messen. Der Punkt bleibt offen; erledigt ist
-  er erst, wenn diese zweite Hälfte eine Zahl hat
-- **Die Wortart als Filter schließt mehr aus als gedacht.** Gemessen am 17.08.2026 über
-  ganz `tools/sherlock.txt` (5.544 Grundformen): **181 (3,3 %)** bekommen eine leere
+  Untergrenze; der Fall einer nicht-leeren, aber falsch-wortartigen Liste — das Modell wählt
+  daraus eine falsche Bedeutung, ohne dass eine Wörterbuchlücke sichtbar wird — ist darin
+  **nicht** enthalten und ohne Goldstandard je Beleg nicht seriös zu messen. Der Punkt
+  bleibt offen; erledigt ist er erst, wenn diese zweite Hälfte eine Zahl hat
+- **Die Wortart als Filter schließt mehr aus als gedacht.** Gemessen am 17.08.2026 über ganz
+  `tools/sherlock.txt` (5.544 Grundformen): **181 (3,3 %)** bekommen eine leere
   Auswahlliste, obwohl ihr Stichwort im Wörterbuch steht — gegenüber 480 Grundformen, die
   dort tatsächlich fehlen. Zwei Ursachen mit gleicher Wirkung: **24** sind echte
   Taxonomieunterschiede (WikDict führt `such`, `few`, `many`, `least` als `Determiner`,
@@ -944,8 +945,8 @@ Siehe Abschnitt „Warum die Reihenfolge zwingend ist".
   Wort, das drinsteht, und T11 markiert es `uncertain` — **eine Modellunsicherheit verdeckt
   dann einen Zuordnungsfehler**. T11 hat den zweiten Versuch ohne Wortartfilter bewusst
   **nicht** gebaut (`translation.choose_sense`, Regel 14: kein Mechanismus ohne gemessenen
-  Anlass). Der Anlass liegt seit „Was der Wortartfilter kürzt — und was er kostet" oben
-  vor — **1.076 Vorkommen** über 35 Kapitel, an einer zweiten Stichprobe wieder 3,3 % —, die
+  Anlass). Der Anlass liegt seit „Was der Wortartfilter kürzt — und was er kostet" oben vor
+  — **1.076 Vorkommen** über 35 Kapitel, an einer zweiten Stichprobe wieder 3,3 % —, die
   Entscheidung darüber steht aus
 - **Redewendungserkennung** über Textfenster ist noch nicht geprüft. Der bisherige Test
   betrifft nur die Bedeutungsauswahl bei Einzelwörtern
@@ -1001,11 +1002,10 @@ sieben Bedeutungen, von denen *Uhr* und *Wache* nichts miteinander zu tun haben.
 
 #### Wie sich das mit „eine Triage-Entscheidung je Wort genügt" verträgt
 
-Beide Sätze stehen seit dem 18.08.2026 nebeneinander — „eine Triage-Entscheidung je Wort
-genügt" (Abschnitt 3, „Zwei Drittel der Grundformen eines Kapitels sind mehrdeutig") und
-„Kenntnis pro Bedeutung" hier —, ohne dass
-gesagt war, wie sie zusammengehen. Sie waren die Bruchstelle, an der der schwere Befund vom
-25.08.2026 lag; **aufgelöst ist sie seit dem Umbau vom selben Tag:**
+Beide Sätze stehen seit dem 18.08.2026 nebeneinander — „eine Triage-Entscheidung je Wort genügt"
+(Abschnitt 3, „Zwei Drittel der Grundformen eines Kapitels sind mehrdeutig") und „Kenntnis pro
+Bedeutung" hier —, ohne dass gesagt war, wie sie zusammengehen. Sie waren die Bruchstelle, an
+der der schwere Befund vom 25.08.2026 lag; **aufgelöst ist sie seit dem Umbau vom selben Tag:**
 
 > Die gemeinte Bedeutung wird **vor** der Triage aufgelöst, und die Entscheidung des Nutzers
 > bucht auf **sie**. Der Nutzer entscheidet einmal je Wort, das Profil vermerkt eine
@@ -1368,17 +1368,21 @@ sortierten Triage. „Sibyl" in Kapitel 7 traf denselben Fall (26 von 28, 0,93).
 
 **Regel 12 gilt seither mit einem Anteilsschwellwert:** Ein Vorkommen bleibt Lernvokabel,
 solange der Anteil eigennamiger Belege am Gesamtvorkommen unter 0,90 bleibt
-(`extraction._PROPER_NOUN_RATIO_THRESHOLD`). Gemessen über alle Kapitel von
+(`extraction._PROPER_NOUN_RATIO_THRESHOLD`).
+
+**Woher der Wert 0,90 stammt** — gemessen am 25.08.2026 über alle Kapitel von
 `tools/dorian_gray.epub` und `tools/sherlock.epub` (36 Kapitel, 361 Grundformen mit
-mindestens einem Eigennamen-Vorkommen, 25.08.2026): Bei 0,90 fallen neben „Dorian" und
-„Sibyl" (Kapitel 7) sechs weitere Grundformen weg, die jeweils in einem einzelnen Kapitel
-fast nur als Namensbestandteil auftreten — „baker" (Henry Baker, Sherlock Kap. 8, 16/17),
-„hunter" (Violet Hunter, Kap. 13, 19/21), „king" (King of Bohemia, Kap. 2, 17/18),
-„league" (Red-Headed League, Kap. 3, 15/16), „lord" (Lord St. Simon, Kap. 11, 36/37),
-„miss" (Titel vor einem Namen, Kap. 9, 18/19). Echte Anredesubstantive bleiben davon
-unberührt — höchster gemessener Anteil je Kapitel über beide Bücher: „lady" 0,88, „sir"
-0,86, „street" 0,82, „charming" 0,88 (`Prince Charming`, korrekt kein Fund oberhalb der
-Schwelle), „mother" 0,71, „duchess" 0,35 —, alle unter 0,90.
+mindestens einem Eigennamen-Vorkommen), damals noch **je Kapitel** angewendet; zwei der
+hier genannten Wörter hält die gültige buchweite Fassung heute, siehe unten: Bei 0,90
+fallen neben „Dorian" und „Sibyl" (Kapitel 7) sechs weitere Grundformen weg, die jeweils
+in einem einzelnen Kapitel fast nur als Namensbestandteil auftreten — „baker" (Henry
+Baker, Sherlock Kap. 8, 16/17), „hunter" (Violet Hunter, Kap. 13, 19/21), „king" (King of
+Bohemia, Kap. 2, 17/18), „league" (Red-Headed League, Kap. 3, 15/16), „lord" (Lord St.
+Simon, Kap. 11, 36/37), „miss" (Titel vor einem Namen, Kap. 9, 18/19). Echte
+Anredesubstantive bleiben davon unberührt — höchster gemessener Anteil je Kapitel über
+beide Bücher: „lady" 0,88, „sir" 0,86, „street" 0,82, „charming" 0,88 (`Prince Charming`,
+korrekt kein Fund oberhalb der Schwelle), „mother" 0,71, „duchess" 0,35 —, alle unter
+0,90.
 
 Zwei Nachbarwerte wurden mitgemessen: 0,80 risse zusätzlich „lady" mit (0,80 in Kapitel 17
 erfüllt „≥"), 0,95 ließe „Sibyl" in Kapitel 7 (0,93) unberührt. 0,90 ist der Kompromiss,
@@ -2595,14 +2599,13 @@ entscheidet das Wörterbuch beim Nachschlagen, nicht die Liste.
 
 **Gefragt wird einmal, beim Anlegen des Profils** (`cli.main._ask_cefr_level`), und eine
 Leereingabe ist dabei keine Antwort. Beide Antworten sind teuer und ungleich teuer: Eine
-gewählte Stufe trägt mit einem Tastendruck tausende ungesehene Behauptungen ins Profil,
-„keine Angabe" verzichtet ganz darauf und verlangt später einen Kalibrierdurchlauf von
-Hand (konzept.md §4, „Der erste Durchlauf je Buch ist ein Kalibrierdurchlauf"). „Keine
-Angabe" muss deshalb
-ausgeschrieben werden — anders als beim Wörterbuchbezug, wo Enter Zustimmung bedeutet
-(Abschnitt 2, „Der Bezug läuft beim Start, die Startprüfung nur bis zum Index"), und aus
-demselben Grund, aus dem die Leereingabe in
-der Triage bis zur Behebung am 14.09.2026 eine Falle war (Abschnitt 9, „Offene Punkte").
+gewählte Stufe trägt mit einem Tastendruck tausende ungesehene Behauptungen ins Profil, „keine
+Angabe" verzichtet ganz darauf und verlangt später einen Kalibrierdurchlauf von Hand (konzept.md
+§4, „Der erste Durchlauf je Buch ist ein Kalibrierdurchlauf"). „Keine Angabe" muss deshalb
+ausgeschrieben werden — anders als beim Wörterbuchbezug, wo Enter Zustimmung bedeutet (Abschnitt
+2, „Der Bezug läuft beim Start, die Startprüfung nur bis zum Index"), und aus demselben Grund,
+aus dem die Leereingabe in der Triage bis zur Behebung am 14.09.2026 eine Falle war (Abschnitt
+9, „Offene Punkte").
 
 Geschrieben wird in **einer** Transaktion (`profile.record_preset`) — ganz oder gar nicht.
 Das ist nicht bloß Sauberkeit: Gemessen an 18.644 Ereignissen kostet `record_event` in
