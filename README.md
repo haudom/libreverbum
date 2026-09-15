@@ -47,11 +47,19 @@ EPUB-Datei bis zum importierbaren Anki-Deck und zum geprüften Ausdruck, bedient
 **Kommandozeile**. Die Qt-Oberfläche gehört zu Phase 2 und ist noch nicht gebaut — der Kern
 ist bereits so geschnitten, dass sie ihn nur aufruft ([konzept.md](konzept.md), „Phasenplan").
 
-Seither dazugekommen: die Vorbelegung des Grundwortschatzes beim Anlegen des Profils
-([technik.md](technik.md) §11), die blockweise Triage mit Vorladen statt harter
-Wortobergrenze ([technik.md](technik.md) §12), der Teilexport der bereits entschiedenen
-Karten bei einem abgebrochenen Lauf ([technik.md](technik.md) §12) und der Zwischenspeicher
-für den buchweiten Eigennamenanteil ([technik.md](technik.md) §5).
+Seither dazugekommen, jeweils begründet in [technik.md](technik.md):
+
+- die **Vorbelegung des Grundwortschatzes** beim Anlegen des Profils (§11)
+- die **blockweise Triage mit Vorladen** statt einer harten Wortobergrenze; die Druckseite
+  bricht dafür auf mehrere Blätter um, statt bei zu vielen Einträgen abzubrechen (§12)
+- ein **„lernen" auf ein Wort ohne Wörterbucheintrag** lässt den Export nicht mehr
+  scheitern (§8b)
+- **Fortschrittsmeldungen** während des Kapiteldurchlaufs und eine kompakte Triage-Anzeige,
+  statt eine Meldung minutenlang stehenzulassen (§13)
+- der **Teilexport** der bereits entschiedenen Karten, wenn ein Lauf unterwegs scheitert —
+  etwa weil der Modellserver wegfällt (§12)
+- ein **Zwischenspeicher** für den buchweiten Eigennamenanteil, der jedem weiteren Lauf
+  über dasselbe Buch den spaCy-Durchlauf über das ganze Buch erspart (§5)
 
 Was fertig ist, steht in `git log`; was als Nächstes kommt, im Phasenplan.
 
@@ -145,6 +153,11 @@ Ein zweiter Lauf über dasselbe Kapitel überschreibt nichts, sondern legt sich 
 `…_2` daneben. In Anki landet er trotzdem im selben Deck: Deck-Kennung und Notiz-GUID
 sind stabil, ein zweiter Import aktualisiert dieselben Notizen, statt Dubletten
 anzulegen ([technik.md](technik.md) §8b).
+
+Scheitert ein Lauf unterwegs — der Modellserver fällt weg, die Eingabe bricht ab —, werden
+die bis dahin entschiedenen Karten trotzdem geschrieben: mit `_teilexport` im Dateinamen,
+danach die Fehlermeldung ([technik.md](technik.md) §12). Der reguläre Ausstieg mit `q`
+gehört nicht dazu, er exportiert vollständig.
 
 ### Wenn ein „Kapitel" ein Drittel des Buchs ist
 
