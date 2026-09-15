@@ -121,6 +121,7 @@ from __future__ import annotations
 import enum
 import hashlib
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -286,8 +287,9 @@ def _proper_noun_ratio_cache_key(epub_path: Path, nlp: Language) -> str:
 
 def _proper_noun_ratio_cache_path(cache_dir: Path, cache_key: str) -> Path:
     """Pfad der Zwischenspeicherdatei zu einer Kennung — eigens benannt, damit ein Test den
-    Dateinamen prüfen kann, ohne `_read_proper_noun_ratio_cache`/`_write_proper_noun_ratio_
-    cache` anzufassen (Auftragstext vom 15.09.2026: „einzeln prüfbare Funktionen")."""
+    Dateinamen prüfen kann, ohne
+    `_read_proper_noun_ratio_cache`/`_write_proper_noun_ratio_cache` anzufassen
+    (Auftragstext vom 15.09.2026: „einzeln prüfbare Funktionen")."""
     return cache_dir / f"book_proper_noun_ratios_{cache_key}.json"
 
 
@@ -332,19 +334,44 @@ def _write_proper_noun_ratio_cache(path: Path, ratios: Mapping[str, float]) -> N
     `extraction._PROPER_NOUN_RATIO_THRESHOLD` — sonst wanderte der Schwellwert in die
     Kennung, und wer ihn ändert, bekäme still den alten Filter (Regel 13).
 
-    Ein Fehlschlag beim Schreiben (Verzeichnis nicht anlegbar, Platte voll) bricht sichtbar
-    ab statt den Aufruf nur langsamer zu machen (Auftragstext, Punkt 7) — dieselbe
-    `except Exception: … ; raise`-Bauart wie in `dictionary.fetch_dictionary`, die die
-    Nebendatei aufräumt und den Fehler danach unverändert weiterreicht."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_name(path.name + ".part")
+    Geschrieben wird mit `ensure_ascii=False` (Befund 3, Durchsicht 8e3d054): `json.dump`s
+    Vorgabe `ensure_ascii=True` hätte jedes Zeichen über 127 als `\\uXXXX`-Escape abgelegt
+    und die Behauptung „utf-8" im Docstring von `_read_proper_noun_ratio_cache` faktisch
+    gegenstandslos gemacht — die Datei enthielte dann kein einziges Byte über 127.
+
+    Der Temporärname trägt zusätzlich die eigene Prozesskennung (Befund 4, Durchsicht
+    8e3d054): Er war bisher nur über die Kennung gebildet, also über zwei gleichzeitige
+    Läufe (dieselbe Kennung, zwei Prozesse) geteilt statt eindeutig — reproduziert in 3
+    von 3 Runden, einmal mit einer Bytemischung beider Schreiber in der Zieldatei. Zwei
+    gleichzeitige Läufe kollidieren jetzt höchstens noch mit sich selbst."""
+    tmp_path = path.with_name(f"{path.name}.{os.getpid()}.part")
     try:
-        with tmp_path.open("w", encoding="utf-8") as handle:
-            json.dump(dict(ratios), handle)
-    except Exception:
-        tmp_path.unlink(missing_ok=True)
-        raise
-    tmp_path.replace(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with tmp_path.open("w", encoding="utf-8") as handle:
+                json.dump(dict(ratios), handle, ensure_ascii=False)
+        except Exception:
+            tmp_path.unlink(missing_ok=True)
+            raise
+        tmp_path.replace(path)
+    except OSError as error:
+        # (Befund 5, Durchsicht 8e3d054): Ein OSError hier (Verzeichnis nicht anlegbar,
+        # etwa weil an seiner Stelle bereits eine Datei liegt, oder die Platte voll) lief
+        # bislang bis zum nackten, englischen Traceback durch — `cli.main.main`s Fang kennt
+        # nur ValueError/FileNotFoundError (Regel 13, dokumentation.md §4), nicht OSError,
+        # und sollte das auch nicht: Ein breiterer Fang dort verschluckte künftig andere,
+        # heute zu Recht sichtbare Fehlschläge. Der OSError wird deshalb hier an der
+        # Quelle in einen ValueError mit deutscher Meldung umgewandelt (Regel 13: Abbruch
+        # mit Meldung statt stillem Weiterlaufen). Das fertige Kapitelergebnis geht dabei
+        # verloren — so entschieden (technik.md §5) —, die Meldung sagt aber ausdrücklich,
+        # dass nur die Ablage und nicht die Berechnung gescheitert ist.
+        raise ValueError(
+            f"Zwischenspeicher {path} lässt sich nicht schreiben ({error}) — die "
+            "Berechnung des buchweiten Eigennamenanteils ist gelungen, nur seine Ablage "
+            "im Zwischenspeicher ist gescheitert. Verzeichnis prüfen — insbesondere, ob "
+            "an seiner Stelle bereits eine gleichnamige Datei liegt — und den Lauf danach "
+            "erneut starten."
+        ) from error
 
 
 def run_chapter(

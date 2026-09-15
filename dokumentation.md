@@ -113,6 +113,7 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | Gliederungsebene (in der Navigation) | `level` |
 | Hinweis (z. B. bei fehlender Navigation) | `notice` |
 | Datenverzeichnis | `data_dir` |
+| Zwischenspeicher (Wegwerfwert, ohne Nutzerwert selbst neu berechenbar — bisher nur für den buchweiten Eigennamenanteil, technik.md §5, „Entschieden 15.09.2026") | `cache`, `cache_dir` |
 | Einstellungen | `config` |
 
 Neue Begriffe kommen hierher, **bevor** der erste Bezeichner damit entsteht.

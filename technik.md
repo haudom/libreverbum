@@ -1404,12 +1404,23 @@ Migration für einen Wert, der keine Nutzerdaten sind.
 EPUB-Bytes, dazu die installierte spaCy-Fassung und Name/Fassung des geladenen
 Sprachmodells — beide ändern die Vertaggung, aus der der Anteil entsteht, und damit den
 Anlass für den offenen Punkt oben („wann er verfällt"). Trifft der Name nicht, wird neu
-gerechnet; es gibt keinen Vergleich im Code, den jemand zu schreiben vergessen könnte.
-Falle dabei: `nlp.meta["spacy_version"]` ist ein Anforderungsbereich der Modelldatei
-(`">=3.8.0,<3.9.0"` bei `en_core_web_md` 3.8.0), nicht die installierte Fassung — die
-richtige Quelle ist `spacy.__version__` (heute `3.8.15`), gelesen über `spacy.about`, weil
-`spacy/__init__.py` den Namen unter `mypy --strict` nicht wiederausführt. Modellname und
--fassung kommen aus `nlp.meta["name"]`/`nlp.meta["version"]` (heute `core_web_md`/`3.8.0`).
+gerechnet; für diese drei Zutaten gibt es keinen Vergleich im Code, den jemand zu
+schreiben vergessen könnte. Falle dabei: `nlp.meta["spacy_version"]` ist ein
+Anforderungsbereich der Modelldatei (`">=3.8.0,<3.9.0"` bei `en_core_web_md` 3.8.0), nicht
+die installierte Fassung — die richtige Quelle ist `spacy.__version__` (heute `3.8.15`),
+gelesen über `spacy.about`, weil `spacy/__init__.py` den Namen unter `mypy --strict` nicht
+wiederausführt. Modellname und -fassung kommen aus `nlp.meta["name"]`/`nlp.meta["version"]`
+(heute `core_web_md`/`3.8.0`).
+
+**Die Kennung deckt die drei Zutaten ab, nicht den Code, der daraus rechnet** (Befund 6,
+Durchsicht 8e3d054). Jede Änderung an `extraction.book_proper_noun_ratios`, an
+`_CONTENT_POS`/`_PROPER_NOUN_POS` oder an den Übersprungregeln von `epub.read_chapter`
+ändert die Tabelle, **nicht** die Kennung — und `data/cache/` steht in `.gitignore`,
+überlebt also jeden Wechsel des Standes. Wer am Eigennamenfilter arbeitet, bekommt so still
+die alte Tabelle, solange er den Zwischenspeicher nicht von Hand leert. **Löschen:**
+`data/cache/` löschen erzwingt eine Neuberechnung bei jedem folgenden Lauf — ein Schalter
+oder eine Fassungsnummer der Berechnung selbst wird dafür jetzt nicht gebaut (Regel 14, es
+gibt bislang keinen zweiten Anwendungsfall); siehe den offenen Punkt dazu unten.
 
 **Geschrieben wird die volle Tabelle**, so wie `book_proper_noun_ratios` sie liefert —
 nicht nur die Werte oberhalb von `_PROPER_NOUN_RATIO_THRESHOLD`. Sonst wanderte der
@@ -1435,7 +1446,7 @@ Kapitel: Beides hängt allein an der buchweiten Anteilsberechnung.
 **Eine unlesbare, aber namentlich treffende Datei ist ein Befund, kein Normalfall**
 (Regel 13): kaputtes JSON, kein Objekt oder ein Wert, der keine Zahl ist, bricht den Lauf
 sichtbar ab und nennt den vollen Pfad der zu löschenden Datei — weder stillschweigend
-übergangen noch stillschweigend überschrieben. Weil geschrieben wird atomar, kommt eine
+übergangen noch stillschweigend überschrieben. Weil atomar geschrieben wird, kommt eine
 solche Datei nicht durch einen abgebrochenen Schreibvorgang zustande. Ein Fehlschlag beim
 **Schreiben** (Verzeichnis nicht anlegbar, Platte voll) bricht ebenso sichtbar ab, statt
 den Lauf nur langsamer zu machen.
@@ -1464,6 +1475,13 @@ ein Dateizugriff).
   26.08.2026** (Abschnitt 3, „Nachtrag 26.08.2026: was der Wortartfilter kürzt — und was er
   kostet"): Sie taugt dafür, aber schwächer als angenommen. Was daran offen bleibt, steht in
   den Offenen Punkten von Abschnitt 3, nicht mehr hier
+- **Ob die Kennung des Zwischenspeichers eine Fassungsnummer der Berechnung selbst braucht**
+  (Befund 6, Durchsicht 8e3d054) — zusätzlich zu EPUB-Bytes, spaCy- und Modellfassung —, die
+  bei einer Änderung an `extraction.book_proper_noun_ratios`, an
+  `_CONTENT_POS`/`_PROPER_NOUN_POS` oder an den Übersprungregeln von `epub.read_chapter`
+  von Hand hochgezählt würde. Ohne sie bleibt `data/cache/` löschen der einzige Weg, eine
+  solche Änderung wirksam werden zu lassen — tragfähig, solange diese Stellen selten
+  wechseln, aber ungeprüft, sobald das nicht mehr gilt
 
 ---
 
@@ -1683,8 +1701,8 @@ Vorratsarbeit, die Regel 14 untersagt.
 
 Kein elftes Modul für den Zwischenspeicher aus Abschnitt 5, „Entschieden 15.09.2026:
 Zwischenspeicher für den buchweiten Eigennamenanteil": Die Funktionen liegen in
-`pipeline`, dem einzigen Ort, der die Kapitelliste für `extraction.
-book_proper_noun_ratios` ohnehin zusammenstellt.
+`pipeline`, dem einzigen Ort, der die Kapitelliste für
+`extraction.book_proper_noun_ratios` ohnehin zusammenstellt.
 
 Vier dieser Grenzen sind keine Geschmacksfrage. Sie machen Regeln aus den Abschnitten 1
 bis 5 zu Modulgrenzen, und das ist ihr eigentlicher Zweck: Eine Regel, die auf einer

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
+import os
 import shutil
 import sqlite3
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
@@ -848,14 +850,98 @@ def test_proper_noun_ratio_cache_key_differs_for_a_different_model_name_or_versi
 def test_write_proper_noun_ratio_cache_is_read_back_unchanged(tmp_path: Path) -> None:
     """Auftragstext vom 15.09.2026, Punkt 6: geschrieben wird mit `encoding='utf-8'`
     (CLAUDE.md) — die Umlaute in `café` prüfen das — und atomar: Nach dem Schreiben bleibt
-    keine `.part`-Nebendatei liegen (dieselbe Bauart wie `dictionary.fetch_dictionary`)."""
+    keine `.part`-Nebendatei liegen (dieselbe Bauart wie `dictionary.fetch_dictionary`).
+
+    Befund 3 (Durchsicht 8e3d054): `json.dump`s Vorgabe `ensure_ascii=True` hätte `café`
+    als `caf\\u00e9` abgelegt — auf dem Umweg über den Rücklesetest nicht von einer echten
+    UTF-8-Datei zu unterscheiden. Geprüft wird deshalb zusätzlich der rohe Dateiinhalt:
+    `é` muss dort als das eine UTF-8-Zeichen stehen, nicht als sechsstellige Escape-Folge."""
     path = tmp_path / "cache" / "book_proper_noun_ratios_test.json"
     ratios = {"street": 0.42, "bank": 0.0, "café": 0.75}
 
     pipeline._write_proper_noun_ratio_cache(path, ratios)
 
     assert pipeline._read_proper_noun_ratio_cache(path) == ratios
-    assert not path.with_name(path.name + ".part").exists()
+    raw = path.read_text(encoding="utf-8")
+    assert "café" in raw
+    assert "\\u00e9" not in raw
+    # (Befund 4, Durchsicht 8e3d054): Der Temporärname trägt seit der Behebung zusätzlich
+    # die Prozesskennung (`os.getpid()`) statt nur der Kennung im Dateinamen — die Prüfung
+    # sucht deshalb per Muster, nicht mehr nach dem einen früheren Namen.
+    assert not list(path.parent.glob(f"{path.name}.*.part"))
+
+
+def test_write_proper_noun_ratio_cache_leaves_an_existing_file_untouched_on_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Befund 3 (Durchsicht 8e3d054): Der Docstring behauptet „atomar", ungeprüft blieb
+    bislang, was das bedeutet — die Verfälschung „ohne Temporärdatei direkt in die
+    Zieldatei schreiben" wäre bei den bisherigen Tests grün geblieben, weil keiner von
+    ihnen einen Fehlschlag *während* des Schreibens auslöst. Zusicherung: Scheitert
+    `json.dump` mitten im Schreiben, bleibt eine bereits vorhandene Zieldatei mit ihrem
+    alten Inhalt unverändert liegen — ein direktes Schreiben in die Zieldatei hätte sie
+    stattdessen halb überschrieben oder geleert."""
+    path = tmp_path / "cache" / "book_proper_noun_ratios_test.json"
+    path.parent.mkdir(parents=True)
+    path.write_text('{"street": 0.5}', encoding="utf-8")
+
+    def _broken_dump(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("absichtlicher Fehlschlag mitten im Schreiben")
+
+    monkeypatch.setattr(json, "dump", _broken_dump)
+
+    with pytest.raises(RuntimeError):
+        pipeline._write_proper_noun_ratio_cache(path, {"bank": 0.9})
+
+    assert path.read_text(encoding="utf-8") == '{"street": 0.5}'
+    assert not list(path.parent.glob(f"{path.name}.*.part"))
+
+
+def test_write_proper_noun_ratio_cache_uses_a_process_specific_temporary_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Befund 4 (Durchsicht 8e3d054): Der Temporärname war bislang je Kennung geteilt, nicht
+    je Prozess (`<Kennung>.part`) — zwei gleichzeitige Läufe über dasselbe Buch schrieben
+    dadurch in dieselbe Temporärdatei, reproduziert in 3 von 3 Runden, einmal mit einer
+    Bytemischung beider Schreiber in der Zieldatei. Zusicherung: Der Temporärname trägt die
+    eigene Prozesskennung (`os.getpid()`), geprüft am tatsächlich geöffneten Pfad, nicht nur
+    am fertigen Dateinamen — sonst bestünde der Test auch dann, wenn die Kennung irgendwo
+    im Pfad, aber nicht im Temporärnamen selbst stünde."""
+    path = tmp_path / "cache" / "book_proper_noun_ratios_test.json"
+    opened_paths: list[Path] = []
+    real_open = Path.open
+
+    def _spying_open(self: Path, *args: Any, **kwargs: Any) -> Any:
+        opened_paths.append(self)
+        return cast("Any", real_open)(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", _spying_open)
+    monkeypatch.setattr(os, "getpid", lambda: 424242)
+
+    pipeline._write_proper_noun_ratio_cache(path, {"street": 0.5})
+
+    assert len(opened_paths) == 1
+    assert opened_paths[0].name == f"{path.name}.424242.part"
+
+
+def test_write_proper_noun_ratio_cache_raises_a_german_message_when_the_directory_is_blocked(
+    tmp_path: Path,
+) -> None:
+    """Befund 5 (Durchsicht 8e3d054): Liegt an der Stelle des Zwischenspeicherverzeichnisses
+    bereits eine Datei, bricht `Path.mkdir` mit einem `OSError` ab (unter Windows
+    `FileExistsError [WinError 183]`) — ein `OSError`, den `cli.main.main`s Fang
+    (`except (ValueError, FileNotFoundError)`) nicht kennt und deshalb als nackten,
+    englischen Traceback durchließe (Bruch der Sprachregel, dokumentation.md §1). Der
+    `OSError` wird deshalb hier an der Quelle in einen `ValueError` mit deutscher Meldung
+    umgewandelt, die den vollen Pfad nennt und sagt, dass die Berechnung gelungen ist und
+    nur die Ablage gescheitert ist."""
+    blocked_cache_dir = tmp_path / "cache"
+    blocked_cache_dir.write_text("blockiert das Verzeichnis", encoding="utf-8")
+    path = blocked_cache_dir / "book_proper_noun_ratios_test.json"
+
+    with pytest.raises(ValueError, match="Berechnung") as error:
+        pipeline._write_proper_noun_ratio_cache(path, {"street": 0.5})
+    assert str(path) in str(error.value)
 
 
 def test_read_proper_noun_ratio_cache_returns_none_when_the_file_is_missing(tmp_path: Path) -> None:
@@ -926,7 +1012,13 @@ def test_run_chapter_does_not_recompute_proper_noun_ratios_on_a_cache_hit(
     `extraction.book_proper_noun_ratios` nicht erneut auf — geprüft an einer Attrappe, die
     bei jedem Aufruf abbricht (dokumentation.md §5, „Woran geprüft wird"). Bestünde
     `run_chapter` trotz Treffer weiterhin auf dem vollen Buchlauf, schlüge dieser Test mit
-    der Attrappen-Ausnahme fehl, statt mit dem erwarteten Ergebnis durchzulaufen."""
+    der Attrappen-Ausnahme fehl, statt mit dem erwarteten Ergebnis durchzulaufen.
+
+    Prüft nur, dass kein erneuter Buchlauf stattfindet — nicht, dass der Treffer dasselbe
+    Ergebnis liefert wie ein kalter Lauf (Befund 1, Durchsicht 8e3d054: Das synthetische
+    Mini-EPUB hier hat dafür zu wenige Eigennamen, siehe
+    `test_run_chapter_returns_the_same_vocabulary_on_a_cache_hit_as_cold` weiter unten, die
+    das an `tools/sherlock.epub` zusichert)."""
     cache_dir = tmp_path / "cache"
     cache_key = pipeline._proper_noun_ratio_cache_key(pipeline_epub, nlp)
     cache_path = pipeline._proper_noun_ratio_cache_path(cache_dir, cache_key)
@@ -950,6 +1042,36 @@ def test_run_chapter_does_not_recompute_proper_noun_ratios_on_a_cache_hit(
     )
 
     assert result.chapter.number == 1
+
+
+def test_run_chapter_writes_the_proper_noun_ratio_cache_on_a_cold_run(
+    pipeline_epub: Path, mini_dictionary_db: Path, profile_path: Path, nlp: Language, tmp_path: Path
+) -> None:
+    """Befund 2 (Durchsicht 8e3d054): Bislang prüfte kein Test über `run_chapter` selbst,
+    dass ein kalter Lauf mit `cache_dir` überhaupt eine Zwischenspeicherdatei anlegt — nur
+    `_write_proper_noun_ratio_cache` direkt aufgerufen war geprüft. Ein abgeschalteter
+    Schreibaufruf in `run_chapter` (etwa `if False: _write_proper_noun_ratio_cache(...)`)
+    hätte alle bisherigen Tests unverändert grün gelassen: Der Zwischenspeicher träfe nie,
+    das Merkmal wäre wirkungslos. Zusicherung: Nach einem kalten Lauf mit `cache_dir` liegt
+    unter dem von `_proper_noun_ratio_cache_key`/`_proper_noun_ratio_cache_path` berechneten
+    Namen eine lesbare Datei mit der buchweiten Eigennamen-Tabelle."""
+    cache_dir = tmp_path / "cache"
+    cache_key = pipeline._proper_noun_ratio_cache_key(pipeline_epub, nlp)
+    cache_path = pipeline._proper_noun_ratio_cache_path(cache_dir, cache_key)
+    assert not cache_path.exists()
+
+    pipeline.run_chapter(
+        epub_path=pipeline_epub,
+        chapter_number=1,
+        dictionary_path=mini_dictionary_db,
+        profile_path=profile_path,
+        nlp=nlp,
+        cache_dir=cache_dir,
+    )
+
+    written = pipeline._read_proper_noun_ratio_cache(cache_path)
+    assert written is not None
+    assert written  # nicht-leere Tabelle: das Mini-EPUB trägt Vorkommen bei
 
 
 def test_run_chapter_without_a_cache_dir_behaves_as_before(
@@ -1053,6 +1175,53 @@ def test_run_chapter_processes_a_real_chapter_with_the_real_dictionary(
     woman = _entry(result, "woman")
     assert woman.occurrence.lemma.pos == "NOUN"
     assert any("Frau" in (sense.wikdict_trans_list or "") for sense in woman.candidates)
+
+
+@pytest.mark.needs_epub
+@pytest.mark.needs_dictionary
+def test_run_chapter_returns_the_same_vocabulary_on_a_cache_hit_as_cold(
+    tmp_path: Path, real_epub_paths: dict[str, Path], real_dictionary_path: Path, nlp: Language
+) -> None:
+    """Befund 1 (Durchsicht 8e3d054): `test_run_chapter_does_not_recompute_proper_noun_
+    ratios_on_a_cache_hit` sicherte bislang nur zu, dass der Treffer-Lauf überhaupt
+    durchläuft (`result.chapter.number == 1`) — nicht, dass er dasselbe Ergebnis liefert
+    wie der kalte. Die Verfälschung „die geladene Tabelle beim Treffer durch `{}` ersetzen"
+    ließ jene Attrappen-Vorrichtung unverändert grün, veränderte aber das echte Ergebnis: An
+    `tools/sherlock.epub` Kapitel 2 stehen kalt 1410 Einträge, mit einer leeren Tabelle an
+    der Cache-Hit-Stelle nur 1409 — der buchweite Eigennamenfilter (technik.md §5) verhält
+    sich anders, sobald die tatsächlich geladene Tabelle nicht ankommt. Das synthetische
+    Mini-EPUB der übrigen Tests trägt zu wenige Eigennamen, um diesen Unterschied zu zeigen
+    (dokumentation.md §5, „Woran geprüft wird" — die Vorrichtung zeigt Laufen, nicht
+    Stimmen); nur der Vergleich am echten Buch deckt ihn auf.
+
+    Arbeitet wie `test_run_chapter_processes_a_real_chapter_with_the_real_dictionary` auf
+    einer Kopie von `tools/en-de.sqlite3` mit angelegtem Index."""
+    dictionary_copy = tmp_path / "en-de.sqlite3"
+    shutil.copyfile(real_dictionary_path, dictionary_copy)
+    dictionary.ensure_index(dictionary_copy)
+
+    structure = epub.read_structure(real_epub_paths["sherlock"])
+    chapter_number = structure.chapters[1].number  # Kapitel 2, "A Scandal in Bohemia"
+    cache_dir = tmp_path / "cache"
+
+    cold_result = pipeline.run_chapter(
+        epub_path=real_epub_paths["sherlock"],
+        chapter_number=chapter_number,
+        dictionary_path=dictionary_copy,
+        profile_path=tmp_path / "profil_kalt.sqlite3",
+        nlp=nlp,
+        cache_dir=cache_dir,
+    )
+    warm_result = pipeline.run_chapter(
+        epub_path=real_epub_paths["sherlock"],
+        chapter_number=chapter_number,
+        dictionary_path=dictionary_copy,
+        profile_path=tmp_path / "profil_treffer.sqlite3",
+        nlp=nlp,
+        cache_dir=cache_dir,
+    )
+
+    assert warm_result == cold_result
 
 
 # ---------------------------------------- resolve_triage_entries (zweite T16-Durchsicht)
