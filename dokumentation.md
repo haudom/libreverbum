@@ -714,13 +714,20 @@ betroffenen Testdateien laufen lassen" verkleinert das Problem, löst es aber ni
 > die Durchsicht hält für grün, was gar nicht gelaufen ist. Zur Einordnung: 33 der 559
 > Tests hängen an `tools/` (`needs_dictionary`, `needs_epub`, `needs_calibre_split_epub`) —
 > diese Größenordnung darf danebenstehen, ist aber nicht die Prüfgröße; geprüft wird die
-> Zahl **zwei**.
+> Zahl **zwei**. Meldet der Lauf **eine** statt zwei, hängt in der Umgebung
+> `LIBREVERBUM_MODEL_URL` oder `LIBREVERBUM_WORDFREQ_PYTHON` (`tests/conftest.py`) —
+> falscher Alarm, kein falsches Grün; die betreffende Variable vor dem Lauf löschen.
 
 **Ein Verfälschungslauf im Wegwerfordner wird in `timeout` gewickelt** (etwa
-`timeout 900 pytest …`), damit eine falsche Umsetzung **rot** wird, statt zu hängen — der
-Hänger ist sonst die einzige Fehlerform, die überhaupt kein Ergebnis liefert. Begründung
-und die drei Anlässe: technik.md §6, „Zeitschranke: Hängeschutz über die Shell, nicht über
-`pytest-timeout`".
+`timeout 900 pytest …`, **in Git Bash** — dort ist `timeout` das GNU-Werkzeug), damit eine
+falsche Umsetzung **rot** wird, statt zu hängen — der Hänger ist sonst die einzige
+Fehlerform, die überhaupt kein Ergebnis liefert. **Unter PowerShell heißt derselbe Name
+etwas anderes**: `timeout` löst dort auf Windows' Pausenbefehl auf, und `timeout 900
+pytest …` bricht sofort mit „Ungültige Syntax" und Exit 1 ab, **ohne `pytest` je
+auszuführen** — ein Exit ≠ 0 sähe dann wie eine bestandene Verfälschungsprobe aus, obwohl
+keine stattgefunden hat. Ein Verfälschungslauf gehört deshalb in Git Bash. Begründung und
+die drei Anlässe für die Zeitschranke selbst: technik.md §6, „Zeitschranke: Hängeschutz
+über die Shell, nicht über `pytest-timeout`".
 
 **Die eigenen Messskripte der Durchsicht liegen dagegen außerhalb dieses Ordners.** Sonst
 prüft das Tor sie mit — und ihr Rot sieht aus wie Rot des durchgesehenen Commits: Am

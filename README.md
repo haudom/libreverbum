@@ -47,6 +47,12 @@ EPUB-Datei bis zum importierbaren Anki-Deck und zum geprüften Ausdruck, bedient
 **Kommandozeile**. Die Qt-Oberfläche gehört zu Phase 2 und ist noch nicht gebaut — der Kern
 ist bereits so geschnitten, dass sie ihn nur aufruft ([konzept.md](konzept.md), „Phasenplan").
 
+Seither dazugekommen: die Vorbelegung des Grundwortschatzes beim Anlegen des Profils
+([technik.md](technik.md) §11), die blockweise Triage mit Vorladen statt harter
+Wortobergrenze ([technik.md](technik.md) §12), der Teilexport der bereits entschiedenen
+Karten bei einem abgebrochenen Lauf ([technik.md](technik.md) §12) und der Zwischenspeicher
+für den buchweiten Eigennamenanteil ([technik.md](technik.md) §5).
+
 Was fertig ist, steht in `git log`; was als Nächstes kommt, im Phasenplan.
 
 ## Voraussetzungen

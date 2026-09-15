@@ -152,8 +152,10 @@ Runden.
 einem Wegwerfordner — `tools/en-de.sqlite3` und `tools/*.epub` gehören mit hinein. Die
 Gegenprobe: Die Schlusszeile von `pytest` muss genau **zwei** Übersprungene nennen
 (`needs_model`, `needs_wordfreq`) — meldet sie stattdessen rund fünfunddreißig, ist die
-Kopie missraten. Begründung: dokumentation.md §10, „Woran sie prüft: gegen den Commit,
-nicht gegen den Arbeitsbaum".
+Kopie missraten; meldet sie eine, steht `LIBREVERBUM_MODEL_URL` oder
+`LIBREVERBUM_WORDFREQ_PYTHON` noch in der Umgebung (falscher Alarm, kein falsches Grün).
+Begründung: dokumentation.md §10, „Woran sie prüft: gegen den Commit, nicht gegen den
+Arbeitsbaum".
 
 ## Daten
 
@@ -235,9 +237,10 @@ Er steht in drei Quellen, die sich selbst nachführen — nicht hier:
   oben bestanden hat
 - **Was als Nächstes gebaut wird:** [konzept.md](konzept.md), „Phasenplan" — welche Phase
   an der Reihe ist und was zu ihr gehört. **Vor der ersten Zeile Anwendungscode** dazu die
-  offenen Punkte: konzept.md, „Bewusst offen" für die inhaltlichen, die Abschnitte „Offene
-  Punkte" in [technik.md](technik.md) für die technischen. Was dort steht, wird erst
-  entschieden, dann gebaut
+  offenen Punkte: konzept.md, „Bewusst offen" für die inhaltlichen, technik.md, „Offene
+  Punkte im Überblick" für die technischen — die Tabelle am Kopf von
+  [technik.md](technik.md) verweist auf die einzelnen „Offene Punkte"-Abschnitte, ersetzt
+  aber deren Lektüre für den Kaltstart. Was dort steht, wird erst entschieden, dann gebaut
 - **Was gerade jemand anderes bearbeitet:** `git status`. Es laufen regelmäßig zwei
   Bearbeiter gleichzeitig — fremde Änderungen im Arbeitsbaum sind kein Fehler und werden
   weder repariert noch mitcommittet
@@ -281,7 +284,7 @@ die davon abhängen, tragen `needs_dictionary`, `needs_model`, `needs_epub`,
   - Auf `main` und **ohne zu pushen**. Veröffentlichen bleibt eine eigene Entscheidung
   - **Nur die eigenen Dateien werden gestagt** — `git add` mit den Dateien namentlich, nie
     `git add -A` und nie `git commit -a`; `git status --short` vor und nach dem Commit.
-    Es laufen regelmäßig zwei Bearbeiter gleichzeitig (siehe „Aktueller Stand" unten), und
+    Es laufen regelmäßig zwei Bearbeiter gleichzeitig (siehe „Aktueller Stand" oben), und
     zweimal lagen deren fremde, unversionierte Änderungen im Arbeitsbaum. Mit `git add -A`
     wäre die fremde, halbfertige Arbeit mitgewandert — an einer der beiden Stellen war eine
     zugehörige Testdatei zu dem Zeitpunkt noch nicht angepasst, der Commit also rot gewesen

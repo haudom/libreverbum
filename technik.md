@@ -95,6 +95,7 @@ offen").
 | §3 | Was der Wortartfilter jenseits der 3,3 % kostet, ist nicht beziffert |
 | §3 | Wortart als Filter schließt mehr aus als gedacht — Entscheidung steht aus |
 | §3 | Redewendungserkennung über Textfenster noch nicht geprüft |
+| §3 | Ob Ollama dauerhaft die richtige Wahl ist oder `llama-server` mit Vulkan direkt |
 | §4 | Umgang mit gleichzeitigem Zugriff, falls eine Weboberfläche hinzukommt |
 | §4 | Regel-Kommentar über `profile.record_card` begründet falsch — zu berichtigen |
 | §4 | Profil-Identität einer Bedeutung schließt die Anki-GUID aus — Fallrisiko beim nächsten Wörterbuchbezug |
@@ -1711,16 +1712,20 @@ wiederkehren kann. (b) `pytest --timeout=…` bricht in dieser Umgebung mit „u
 arguments" ab (exit 4); `pytest-timeout` ist nicht installiert. (c) Zwei
 Verfälschungsläufe (dokumentation.md §5) hätten ohne Schranke unbegrenzt gestanden.
 
-**Entschieden: kein `pytest-timeout`.** Die Shell-Schranke (`timeout <sekunden> pytest …`)
-wirkt auch außerhalb von `pytest`, bringt keine neue Abhängigkeit (Regel 15) und braucht
-keine Sperrdatei.
+**Entschieden: kein `pytest-timeout`.** Die Shell-Schranke (`timeout <sekunden> pytest …`,
+**in Git Bash**) wirkt auch außerhalb von `pytest`, bringt keine neue Abhängigkeit (Regel
+15) und braucht keine Sperrdatei. **Unter PowerShell ist `timeout` ein anderer Befehl** —
+Windows' Pausenbefehl, nicht GNU-`timeout` — und bricht mit „Ungültige Syntax" und Exit 1
+ab, ohne den eingewickelten Befehl je auszuführen (dokumentation.md §10). Die
+Shell-Schranke gilt deshalb für Git Bash, nicht für PowerShell.
 
 ### Zeilenenden mit `.gitattributes` auf LF festgenagelt (15.09.2026)
 
-Im Index lag bereits jede verfolgte Datei mit LF (geprüft am 26.08.2026 mit
-`git ls-files --eol`), im **Arbeitsbaum** dagegen 34 mit LF und 27 mit CRLF:
-`core.autocrlf` steht auf `true` und wandelt beim Auschecken um, während ein Werkzeug, das
-eine Datei neu schreibt, sie mit LF hinterlässt. Drei Anlässe haben die Entscheidung
+Im Index lag bereits jede verfolgte Datei mit LF (`git ls-files --eol`); im
+**Arbeitsbaum** waren es am 26.08.2026 noch 18 mit CRLF und 37 mit LF, am 15.09.2026 34 mit
+LF und 27 mit CRLF — `core.autocrlf` steht auf `true` und wandelt beim Auschecken um,
+während ein Werkzeug, das eine Datei neu schreibt, sie mit LF hinterlässt, sodass sich das
+Verhältnis mit jedem Edit verschiebt. Drei Anlässe haben die Entscheidung
 erzwungen: `git archive` liefert unter Windows CRLF, `git show` dagegen LF — zweimal sah
 die Rücknahme einer Verfälschung (dokumentation.md §5) deshalb wie eine Manipulation aus,
 einmal hätte ein byteweiser Vergleich einen Befund erzeugt, den es nicht gibt; dazu `sed
@@ -1732,10 +1737,12 @@ einmal hätte ein byteweiser Vergleich einen Befund erzeugt, den es nicht gibt; 
 durchgehend LF —, nur `.gitattributes` selbst kam neu hinzu (geprüft mit
 `git diff --cached --stat`). Der Arbeitsbaum wechselt erst beim nächsten Auschecken jeder
 Datei auf LF; für `libreverbum/wordfreq_en_5000.txt` ist das unkritisch, weil die
-SHA-256-Prüfung in `tests/test_wordfreq_preset.py` die Zeilen selbst wieder mit `"\n"`
-zusammensetzt (`_entries`, „ohne den Kopf, mit '\n' verbunden") und damit gegen CRLF/LF
-unempfindlich ist — nachgemessen, indem die Datei probeweise neu ausgecheckt und das volle
-Tor erneut gefahren wurde: 557 bestanden, 2 übersprungen.
+SHA-256-Prüfung in `tests/test_wordfreq_preset.py` über `_lines` liest, das mit
+`Path.read_text` öffnet — Python vereinheitlicht die Zeilenenden dabei selbst (Kommentar
+bei `PRESET_SHA256`) — und ist damit gegen CRLF/LF unempfindlich, unabhängig davon, dass
+`_entries` die Zeilen beim Hashen mit `"\n"` neu verbindet. Nachgemessen, indem die Datei
+probeweise neu ausgecheckt und das volle Tor erneut gefahren wurde: 557 bestanden, 2
+übersprungen.
 
 ### Offene Punkte
 
