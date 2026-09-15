@@ -1,0 +1,4 @@
+# Zeilenenden auf LF festgenagelt (technik.md §6, 15.09.2026) — sonst liefert `git archive`
+# unter Windows CRLF, `git show` dagegen LF, und ein Verfälschungsanker aus dem Quelltext
+# findet sich in der einen Kopie und in der anderen nicht.
+* text=auto eol=lf

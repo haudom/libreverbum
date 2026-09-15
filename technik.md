@@ -102,7 +102,6 @@ offen").
 | §5 | Über-Lemmatisierung von Eigennamen — bei „Figuren & Orte" zu beachten |
 | §5 | Ob die Zwischenspeicher-Kennung eine Fassungsnummer der Berechnung braucht |
 | §6 | `encoding="utf-8"` maschinell erzwingen (`PLW1514`) |
-| §6 | Ob eine `.gitattributes` die Zeilenenden festnagelt |
 | §6 | `tools/` bleibt von der Typprüfung ausgenommen — ob das so bleibt |
 | §6 | Auslieferung (Nuitka, PyInstaller) |
 | §7 | Ob `pipeline` je Schritt eine eigene Zwischenablage braucht |
@@ -1716,20 +1715,33 @@ Verfälschungsläufe (dokumentation.md §5) hätten ohne Schranke unbegrenzt ges
 wirkt auch außerhalb von `pytest`, bringt keine neue Abhängigkeit (Regel 15) und braucht
 keine Sperrdatei.
 
+### Zeilenenden mit `.gitattributes` auf LF festgenagelt (15.09.2026)
+
+Im Index lag bereits jede verfolgte Datei mit LF (geprüft am 26.08.2026 mit
+`git ls-files --eol`), im **Arbeitsbaum** dagegen 34 mit LF und 27 mit CRLF:
+`core.autocrlf` steht auf `true` und wandelt beim Auschecken um, während ein Werkzeug, das
+eine Datei neu schreibt, sie mit LF hinterlässt. Drei Anlässe haben die Entscheidung
+erzwungen: `git archive` liefert unter Windows CRLF, `git show` dagegen LF — zweimal sah
+die Rücknahme einer Verfälschung (dokumentation.md §5) deshalb wie eine Manipulation aus,
+einmal hätte ein byteweiser Vergleich einen Befund erzeugt, den es nicht gibt; dazu `sed
+-i` unter MSYS, das eine CRLF-Datei still auf LF normalisiert und Hunderte Zeilen als
+„verschieden" erscheinen lässt.
+
+**Entschieden: festnageln.** `.gitattributes` trägt `* text=auto eol=lf`. `git add
+--renormalize .` hat dabei **keine** Inhaltsänderung erzeugt — der Index war bereits
+durchgehend LF —, nur `.gitattributes` selbst kam neu hinzu (geprüft mit
+`git diff --cached --stat`). Der Arbeitsbaum wechselt erst beim nächsten Auschecken jeder
+Datei auf LF; für `libreverbum/wordfreq_en_5000.txt` ist das unkritisch, weil die
+SHA-256-Prüfung in `tests/test_wordfreq_preset.py` die Zeilen selbst wieder mit `"\n"`
+zusammensetzt (`_entries`, „ohne den Kopf, mit '\n' verbunden") und damit gegen CRLF/LF
+unempfindlich ist — nachgemessen, indem die Datei probeweise neu ausgecheckt und das volle
+Tor erneut gefahren wurde: 557 bestanden, 2 übersprungen.
+
 ### Offene Punkte
 
 - **`encoding="utf-8"` maschinell erzwingen.** ruff kennt dafür `PLW1514`; ob die Regel
   ohne `preview` verfügbar ist, ist noch nicht geprüft. Gelänge es, wanderte eine
   Kleinigkeit aus dokumentation.md §8 aus der Prosa in das Tor
-- **Ob eine `.gitattributes` die Zeilenenden festnagelt.** Im Index liegt inzwischen jede
-  verfolgte Datei mit LF (geprüft am 26.08.2026 mit `git ls-files --eol`), im **Arbeitsbaum**
-  dagegen 18 mit CRLF und 37 mit LF: `core.autocrlf` steht auf `true` und wandelt beim
-  Auschecken um, während ein Werkzeug, das eine Datei neu schreibt, sie mit LF hinterlässt.
-  Wer für eine Verfälschungsprobe (dokumentation.md §5) einen mehrzeiligen Textanker im
-  Quelltext sucht, findet ihn deshalb in der einen Datei und in der anderen nicht — und
-  deutet den Fehlschlag leicht als „Anker falsch abgeschrieben" statt als
-  Zeilenende-Unterschied. `* text=auto eol=lf` würde das beenden, berührt aber als einmalige
-  Umstellung jede Datei und gehört deshalb entschieden, nicht nebenbei gemacht
 - `tools/` bleibt von der Typprüfung ausgenommen — Messskripte, reine Standardbibliothek.
   Ob das so bleibt, ist offen; berührt wird es erst, wenn ein Messskript in den Kern wandert
 - **Auslieferung** (Nuitka, PyInstaller) bleibt offen wie in Abschnitt 1; sie berührt das
