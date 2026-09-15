@@ -685,6 +685,12 @@ sondern die Bauart des Tors. Und **nicht derselbe Bearbeiter**, weil drei der vi
 und in seinen eigenen Tests wiederholt hatte — dieselbe Wurzel wie bei der selbstgebauten
 Vorrichtung in §5, „Woran geprüft wird". Wer prüft, muss die Annahme nicht teilen.
 
+**Bei einem reinen Dokumentationscommit ist das Tor nicht nur unvollständig, sondern
+stumm.** Kein Testlauf berührt Prosa — `grep` und der Augenschein sind dort der ganze
+Prüfapparat. Beleg: In einer Durchsicht der Phase-1-Nachträge waren fünf von sechs
+Befunden von einer Art, die kein Testlauf je angefasst hätte. Dieselbe stille Fehlerklasse
+wie bei Code, nur ohne die vier Befehle, die überhaupt etwas melden könnten.
+
 ### Wonach sie sucht, und was herauskommt
 
 Nicht nach Formfehlern, die hat das Tor. Gesucht wird der **stille Fehlschlag**: ein
@@ -736,6 +742,36 @@ betroffenen Testdateien laufen lassen" verkleinert das Problem, löst es aber ni
 > Zahl **zwei**. Meldet der Lauf **eine** statt zwei, hängt in der Umgebung
 > `LIBREVERBUM_MODEL_URL` oder `LIBREVERBUM_WORDFREQ_PYTHON` (`tests/conftest.py`) —
 > falscher Alarm, kein falsches Grün; die betreffende Variable vor dem Lauf löschen.
+
+**Das Vergleichspaar einer Durchsicht ist `git show <commit>`, nicht `git diff
+<vorgänger> <commit>`.** Liegt zwischen den beiden ein fremder Commit — bei zwei
+gleichzeitig Bearbeitenden der Normalfall —, geraten dessen Zeilen mit in den Diff und
+drohen als Befund gegen den falschen Bauenden auszufallen. Beleg: 23 fremde Zeilen einer
+README-Arbeit im genannten Vergleichspaar, aus denen beinahe ein Befund gegen den
+falschen Bauenden entstanden wäre; entdeckt nur, weil die Zuordnung vor dem Formulieren
+noch einmal geprüft wurde.
+
+**Beim Einfalten ist die Suchmenge „alles außer `beobachtungen/`", nie die im Auftrag
+aufgezählten geänderten Verzeichnisse.** Ein Auftrag, der die zu durchsuchenden Orte
+aufzählt, verengt damit ungewollt, was der vorgeschriebene `grep` weit gefasst hätte.
+Beleg: Eine Kurzfassung der Nachtragsregel aus §7 stand weiterhin unverändert in
+CLAUDE.md — einer Datei, die keiner der aufgezählten Teilaufträge als eigene führte — und
+wurde nur gefunden, weil der `grep` über den ganzen Wegwerfordner lief statt über die im
+Auftrag benannten Verzeichnisse. Die Stelle stand als Prosa, nicht im Diff der Teilaufgabe.
+
+**Ein eigenes Prüfskript meldet seine Trefferzahl und wird gegen eine unabhängig bekannte
+Größe gehalten, bevor sein Ergebnis zählt.** Beleg: Ein Verweisskript beim Einfalten von
+Nachträgen suchte das typografische Anführungszeichenpaar `„…"` und meldete zwei Treffer,
+weil der Bestand öffnend `„` (U+201E), schließend aber ASCII `"` verwendet — die
+tatsächliche Zahl lag bei 518. Gerettet hat nur, dass der Auftrag „rund 160 Stellen"
+nannte und zwei dagegen absurd war: genau das falsche Grün, das die Durchsicht sucht —
+null tote Verweise, weil überhaupt keine Verweise gefunden wurden.
+
+**Ein Fehler, der schon vor dem durchgesehenen Commit bestand, gehört dennoch in den
+Bericht — gesondert von den Befunden am Commit ausgewiesen.** Der Gegenstand der
+Durchsicht ist der Commit, aber ein Durchsehender ist oft der Einzige, der die Stelle
+überhaupt ansieht; bei strenger Auslegung „nur der Commit zählt" fiele ein solcher
+Vorbefund unter den Tisch, ohne dass ihn je jemand sonst bemerkt.
 
 **Ein Verfälschungslauf im Wegwerfordner wird in `timeout` gewickelt** (etwa
 `timeout 900 pytest …`, **in Git Bash** — dort ist `timeout` das GNU-Werkzeug), damit eine
