@@ -1,4 +1,4 @@
-"""Datenverzeichnis und `config.toml` (technik.md §9).
+"""Datenverzeichnis und `config.toml` (technik.md §9) — Anwendungsschicht (§14, E4).
 
 Aufgabe
 -------
@@ -9,6 +9,10 @@ Aufrufer sie einmalig aus einer Vorlage an und ändert sie danach der Nutzer von
 Dieses Modul bestimmt und legt an; der Kern (`libreverbum.*`) bekommt von hier aus nur
 fertige Pfade und eine fertige Modellserver-Adresse (technik.md §9, „Der Kern kennt keine
 Vorgabe") — keine dieser beiden Vorgaben entsteht im Kern selbst.
+
+Liegt in `app/`, nicht mehr in `cli/` (bauplan-phase2.md AP 3): Datenverzeichnis und
+Einstellungen braucht jede Oberfläche, nicht nur die Kommandozeile — `gui/` bekommt sie
+mit diesem Umzug geschenkt, statt sie nachzubauen (technik.md §14, E4).
 
 Voraussetzungen
 ---------------
@@ -97,7 +101,7 @@ class Config:
 
 
 # REGEL (technik.md §9, „Wohin die Dateien gehören"): Gemessen vom Ort dieser Datei aus
-# (cli/config.py, eine Ebene unter der Wurzel), nicht vom Arbeitsverzeichnis. `Path.cwd()`
+# (app/config.py, eine Ebene unter der Wurzel), nicht vom Arbeitsverzeichnis. `Path.cwd()`
 # träfe je nach Aufrufort ein anderes Profil, und ein Profil an unerwarteter Stelle sieht
 # aus wie ein verlorenes — dieselbe Sorge, aus der `cli.main._confirm_new_profile` vor dem
 # ersten Anlegen nachfragt.

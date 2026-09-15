@@ -14,6 +14,11 @@ ruft ihn nur auf (technik.md §1, „Architekturregel"), es importiert dafür be
 Kernmodule zugleich — die Importregel aus technik.md §7 gilt nur innerhalb von
 `libreverbum/`, nicht für die Oberfläche, die ihn aufruft.
 
+Was diese Oberfläche mit einer künftigen zweiten teilen würde — Datenverzeichnis und
+`config.toml`, Auflösung des Modellnamens, Namensbildung der Exportdateien — liegt seit
+bauplan-phase2.md AP 3 nicht mehr hier, sondern in `app/` (technik.md §14, E4); `cli/`
+importiert es von dort.
+
 Voraussetzungen
 ---------------
 Eine interaktive Konsole (`input`/`print`), ein bereits bezogenes Wörterbuch

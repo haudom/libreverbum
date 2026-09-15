@@ -7,6 +7,10 @@ Aufgabe
 das Bestimmen des ersten vom Server genannten Modells Sache des Aufrufers, nicht dieses
 Moduls"). Dieses Modul ist dieser Aufrufer.
 
+Liegt in `app/`, nicht mehr in `cli/` (bauplan-phase2.md AP 3): Beide Oberflächen rufen
+`libreverbum.translation.choose_sense` auf und brauchen deshalb denselben aufgelösten
+Modellnamen — Anwendungsschicht, kein Kernwissen (technik.md §14, E4).
+
 Voraussetzungen
 ---------------
 `url` ist bereits die fertige, in `config.toml` hinterlegte Adresse (technik.md §9) — hier

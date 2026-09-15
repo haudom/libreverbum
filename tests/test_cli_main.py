@@ -415,7 +415,7 @@ def test_main_names_its_data_directory_on_every_run(tmp_path: Path) -> None:
 
 def test_main_creates_config_on_the_first_run_and_stops(tmp_path: Path) -> None:
     """bauplan.md T16: „fehlende config.toml wird einmalig angelegt und gemeldet" —
-    hier über den vollen Einstiegspunkt, nicht nur über `cli.config.load_config`."""
+    hier über den vollen Einstiegspunkt, nicht nur über `app.config.load_config`."""
     written: list[str] = []
 
     exit_code = main(
@@ -1018,7 +1018,7 @@ def test_full_run_learns_a_word_and_an_expression_and_exports_them(
     assert exit_code == 0, "\n".join(console.log)
     # Die geschriebenen Dateien werden im Verzeichnis gesucht, nicht über einen zweiten
     # `export_paths`-Aufruf: Der liefert seit dem 27.08.2026 den nächsten **freien**
-    # Namen und damit gerade nicht die eben geschriebenen Dateien (`cli/export.py`).
+    # Namen und damit gerade nicht die eben geschriebenen Dateien (`app/export.py`).
     decks = sorted(output_dir.glob("*.apkg"))
     printouts = sorted(output_dir.glob("*.html"))
     assert [pfad.name for pfad in decks] == ["CLI-Testbuch_kapitel1.apkg"]

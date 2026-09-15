@@ -2391,8 +2391,9 @@ Standardbibliothek.**
 Darin `profil.sqlite3`, `en-de.sqlite3`, `config.toml` und, seit dem 15.09.2026, das
 Unterverzeichnis `cache/` für den Zwischenspeicher aus Abschnitt 5 („Entschieden
 15.09.2026: Zwischenspeicher für den buchweiten Eigennamenanteil") — `cli` setzt ihn auf
-`<data_dir>/cache`, ohne eigenen Schlüssel in `config.toml`. `cli.config.default_data_dir`
-misst den Pfad vom Ort der eigenen Datei aus, **nicht** vom Arbeitsverzeichnis: Ein am
+`<data_dir>/cache`, ohne eigenen Schlüssel in `config.toml`. `app.config.default_data_dir`
+(bauplan-phase2.md AP 3; vorher `cli.config.default_data_dir`) misst den Pfad vom Ort der
+eigenen Datei aus, **nicht** vom Arbeitsverzeichnis: Ein am
 Arbeitsverzeichnis hängendes Datenverzeichnis träfe je nach Aufrufort ein anderes Profil.
 `data/` steht in `.gitignore`, und jeder Lauf gibt das benutzte Verzeichnis als erste Zeile
 aus.
@@ -3115,8 +3116,9 @@ Fehlermeldung und Exit-Code 1 — Festlegung 2 gilt unverändert, der Export ist
   übereinstimmen — genau die Vermischung, die die stabile GUID verhindern soll.
 - **Warum der Dateiname den Teilstand nennt, der Deckname nicht.** Eine Teildatei, die wie
   ein vollständiger Export aussieht, wäre der stille Fehlschlag an dieser Stelle (Regel
-  13): Wer sie öffnet, hält das Kapitel für fertig bearbeitet. `cli.export.export_paths`
-  bekommt dafür ein `partial`-Kennzeichen und hängt `_teilexport` an den Namensstamm,
+  13): Wer sie öffnet, hält das Kapitel für fertig bearbeitet. `app.export.export_paths`
+  (bauplan-phase2.md AP 3; vorher `cli.export.export_paths`) bekommt dafür ein
+  `partial`-Kennzeichen und hängt `_teilexport` an den Namensstamm,
   **bevor** die Suche nach dem freien Namenspaar beginnt — „Exportdateien werden nicht
   überschrieben" oben gilt unverändert, auch für einen Teilexport müssen beide Namen frei
   sein, sonst `_2`, `_3`.

@@ -1,4 +1,4 @@
-"""Prüft `cli/export.py` — Export nach Anki und Druckseite (bauplan.md T16).
+"""Prüft `app/export.py` — Export nach Anki und Druckseite (technik.md §14).
 
 `test_export_writes_the_decks_guid_into_the_profile` ist die Nachbesserung zum Befund
 mittel aus der T16-Durchsicht: Regel 6 (dokumentation.md §4, „Anki-GUID beim Export in
@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from cli import export
+from app import export
 from libreverbum import anki, profile
 from libreverbum.entities import Book, Card, CardDirection, Lemma, Occurrence, Sense
 
@@ -101,7 +101,7 @@ def test_a_second_run_over_the_same_chapter_writes_next_to_the_first(
     tmp_path: Path, profile_con: sqlite3.Connection
 ) -> None:
     """Ein zweiter Lauf über dasselbe Kapitel überschreibt die Dateien des ersten nicht,
-    sondern legt sich mit `_2` daneben (`cli/export.py`, `export_paths`).
+    sondern legt sich mit `_2` daneben (`app/export.py`, `export_paths`).
 
     Der Verlust wäre still: `profile.record_card` hat die Karten des ersten Laufs längst
     gebucht, sie kommen kein zweites Mal — wer das erste `.apkg` noch nicht importiert

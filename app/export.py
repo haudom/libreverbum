@@ -10,6 +10,12 @@ niemand"). Dieses Modul kennt deshalb selbst weder `anki` noch `printout` noch
 `profile.record_card` — es leitet `Card.sense`/`Card.occurrence` nur in das von
 `printout.write_printout` erwartete Tupelpaar um, mittelbar über `pipeline.export_cards`.
 
+Liegt in `app/`, nicht mehr in `cli/` (bauplan-phase2.md AP 3): Was hier bleibt, ist die
+Namensbildung (`export_paths`, `_2`/`_3`, `_teilexport`) — Sache des Aufrufers, nicht des
+Kerns (technik.md §7). Die Verkettung der Kernschritte selbst wanderte bereits mit AP 2
+nach `pipeline.export_cards`; dieses Modul ruft sie nur noch auf. `gui/` bekommt beides mit
+diesem Umzug geschenkt, statt es nachzubauen (technik.md §14, E4).
+
 Voraussetzungen
 ---------------
 `cards` stammt aus **einem** Kapitel (dieselbe Annahme wie in `anki.export_deck` und

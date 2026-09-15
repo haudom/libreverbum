@@ -1,4 +1,4 @@
-"""Prüft `cli/config.py` — Datenverzeichnis und `config.toml` (technik.md §9, bauplan.md T16)."""
+"""Prüft `app/config.py` — Datenverzeichnis und `config.toml` (technik.md §9, §14)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from cli import config
+from app import config
 
 
 def test_default_data_dir_lies_next_to_the_project() -> None:
@@ -14,12 +14,12 @@ def test_default_data_dir_lies_next_to_the_project() -> None:
     nicht im Nutzerverzeichnis — auffindbar ohne versteckte Ordner im Explorer.
 
     Geprüft am Nachbarn statt am Pfad selbst: Dass der Elternordner das Projekt ist,
-    erkennt der Test daran, dass `cli/config.py` darin liegt."""
+    erkennt der Test daran, dass `app/config.py` darin liegt."""
     verzeichnis = config.default_data_dir()
 
     assert verzeichnis.is_absolute()
     assert verzeichnis.name == "data"
-    assert (verzeichnis.parent / "cli" / "config.py").is_file()
+    assert (verzeichnis.parent / "app" / "config.py").is_file()
 
 
 def test_default_data_dir_does_not_follow_the_working_directory(

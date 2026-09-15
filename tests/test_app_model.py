@@ -1,4 +1,4 @@
-"""Prüft `cli/model.py` — den Modellnamen auflösen (bauplan.md T16).
+"""Prüft `app/model.py` — den Modellnamen auflösen (technik.md §14).
 
 Regressionstest zu Befund schwer 2 (Durchsicht T16): `config.toml` trägt `model.url`
 bereits mit angehängtem `/v1` (technik.md §9, `http://localhost:11434/v1`), der üblichen
@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from cli import model
+from app import model
 
 if TYPE_CHECKING:
     from conftest import ModelServerDouble

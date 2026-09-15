@@ -2,8 +2,8 @@
 
 Aufgabe
 -------
-Verkettet, was `cli.config`, `libreverbum.epub`, `libreverbum.extraction`,
-`libreverbum.pipeline`, `cli.interaction` und `cli.export` je für sich liefern, zu einem
+Verkettet, was `app.config`, `libreverbum.epub`, `libreverbum.extraction`,
+`libreverbum.pipeline`, `cli.interaction` und `app.export` je für sich liefern, zu einem
 Aufruf von der Kommandozeile: Wörterbuch beziehen oder indizieren
 (`libreverbum.dictionary`), EPUB wählen, Kapitel wählen, `pipeline.run_chapter`,
 je Decksel eine blockweise Triage über `interaction.run_triage_blocks` (Bedeutung vor der
@@ -41,7 +41,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, assert_never
 
-from cli import config, display, export, interaction, model
+from app import config, export, model
+from cli import display, interaction
 from cli.display import finish_progress_line, safe_print, safe_print_progress
 from cli.interaction import ReadLine, WriteLine
 from libreverbum import dictionary, epub, extraction, pipeline, profile
