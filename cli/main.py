@@ -218,6 +218,11 @@ def _apply_vocabulary_preset(
             timestamp=datetime.now(UTC),
         )
     except Exception:
+        # REGEL (dokumentation.md §4 Regel 13, „Kein except, das nur protokolliert und
+        # weiterläuft"): Räumt nur die gerade erst angelegte Profildatei weg und läuft mit
+        # `raise` unverändert weiter — es meldet nichts selbst und bricht den Lauf nicht
+        # selbst ab, das bleibt `main`s eigenem Fang überlassen (Befund 3, Durchsicht
+        # b91a56e).
         if not profile_existed_before and profile_path.is_file():
             profile_path.unlink()
         raise
@@ -591,10 +596,13 @@ def _export_partial_run(
     danach ausgibt.
 
     `export.write_exports` bekommt `partial=True` — der Dateiname trägt den Teilstand
-    (`_teilexport`), der Deckname bleibt unverändert (`cli/export.py`, „Liefert"). Diese
-    Funktion selbst wirft keine Ausnahme, die eine andere verdeckte: Scheitert der
-    Teilexport seinerseits, ist das ein eigener, sichtbarer Fehlschlag (Regel 13,
-    dokumentation.md §4), keiner, der stillschweigend übergangen würde."""
+    (`_teilexport`), der Deckname bleibt unverändert (`cli/export.py`, „Liefert"). Scheitert
+    der Teilexport seinerseits (etwa ein ungültiger `output_dir`), wirft diese Funktion die
+    entstehende Ausnahme unverändert weiter — sie fängt selbst nichts ab. **Der Aufrufer**
+    in `_run` fängt diesen zweiten Fehlschlag gesondert ab und meldet ihn zusätzlich, bevor
+    die ursprüngliche Ausnahme unverändert weiterläuft: Ohne diesen zweiten Fang ersetzte
+    die neue Ausnahme die ursprüngliche vollständig, und deren Ursache verschwände aus der
+    Meldung (Befund 1, Durchsicht b91a56e)."""
     if not partial_cards:
         return
     paths = export.write_exports(
@@ -803,14 +811,27 @@ def _run(
                 partial_cards=partial_cards,
             )
         except Exception:
-            _export_partial_run(
-                con=con,
-                partial_cards=partial_cards,
-                output_dir=output_dir,
-                book_title=result.chapter.book.title,
-                chapter_number=result.chapter.number,
-                write_line=write_line,
-            )
+            # REGEL (dokumentation.md §4 Regel 13, „Kein except, das nur protokolliert und
+            # weiterläuft"): Dieser Fang schreibt den Teilexport und läuft danach mit
+            # `raise` unverändert zur ursprünglichen Ausnahme weiter — er verschluckt sie
+            # nicht, sondern hängt ihr eine Nebenwirkung voran. Scheitert `_export_partial_run`
+            # selbst (etwa ein ungültiger `output_dir`), ersetzte diese zweite Ausnahme ohne
+            # den inneren Fang unten die erste vollständig: `main` finge nur noch die zweite,
+            # und die eigentliche Ursache erschiene in der Meldung nirgends (Befund 1,
+            # Durchsicht b91a56e). Der innere Fang meldet den zweiten Fehlschlag deshalb
+            # zusätzlich, statt ihn durchzureichen — das äußere `raise` bricht den Lauf davon
+            # unabhängig weiterhin ab, nie mit Exit-Code 0.
+            try:
+                _export_partial_run(
+                    con=con,
+                    partial_cards=partial_cards,
+                    output_dir=output_dir,
+                    book_title=result.chapter.book.title,
+                    chapter_number=result.chapter.number,
+                    write_line=write_line,
+                )
+            except Exception as export_error:
+                write_line(f"Teilexport zusätzlich fehlgeschlagen: {export_error}")
             raise
 
         cards = word_cards + expression_cards

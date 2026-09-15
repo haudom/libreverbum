@@ -838,8 +838,15 @@ def run_triage_blocks(
     durchgeklickt oder mit `q` verlassen. Scheitert ein späterer Block (etwa der
     Vorladeblock über `prefetch.join()` unten), läuft die Ausnahme unverändert durch
     (Regel 13, dokumentation.md §4) — `partial_cards` enthält zu diesem Zeitpunkt aber
-    bereits die Karten jedes zuvor abgeschlossenen Blocks, verloren geht nur, was der
-    Nutzer noch gar nicht entschieden hatte. `cli.main._run` übergibt für die Wörter- und
+    bereits die Karten jedes zuvor abgeschlossenen Blocks. Aus dem **Export** verloren
+    gehen auch schon getroffene Entscheidungen des noch nicht abgeschlossenen Blocks: Sie
+    stehen zwar bereits als `Event` im Profil (`_record`), tragen aber zu keinem `Card` in
+    `partial_cards` bei, weil `run_triage_pass` für diesen Block nie zurückkehrt (gemessen,
+    Befund 2, Durchsicht b91a56e: Blockgröße 3, erste Entscheidung „lernen", danach
+    `EOFError` — Exit 1, keine Exportdatei, Profil `[('learning', 1)]`, aber null
+    `card`-Zeilen). Am **Verhalten** ändert das nichts: `learning` gilt weiterhin nicht als
+    `known` (Abschnitt 4), der nächste Lauf über dasselbe Kapitel fragt diese Grundform
+    erneut ab. `cli.main._run` übergibt für die Wörter- und
     die Wendungsschleife **dieselbe** Liste, damit ein Fehlschlag im Wendungsteil die
     Wörterkarten mitnimmt. Vorgabe `None` legt intern eine eigene, leere Liste an — für
     jeden Aufrufer, dem der Teilexport gleichgültig ist (etwa die Tests in dieser Datei),

@@ -2991,6 +2991,16 @@ Fehlermeldung und Exit-Code 1 — Festlegung 2 gilt unverändert, der Export ist
   wäre Arbeit, die niemand bestellt hat. Der vorgesehene Weg hinaus bleibt `q`
   beziehungsweise „nein" bei der Fortsetzungsfrage — beide sind ohnehin kein Abbruch,
   sondern das reguläre Verlassen der Triage, und exportieren wie bisher vollständig.
+- **Eine abgeschnittene Eingabe zählt zum Teilexport, nicht zu den Ausstiegswegen
+  (Nachtrag 15.09.2026, Durchsicht b91a56e).** Zwischen den beiden Fällen oben liegt
+  `EOFError`: Eine abgeschnittene Eingabe (Pipe-Ende, umgeleitetes `/dev/null`) lässt
+  `input()` — und damit jedes `read_line` — diese Ausnahme werfen. Sie ist eine
+  `Exception`, kein `BaseException`, fällt also unter denselben Fang wie ein echter
+  Programmfehler und schreibt die bis dahin entschiedenen Karten als Teilexport, bevor
+  `cli.main.main` den Lauf mit der eigenen deutschen Meldung „Abgebrochen — keine Eingabe
+  mehr." beendet. Das ist von der Entscheidung oben bereits gedeckt und inhaltlich
+  richtig — die Entscheidungen des Nutzers bis dahin waren echt —, stand bisher nur
+  nirgends.
 
 ### Offene Punkte
 

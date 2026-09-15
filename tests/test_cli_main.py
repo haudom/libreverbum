@@ -1185,6 +1185,72 @@ def test_a_failure_in_the_expression_pass_exports_the_word_cards_and_exits_with_
     assert guids == [word_card.guid]
 
 
+def test_a_failed_partial_export_reports_the_original_cause_alongside_its_own_failure(
+    tmp_path: Path, book_epub: Path, mini_dictionary_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Befund 1, Durchsicht b91a56e: Scheitert der Teilexport selbst (hier: `export.
+    write_exports` wirft eine `FileNotFoundError`, wie sie ein nicht vorhandenes
+    Ausgabelaufwerk auslöst), darf diese zweite Ausnahme die **ursprüngliche** nicht
+    ersetzen. `cli.main._run` meldet den Teilexport-Fehlschlag deshalb als eigene,
+    zusätzliche Zeile und lässt danach die ursprüngliche Ausnahme unverändert weiterlaufen
+    — `main`s bestehender Fang gibt am Ende weiterhin deren Meldung aus, nicht die des
+    Teilexports.
+
+    Verfälschungsprobe: Ohne den inneren `try/except` um `_export_partial_run` in
+    `cli.main._run` (also `except Exception: _export_partial_run(...); raise` ohne
+    eigenen Fang um den Aufruf) läuft die hier injizierte `FileNotFoundError` aus
+    `export.write_exports` bis zu `main`s Fang durch und ersetzt dort die ursprüngliche
+    `ValueError` vollständig — `"Fehler: Modellserver antwortet nicht mehr." in written`
+    schlägt dann fehl, weil nur noch die Meldung zur `FileNotFoundError` ankommt."""
+    data_dir = tmp_path / "data"
+    _write_config(
+        data_dir,
+        model_url="http://127.0.0.1:0/v1",
+        model_name="mini-model",
+        dictionary_path=mini_dictionary_db,
+    )
+    output_dir = tmp_path / "export"
+    word_card = _make_card("watch")
+
+    def _fake_run_triage_blocks(
+        *, label: str, partial_cards: list[Card], **_kwargs: object
+    ) -> list[Card]:
+        if label == "Wörter":
+            partial_cards.append(word_card)
+            return [word_card]
+        raise ValueError("Modellserver antwortet nicht mehr.")
+
+    def _failing_write_exports(*_args: object, **_kwargs: object) -> None:
+        raise FileNotFoundError(
+            "[WinError 3] Das System kann den angegebenen Pfad nicht finden: 'Z:'"
+        )
+
+    monkeypatch.setattr("cli.main.interaction.run_triage_blocks", _fake_run_triage_blocks)
+    monkeypatch.setattr("cli.main.export.write_exports", _failing_write_exports)
+    written: list[str] = []
+
+    exit_code = main(
+        [
+            str(book_epub),
+            "--chapter",
+            "1",
+            "--data-dir",
+            str(data_dir),
+            "--output-dir",
+            str(output_dir),
+        ],
+        read_line=_read_new_profile_no_preset,
+        write_line=written.append,
+        style=display.PLAIN_STYLE,
+    )
+
+    assert exit_code == 1
+    assert any("Teilexport" in line and "fehlgeschlagen" in line for line in written), "\n".join(
+        written
+    )
+    assert "Fehler: Modellserver antwortet nicht mehr." in written, "\n".join(written)
+
+
 def test_a_failure_before_any_card_is_decided_writes_no_export_file(
     tmp_path: Path, book_epub: Path, mini_dictionary_db: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
