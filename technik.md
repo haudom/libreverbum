@@ -2928,6 +2928,52 @@ nachgezogen (konzept.md, „Abnahmekriterien"). Die Kapazität bleibt gemessen u
 selbst ist seit dem Nachtrag 01.09.2026 in Abschnitt 8c nicht mehr 36, sondern **33**: die
 dort gerechnete Zahl hielt beim echten Druck nicht.
 
+### Entschieden 15.09.2026: ein abgebrochener Lauf exportiert, was er hat
+
+Der offene Punkt „exportiert ein abgebrochener Lauf, was er hat?" (aufgefallen bei der
+Durchsicht von 1cfb1e4) ist entschieden: **ja.** Bricht der Modellserver etwa im dritten
+Block weg, werden die Karten der bereits vollständig durchentschiedenen Blöcke als
+Anki-Deck und Druckseite geschrieben; **danach** endet der Lauf weiterhin sichtbar mit der
+Fehlermeldung und Exit-Code 1 — Festlegung 2 gilt unverändert, der Export ist kein
+`except`, das protokolliert und weiterläuft (Regel 13, dokumentation.md §4).
+
+- **Warum überhaupt exportiert wird.** Jede „lernen"-Entscheidung eines abgeschlossenen
+  Blocks steht bereits als `Event` im Profil (`cli.interaction._record`), bevor der
+  nächste Block auch nur angefragt wird. Ohne Export wäre diese bereits getroffene
+  Entscheidung für den Moment wertlos: kein Anki-Deck, keine Druckseite, obwohl das Profil
+  den Fortschritt längst kennt. Gesammelt wird dafür über eine vom Aufrufer
+  (`cli.main._run`) angelegte Liste, die `interaction.run_triage_blocks` nach **jedem
+  abgeschlossenen Block** ergänzt — abgeschlossen heißt: der Block hat einen `TriagePass`
+  zurückgeliefert, ob vollständig durchgeklickt oder mit `q` verlassen. Ein Block, den
+  `run_triage_pass` wegen eines Fehlschlags mittendrin nie zurückliefert, trägt nichts
+  bei — seine Karten sind noch keine abgeschlossene Entscheidung. Wörter- und
+  Wendungsdeckel tragen in dieselbe Liste ein, damit ein Fehlschlag im Wendungsteil die
+  Wörterkarten mitnimmt.
+- **Warum der Deckname unverändert bleibt.** `anki.new_card_guid` bildet dieselbe GUID aus
+  Buch, Kapitel, Grundform samt Wortart, Kartenrichtung sowie `wikdict_lexentry` und
+  `wikdict_sense` (Abschnitt 8b) — unabhängig davon, ob der Export vollständig ist oder ein
+  Teilexport. Ein abweichender Deckname schöbe dieselben Notizen bei einem späteren,
+  vollständigen Lauf über dasselbe Kapitel in ein zweites Anki-Deck, obwohl die GUIDs
+  übereinstimmen — genau die Vermischung, die die stabile GUID verhindern soll.
+- **Warum der Dateiname den Teilstand nennt, der Deckname nicht.** Eine Teildatei, die wie
+  ein vollständiger Export aussieht, wäre der stille Fehlschlag an dieser Stelle (Regel
+  13): Wer sie öffnet, hält das Kapitel für fertig bearbeitet. `cli.export.export_paths`
+  bekommt dafür ein `partial`-Kennzeichen und hängt `_teilexport` an den Namensstamm,
+  **bevor** die Suche nach dem freien Namenspaar beginnt — „Exportdateien werden nicht
+  überschrieben" oben gilt unverändert, auch für einen Teilexport müssen beide Namen frei
+  sein, sonst `_2`, `_3`.
+- **Warum die Ausnahme trotzdem durchläuft.** `cli.main._run` fängt sie nur, um den
+  Teilexport zu schreiben, und wirft sie danach unverändert weiter (`raise` ohne
+  Argument), damit `cli.main.main`s bestehende Fänge greifen — deutsche Meldung bei
+  `ValueError`/`FileNotFoundError`, voller Verlauf bei einem echten Programmfehler. Der
+  Lauf endet mit Exit-Code 1, nie mit 0. Ist noch keine Karte entschieden (leere
+  Sammelliste), wird auch kein Teilexport geschrieben, nur die Fehlermeldung.
+- **Warum Strg-C nicht abgedeckt ist.** Gefangen wird `Exception`, nicht `BaseException`:
+  Ein `KeyboardInterrupt` ist der Nutzer, der sofort heraus will, und ein Export danach
+  wäre Arbeit, die niemand bestellt hat. Der vorgesehene Weg hinaus bleibt `q`
+  beziehungsweise „nein" bei der Fortsetzungsfrage — beide sind ohnehin kein Abbruch,
+  sondern das reguläre Verlassen der Triage, und exportieren wie bisher vollständig.
+
 ### Offene Punkte
 
 - **Wie oft ein Nutzer tatsächlich weitermacht, ist nicht gemessen.** Bleibt es beim ersten
@@ -2938,14 +2984,15 @@ dort gerechnete Zahl hielt beim echten Druck nicht.
   entsteht — kein gemessener Anlass, also Regel 14
 - **Über Kapitelgrenzen hinweg wird nicht vorgeladen.** Der Durchlauf ist auf ein Kapitel
   angelegt (Abschnitt 7); „ganzes Buch auf einmal" ist Phase 2 (konzept.md, „Phasenplan")
-- **Was mit den fertigen Blöcken geschieht, wenn ein späterer scheitert, ist nicht
-  entschieden.** Bricht der Modellserver im dritten Block weg, endet der Lauf sichtbar
-  (Festlegung 2) — aber **vor** dem Export, und die zwei vollständig durchentschiedenen
-  Blöcke ergeben kein Anki-Deck. Die Ereignisse stehen im Profil, doch `learning` gilt nicht
-  als bekannt: Der nächste Lauf fragt dieselben Wörter erneut und zahlt dieselben
-  Modellaufrufe. Aufgefallen bei der Durchsicht von 1cfb1e4. Das ist eine inhaltliche Frage
-  („exportiert ein abgebrochener Lauf, was er hat?"), keine Bauentscheidung — sie gehört
-  besprochen, bevor sie nebenbei beantwortet wird
+- **Ob ein Folgelauf die Triage-Ereignisse dieses Kapitels wiederverwendet, statt die
+  Bedeutung erneut wählen zu lassen, ist nicht entschieden.** Die Entscheidung vom
+  15.09.2026 oben klärt nur, was mit den **bereits entschiedenen** Karten eines
+  abgebrochenen Laufs geschieht — nicht, was mit dem **Rest** geschieht. Ein „lernen" oder
+  „kenne ich" steht zwar als `Event` im Profil, aber `learning` gilt nicht als `known`
+  (Abschnitt 4): Der nächste Lauf über dasselbe Kapitel fragt jedes noch nicht entschiedene
+  Wort erneut ab und zahlt dafür dieselben Modellaufrufe zur Bedeutungsauflösung erneut,
+  unabhängig davon, ob der vorige Lauf regulär endete oder abbrach. Aufgefallen bei der
+  Durchsicht von 1cfb1e4, unverändert offen
 
 ---
 

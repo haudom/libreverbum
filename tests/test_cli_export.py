@@ -10,6 +10,7 @@ Rückgabewerte gegen sich selbst zu halten.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import tempfile
 import zipfile
@@ -65,6 +66,24 @@ def _apkg_note_guids(path: Path) -> list[str]:
         con.close()
         collection_path.unlink()
     return [row[0] for row in rows]
+
+
+def _deck_names(path: Path) -> set[str]:
+    """Die Decknamen aus einer erzeugten `.apkg`-Datei — dieselbe Bauart wie
+    `tests/test_anki.py`, `_col` (die Datei wird als ZIP wieder aufgemacht, `col.decks`
+    ist ein JSON-Objekt je Deck-ID)."""
+    with zipfile.ZipFile(path) as archive:
+        collection_bytes = archive.read("collection.anki2")
+    with tempfile.NamedTemporaryFile(suffix=".anki2", delete=False) as handle:
+        handle.write(collection_bytes)
+        collection_path = Path(handle.name)
+    con = sqlite3.connect(collection_path)
+    try:
+        (decks_json,) = con.execute("SELECT decks FROM col").fetchone()
+    finally:
+        con.close()
+        collection_path.unlink()
+    return {deck["name"] for deck in json.loads(decks_json).values()}
 
 
 @pytest.fixture
@@ -220,3 +239,84 @@ def test_a_word_without_a_dictionary_entry_does_not_cost_the_whole_export(
     assert paths.printout_path.is_file()
     assert sorted(_apkg_note_guids(paths.anki_path)) == sorted([sicher.guid, unsicher.guid])
     assert profile_con.execute("SELECT count(*) FROM card").fetchone()[0] == 2
+
+
+def test_export_paths_marks_a_partial_export_in_the_filename(tmp_path: Path) -> None:
+    """technik.md §12, „Entschieden 15.09.2026: ein abgebrochener Lauf exportiert, was er
+    hat": Der Teilstand steht im Dateinamen, damit eine Teildatei nicht wie ein
+    vollständiger Export aussieht (Regel 13, dokumentation.md §4)."""
+    paths = export.export_paths(tmp_path / "export", "Testbuch", 1, partial=True)
+
+    assert paths.anki_path.name == "Testbuch_kapitel1_teilexport.apkg"
+    assert paths.printout_path.name == "Testbuch_kapitel1_teilexport.html"
+
+
+def test_export_paths_still_searches_a_free_pair_for_a_partial_export(tmp_path: Path) -> None:
+    """Die Suche aus `export_paths` nach dem freien Namenspaar gilt unverändert auch für
+    einen Teilexport — ein zweiter abgebrochener Lauf über dasselbe Kapitel überschreibt
+    den ersten Teilexport nicht, sondern rückt mit `_2` daneben."""
+    output_dir = tmp_path / "export"
+    output_dir.mkdir()
+    (output_dir / "Testbuch_kapitel1_teilexport.html").write_text("alt", encoding="utf-8")
+
+    paths = export.export_paths(output_dir, "Testbuch", 1, partial=True)
+
+    assert paths.anki_path.name == "Testbuch_kapitel1_teilexport_2.apkg"
+    assert paths.printout_path.name == "Testbuch_kapitel1_teilexport_2.html"
+
+
+def test_write_exports_keeps_the_deck_name_unchanged_for_a_partial_export(
+    tmp_path: Path, profile_con: sqlite3.Connection
+) -> None:
+    """technik.md §12, „Entschieden 15.09.2026 …": Der Teilexport landet im selben
+    Anki-Deck, das ein späterer vollständiger Lauf über dasselbe Kapitel träfe — nur der
+    Dateiname unterscheidet sich, nicht der Deckname. `anki.new_card_guid` liefert für
+    dieselben Einträge dieselbe GUID unabhängig von `partial`; ein abweichender Deckname
+    schöbe sie in ein zweites Deck.
+
+    Verfälschungsprobe: Hängt `write_exports` den Teilstand versehentlich an den
+    Deckname statt an den Dateinamen (etwa `deck_name=f"...{' (Teilexport)' if partial else
+    ''}"`), liefert `_deck_names` `{"Testbuch - Kapitel 1 (Teilexport)"}` statt der
+    unveränderten Zeichenkette — dieser Test war daran rot, bevor `deck_name` von `partial`
+    unabhängig blieb."""
+    card = _card_for(_occurrence())
+
+    paths = export.write_exports(
+        profile_con,
+        tmp_path / "export",
+        [card],
+        book_title=_BOOK.title,
+        chapter_number=1,
+        partial=True,
+    )
+
+    assert "_teilexport" in paths.anki_path.name
+    # "Default" ist genankis eigenes, immer mitgeschriebenes Deck (id 1) — geprüft wird
+    # Mitgliedschaft, nicht Gleichheit der ganzen Menge (dieselbe Bauart wie
+    # tests/test_anki.py, wo zwei Decklisten gegeneinander verglichen werden, nicht gegen
+    # eine von Hand erwartete Menge).
+    assert f"{_BOOK.title} - Kapitel 1" in _deck_names(paths.anki_path)
+
+
+def test_a_partial_and_a_full_export_of_the_same_card_carry_the_same_guid(
+    tmp_path: Path, profile_con: sqlite3.Connection
+) -> None:
+    """Die GUID einer Teilkarte ist dieselbe, die ein vollständiger Lauf für denselben
+    Eintrag erzeugt (technik.md §8b) — `partial` beeinflusst nur den Dateinamen, nicht die
+    Kennung, mit der ein späterer, vollständiger Lauf dieselbe Notiz wiederfindet."""
+    card = _card_for(_occurrence())
+
+    partial_paths = export.write_exports(
+        profile_con,
+        tmp_path / "teil",
+        [card],
+        book_title=_BOOK.title,
+        chapter_number=1,
+        partial=True,
+    )
+    full_paths = export.write_exports(
+        profile_con, tmp_path / "voll", [card], book_title=_BOOK.title, chapter_number=1
+    )
+
+    assert _apkg_note_guids(partial_paths.anki_path) == [card.guid]
+    assert _apkg_note_guids(full_paths.anki_path) == [card.guid]

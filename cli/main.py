@@ -11,6 +11,10 @@ Triage auflösen über `pipeline.resolve_triage_entries`, Befund schwer 1, zweit
 T16-Durchsicht; Blockschleife samt Fortsetzungsfrage seit Bauschritt 2/4, Vorladen des
 nächsten Blocks im Hintergrund seit Bauschritt 3/4, technik.md §12),
 Triage über die Tastatur (Wörter, dann Wendungen), Export nach Anki und als Druckseite.
+Scheitert die Triage mitten im Lauf (etwa ein wegbrechender Modellserver), exportiert
+`_run` die bis dahin entschiedenen Karten als Teilexport und reicht die Ausnahme danach
+unverändert weiter (technik.md §12, „Entschieden 15.09.2026: ein abgebrochener Lauf
+exportiert, was er hat").
 
 Regel 9 (dokumentation.md §4), strukturelle Hälfte: Dieses Kommandozeilenprogramm hat
 keine Ereignisschleife und keinen Oberflächen-Thread, den ein NLP- oder Modellaufruf
@@ -41,7 +45,7 @@ from cli import config, display, export, interaction, model
 from cli.display import finish_progress_line, safe_print, safe_print_progress
 from cli.interaction import ReadLine, WriteLine
 from libreverbum import dictionary, epub, extraction, pipeline, profile
-from libreverbum.entities import CardDirection, CefrLevel
+from libreverbum.entities import Card, CardDirection, CefrLevel
 
 if TYPE_CHECKING:
     import sqlite3
@@ -570,6 +574,48 @@ def _resolve_silently(
         con.close()
 
 
+def _export_partial_run(
+    *,
+    con: sqlite3.Connection,
+    partial_cards: list[Card],
+    output_dir: Path,
+    book_title: str,
+    chapter_number: int,
+    write_line: WriteLine,
+) -> None:
+    """Schreibt die bereits entschiedenen Karten eines abgebrochenen Laufs als Teilexport
+    (technik.md §12, „Entschieden 15.09.2026: ein abgebrochener Lauf exportiert, was er
+    hat") — aufzurufen aus dem `except`-Zweig in `_run` unten, **bevor** die ursprüngliche
+    Ausnahme weiterläuft. Tut nichts bei einer leeren Liste: Ist noch keine Karte
+    entschieden, gibt es nichts zu exportieren, nur die Fehlermeldung, die `main` gleich
+    danach ausgibt.
+
+    `export.write_exports` bekommt `partial=True` — der Dateiname trägt den Teilstand
+    (`_teilexport`), der Deckname bleibt unverändert (`cli/export.py`, „Liefert"). Diese
+    Funktion selbst wirft keine Ausnahme, die eine andere verdeckte: Scheitert der
+    Teilexport seinerseits, ist das ein eigener, sichtbarer Fehlschlag (Regel 13,
+    dokumentation.md §4), keiner, der stillschweigend übergangen würde."""
+    if not partial_cards:
+        return
+    paths = export.write_exports(
+        con,
+        output_dir,
+        partial_cards,
+        book_title=book_title,
+        chapter_number=chapter_number,
+        partial=True,
+    )
+    count = len(partial_cards)
+    karten = (
+        "einer bereits entschiedenen Karte"
+        if count == 1
+        else (f"{_format_count(count)} bereits entschiedenen Karten")
+    )
+    write_line(f"Abbruch — Teilexport aus {karten} geschrieben.")
+    write_line(f"Anki-Deck (Teilexport): {paths.anki_path}")
+    write_line(f"Druckseite (Teilexport): {paths.printout_path}")
+
+
 def _run(
     args: argparse.Namespace, *, read_line: ReadLine, write_line: WriteLine, style: display.Style
 ) -> int:
@@ -672,82 +718,106 @@ def _run(
         # nur für den ersten Block, `resolve_silent_block` (eigene Profilverbindung, keine
         # Ausgabe) für jeden vorgeladenen — siehe `_resolve_with_progress`/`_resolve_silently`
         # oben.
-        for line in display.cover("Wörter", style):
-            write_line(line)
-        word_cards = interaction.run_triage_blocks(
-            con=con,
-            book=result.chapter.book,
-            chapter_number=result.chapter.number,
-            entries=result.entries,
-            resolve_visible_block=lambda block: _resolve_with_progress(
+        # (Befund mittel, Durchsicht T16): profile.record_card schreibt die Anki-GUID
+        # jeder Karte ins Profil (Regel 6) und braucht dafür dieselbe, noch offene
+        # Profilverbindung wie die Triage — der Export bleibt deshalb innerhalb dieses
+        # try-Blocks, statt `con` vorher zu schließen.
+        output_dir = args.output_dir or Path.cwd()
+
+        # technik.md §12, „Entschieden 15.09.2026: ein abgebrochener Lauf exportiert, was
+        # er hat": `partial_cards` sammelt die Karten jedes abgeschlossenen Blocks aus
+        # beiden Deckeln — Wörter und Wendungen tragen bewusst in dieselbe Liste ein, damit
+        # ein Fehlschlag im Wendungsteil die Wörterkarten mitnimmt. Scheitert einer der
+        # beiden Aufrufe, exportiert der `except`-Zweig, was bis dahin entschieden ist, und
+        # wirft die Ausnahme danach **unverändert** weiter (`raise` ohne Argument) — kein
+        # `except`, das protokolliert und weiterläuft (Regel 13, dokumentation.md §4).
+        # Gefangen wird `Exception`, nicht `BaseException`: Ein `KeyboardInterrupt` ist der
+        # Nutzer, der sofort heraus will, kein Fehlschlag, der einen Teilexport verdient.
+        partial_cards: list[Card] = []
+        try:
+            for line in display.cover("Wörter", style):
+                write_line(line)
+            word_cards = interaction.run_triage_blocks(
                 con=con,
-                entries=block,
-                limit=interaction.WORD_BLOCK_SIZE,
-                url=cfg.model_url,
-                get_model_name=get_model_name,
-                order=cfg.triage_order,
-            ),
-            resolve_silent_block=lambda block, cancelled: _resolve_silently(
-                profile_path=cfg.profile_path,
-                entries=block,
-                limit=interaction.WORD_BLOCK_SIZE,
-                url=cfg.model_url,
-                get_model_name=get_model_name,
-                order=cfg.triage_order,
-                cancelled=cancelled,
-            ),
-            label="Wörter",
-            card_direction=card_direction,
-            style=style,
-            read_line=read_line,
-            write_line=write_line,
-        )
-        for line in display.cover("Wendungen", style):
-            write_line(line)
-        expression_cards = interaction.run_triage_blocks(
-            con=con,
-            book=result.chapter.book,
-            chapter_number=result.chapter.number,
-            entries=result.expressions,
-            resolve_visible_block=lambda block: _resolve_with_progress(
+                book=result.chapter.book,
+                chapter_number=result.chapter.number,
+                entries=result.entries,
+                resolve_visible_block=lambda block: _resolve_with_progress(
+                    con=con,
+                    entries=block,
+                    limit=interaction.WORD_BLOCK_SIZE,
+                    url=cfg.model_url,
+                    get_model_name=get_model_name,
+                    order=cfg.triage_order,
+                ),
+                resolve_silent_block=lambda block, cancelled: _resolve_silently(
+                    profile_path=cfg.profile_path,
+                    entries=block,
+                    limit=interaction.WORD_BLOCK_SIZE,
+                    url=cfg.model_url,
+                    get_model_name=get_model_name,
+                    order=cfg.triage_order,
+                    cancelled=cancelled,
+                ),
+                label="Wörter",
+                card_direction=card_direction,
+                style=style,
+                read_line=read_line,
+                write_line=write_line,
+                partial_cards=partial_cards,
+            )
+            for line in display.cover("Wendungen", style):
+                write_line(line)
+            expression_cards = interaction.run_triage_blocks(
                 con=con,
-                entries=block,
-                limit=interaction.EXPRESSION_BLOCK_SIZE,
-                url=cfg.model_url,
-                get_model_name=get_model_name,
-                order=cfg.triage_order,
-            ),
-            resolve_silent_block=lambda block, cancelled: _resolve_silently(
-                profile_path=cfg.profile_path,
-                entries=block,
-                limit=interaction.EXPRESSION_BLOCK_SIZE,
-                url=cfg.model_url,
-                get_model_name=get_model_name,
-                order=cfg.triage_order,
-                cancelled=cancelled,
-            ),
-            label="Wendungen",
-            card_direction=card_direction,
-            # (Zweite Nutzermeldung vom 02.09.2026): Der Wendungs-Deckel zählt dort weiter,
-            # wo der Wörter-Deckel aufgehört hat — die Zahl in der Trennlinie ist damit das,
-            # was am Ende tatsächlich ins Anki-Deck und auf die Druckseite geht, nicht der
-            # Stand eines einzelnen Deckels.
-            chosen_before=len(word_cards),
-            style=style,
-            read_line=read_line,
-            write_line=write_line,
-        )
+                book=result.chapter.book,
+                chapter_number=result.chapter.number,
+                entries=result.expressions,
+                resolve_visible_block=lambda block: _resolve_with_progress(
+                    con=con,
+                    entries=block,
+                    limit=interaction.EXPRESSION_BLOCK_SIZE,
+                    url=cfg.model_url,
+                    get_model_name=get_model_name,
+                    order=cfg.triage_order,
+                ),
+                resolve_silent_block=lambda block, cancelled: _resolve_silently(
+                    profile_path=cfg.profile_path,
+                    entries=block,
+                    limit=interaction.EXPRESSION_BLOCK_SIZE,
+                    url=cfg.model_url,
+                    get_model_name=get_model_name,
+                    order=cfg.triage_order,
+                    cancelled=cancelled,
+                ),
+                label="Wendungen",
+                card_direction=card_direction,
+                # (Zweite Nutzermeldung vom 02.09.2026): Der Wendungs-Deckel zählt dort
+                # weiter, wo der Wörter-Deckel aufgehört hat — die Zahl in der Trennlinie
+                # ist damit das, was am Ende tatsächlich ins Anki-Deck und auf die
+                # Druckseite geht, nicht der Stand eines einzelnen Deckels.
+                chosen_before=len(word_cards),
+                style=style,
+                read_line=read_line,
+                write_line=write_line,
+                partial_cards=partial_cards,
+            )
+        except Exception:
+            _export_partial_run(
+                con=con,
+                partial_cards=partial_cards,
+                output_dir=output_dir,
+                book_title=result.chapter.book.title,
+                chapter_number=result.chapter.number,
+                write_line=write_line,
+            )
+            raise
 
         cards = word_cards + expression_cards
         if not cards:
             write_line("Keine Wörter zum Lernen ausgewählt — kein Export.")
             return 0
 
-        # (Befund mittel, Durchsicht T16): profile.record_card schreibt die Anki-GUID
-        # jeder Karte ins Profil (Regel 6) und braucht dafür dieselbe, noch offene
-        # Profilverbindung wie die Triage — der Export bleibt deshalb innerhalb dieses
-        # try-Blocks, statt `con` vorher zu schließen.
-        output_dir = args.output_dir or Path.cwd()
         paths = export.write_exports(
             con,
             output_dir,

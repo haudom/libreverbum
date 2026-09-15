@@ -91,6 +91,7 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | Karte, Deck, Kartenrichtung, Lückentext | `card`, `deck`, `card_direction`, `cloze` |
 | Kartenvorlage (genankis `Model` — „Modell" bleibt dem Sprachmodell vorbehalten, technik.md §3) | `note_model` |
 | Druckausgabe | `printout` |
+| Teilexport (unvollständiger, aber gültiger Export nach einem Abbruch, technik.md §12) | `partial` (`cli.export.export_paths`/`write_exports`), Dateizusatz `_teilexport` |
 | Blattzählung („Blatt n von m", nur bei mehr als einem Blatt) | `sheet_label` |
 | unsicher (markierter Eintrag) | `uncertain` |
 | Ausgabestil (Fähigkeiten des Ziels: Farbe, Sonderzeichen, Breite, einmal je Lauf ermittelt) | `style` (`Style`) |

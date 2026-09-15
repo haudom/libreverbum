@@ -27,6 +27,15 @@ Namensstamm an und sucht dazu das erste Namenspaar, das noch frei ist — ein zw
 über dasselbe Kapitel überschreibt nichts. `write_exports` ruft beide Kernexporte auf,
 schreibt danach je Karte die Anki-GUID ins Profil und liefert die beiden geschriebenen
 Pfade zurück.
+
+`partial=True` (technik.md §12, „Entschieden 15.09.2026: ein abgebrochener Lauf
+exportiert, was er hat") kennzeichnet einen **Teilexport** — geschrieben, wenn
+`cli.main._run` nach einem Fehlschlag mitten in der Triage die bereits entschiedenen
+Karten sichert. Der Dateiname trägt dafür den Zusatz `_teilexport`, der Deckname
+(`f"{book_title} - Kapitel {chapter_number}"`) bleibt **unverändert**: `anki.
+new_card_guid` liefert für dieselben Einträge dieselbe GUID, unabhängig von `partial` — ein
+abweichender Deckname schöbe die Notizen eines späteren, vollständigen Laufs über dasselbe
+Kapitel in ein zweites Deck, obwohl die GUIDs übereinstimmen (Abschnitt 8b).
 """
 
 from __future__ import annotations
@@ -57,9 +66,16 @@ class ExportPaths(NamedTuple):
     printout_path: Path
 
 
-def export_paths(output_dir: Path, book_title: str, chapter_number: int) -> ExportPaths:
+def export_paths(
+    output_dir: Path, book_title: str, chapter_number: int, *, partial: bool = False
+) -> ExportPaths:
     """Die beiden **freien** Zielpfade für einen Export: `<Buch>_kapitel<N>.apkg` und
     `.html`, beim nächsten Lauf über dasselbe Kapitel `…_2`, dann `…_3`.
+
+    `partial=True` hängt vor dieser Zählung `_teilexport` an den Namensstamm (technik.md
+    §12, „Entschieden 15.09.2026 …") — der Teilstand steht damit im Dateinamen, nicht im
+    Deck. Die Suche nach dem freien Namenspaar läuft unverändert auf dem so verlängerten
+    Stamm: Auch für einen Teilexport müssen Deck und Druckseite beide frei sein.
 
     Bis zum 27.08.2026 war der Name allein aus Buchtitel und Kapitelnummer gebildet,
     „damit ein zweiter Lauf über dasselbe Kapitel dieselbe Datei trifft". Das überschrieb
@@ -79,6 +95,8 @@ def export_paths(output_dir: Path, book_title: str, chapter_number: int) -> Expo
     Antworten, sobald der Export dazwischen geschrieben hat.
     """
     stem = f"{safe_filename_stem(book_title)}_kapitel{chapter_number}"
+    if partial:
+        stem += "_teilexport"
     counter = 1
     while True:
         suffix = "" if counter == 1 else f"_{counter}"
@@ -96,6 +114,7 @@ def write_exports(
     *,
     book_title: str,
     chapter_number: int,
+    partial: bool = False,
 ) -> ExportPaths:
     """Schreibt `cards` als Anki-Deck und als Druckseite (bauplan.md T16), danach je
     Karte die Anki-GUID ins Profil (Regel 6, Befund mittel Durchsicht T16).
@@ -112,9 +131,13 @@ def write_exports(
     in ihrer Kartenrichtung nicht bildbar ist — `anki.card_obstacle` —, doppelte GUID im
     selben Export; siehe `anki.export_deck`), steht im Profil nichts, was im Deck nicht
     ebenso fehlt.
+
+    `partial=True` (technik.md §12, „Entschieden 15.09.2026 …") ist derselbe Export, nur
+    mit weniger Karten und einem anderen Dateinamen (`export_paths`) — der Deckname bleibt
+    unverändert, `profile.record_card` läuft unverändert je Karte.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
-    paths = export_paths(output_dir, book_title, chapter_number)
+    paths = export_paths(output_dir, book_title, chapter_number, partial=partial)
     anki.export_deck(paths.anki_path, cards, deck_name=f"{book_title} - Kapitel {chapter_number}")
     for card in cards:
         profile.record_card(con, card)

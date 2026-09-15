@@ -23,7 +23,7 @@ import pytest
 
 from cli import display, interaction
 from libreverbum import dictionary, pipeline, profile
-from libreverbum.entities import Book, CardDirection, Lemma, Occurrence, Sense
+from libreverbum.entities import Book, Card, CardDirection, Lemma, Occurrence, Sense
 from libreverbum.profile import VocabularyStatus
 
 _BOOK = Book(title="Testbuch", author="Autorin")
@@ -2006,6 +2006,116 @@ def test_run_triage_blocks_surfaces_a_prefetch_failure_when_the_block_is_awaited
             read_line=lambda _prompt: next(answers),
             write_line=_no_op_write,
         )
+
+
+def test_run_triage_blocks_keeps_a_completed_blocks_cards_in_partial_cards_when_a_later_block_fails(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """technik.md §12, „Entschieden 15.09.2026: ein abgebrochener Lauf exportiert, was er
+    hat": Scheitert der Vorlade-Rückruf des zweiten Blocks, stehen die im ersten,
+    vollständig durchentschiedenen Block gelernten Karten trotzdem in der vom Aufrufer
+    übergebenen `partial_cards`-Liste — obwohl `run_triage_blocks` selbst nie normal
+    zurückkehrt, sondern die Ausnahme weiterreicht.
+
+    Verfälschungsprobe: Trägt `run_triage_blocks` die Karten eines abgeschlossenen Blocks
+    nicht sofort, sondern erst am Ende der Funktion in `partial_cards` ein (etwa
+    `partial_cards.extend(cards)` erst vor der letzten `return`-Anweisung), bleibt
+    `partial_cards` bei diesem Test leer, weil die Ausnahme die Funktion vorher verlässt —
+    `assert partial_cards` schlägt dann fehl. Test war damit rot, bevor
+    `partial_cards.extend(triage_pass.cards)` unmittelbar nach jedem abgeschlossenen Block
+    stand."""
+    leftover = [_vocabulary_entry("x")]
+
+    def resolve_visible(block: Sequence[pipeline.VocabularyEntry]) -> pipeline.TriageResolution:
+        return pipeline.TriageResolution(
+            entries=_entries(1), known=0, resolved_known=0, skipped=0, remaining=leftover
+        )
+
+    def resolve_silent(
+        block: Sequence[pipeline.VocabularyEntry], _cancelled: threading.Event
+    ) -> pipeline.TriageResolution:
+        raise ValueError("Modellserver antwortet nicht mehr.")
+
+    answers = iter(["", "l", "j"])  # keine Sammelaktion, "lernen" für word0, "j" fortsetzen
+    partial_cards: list[Card] = []
+
+    with pytest.raises(ValueError, match="Modellserver antwortet nicht mehr\\."):
+        interaction.run_triage_blocks(
+            con=profile_con,
+            book=_BOOK,
+            chapter_number=1,
+            entries=[_vocabulary_entry("a")],
+            resolve_visible_block=resolve_visible,
+            resolve_silent_block=resolve_silent,
+            label="Wörter",
+            card_direction=CardDirection.EN_DE,
+            read_line=lambda _prompt: next(answers),
+            write_line=_no_op_write,
+            partial_cards=partial_cards,
+        )
+
+    assert [card.occurrence.lemma.text for card in partial_cards] == ["word0"]
+
+
+def test_run_triage_blocks_appends_to_a_caller_supplied_list_across_repeated_calls(
+    profile_con: sqlite3.Connection,
+) -> None:
+    """technik.md §12, „Entschieden 15.09.2026 …": Wörter- und Wendungsdeckel tragen in
+    dieselbe `partial_cards`-Liste ein — hier mit zwei tatsächlichen Aufrufen von
+    `run_triage_blocks` nachgestellt, wie `cli.main._run` sie für die beiden Deckel macht.
+
+    Verfälschungsprobe: Legt `run_triage_blocks` bei `partial_cards=None` intern jedes Mal
+    eine neue Liste an, statt die übergebene zu ergänzen (etwa `partial_cards = []` ohne
+    die `is None`-Prüfung), verlöre der zweite Aufruf die Karte des ersten aus der von
+    beiden geteilten Liste — `len(partial_cards) == 2` schlüge fehl. Test war damit rot,
+    bevor `if partial_cards is None: partial_cards = []` stand."""
+    partial_cards: list[Card] = []
+    resolve_first, _ = _scripted_resolver(
+        [
+            pipeline.TriageResolution(
+                entries=_entries(1), known=0, resolved_known=0, skipped=0, remaining=[]
+            )
+        ]
+    )
+    first_answers = iter(["", "l"])
+    word_cards = interaction.run_triage_blocks(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        entries=[_vocabulary_entry("a")],
+        resolve_visible_block=resolve_first,
+        resolve_silent_block=lambda block, _cancelled: resolve_first(block),
+        label="Wörter",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(first_answers),
+        write_line=_no_op_write,
+        partial_cards=partial_cards,
+    )
+
+    resolve_second, _ = _scripted_resolver(
+        [
+            pipeline.TriageResolution(
+                entries=_entries(1), known=0, resolved_known=0, skipped=0, remaining=[]
+            )
+        ]
+    )
+    second_answers = iter(["", "l"])
+    expression_cards = interaction.run_triage_blocks(
+        con=profile_con,
+        book=_BOOK,
+        chapter_number=1,
+        entries=[_vocabulary_entry("b")],
+        resolve_visible_block=resolve_second,
+        resolve_silent_block=lambda block, _cancelled: resolve_second(block),
+        label="Wendungen",
+        card_direction=CardDirection.EN_DE,
+        read_line=lambda _prompt: next(second_answers),
+        write_line=_no_op_write,
+        partial_cards=partial_cards,
+    )
+
+    assert len(word_cards) == len(expression_cards) == 1
+    assert len(partial_cards) == 2
 
 
 def test_run_triage_blocks_uses_the_silent_resolver_only_for_blocks_after_the_first(

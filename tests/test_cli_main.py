@@ -21,8 +21,17 @@ import pytest
 from cli import display
 from cli import main as cli_main
 from cli.main import _build_parser, main
-from libreverbum import dictionary, epub, pipeline, profile
-from libreverbum.entities import Book, CefrLevel, Chapter, Lemma, Occurrence
+from libreverbum import anki, dictionary, epub, pipeline, profile
+from libreverbum.entities import (
+    Book,
+    Card,
+    CardDirection,
+    CefrLevel,
+    Chapter,
+    Lemma,
+    Occurrence,
+    Sense,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -1059,6 +1068,170 @@ def test_full_run_uses_the_cover_banner_for_both_decks(
     assert "  Wendungen" in console.log
     assert not any(line == "== Wörter ==" for line in console.log)
     assert not any(line == "== Wendungen ==" for line in console.log)
+
+
+def _make_card(word: str) -> Card:
+    """Eine fertige Karte, unabhängig von Wörterbuch oder Modellserver — für die beiden
+    Tests unten, die `cli.interaction.run_triage_blocks` selbst durch eine Attrappe
+    ersetzen und deshalb keine echte Triage durchlaufen."""
+    lemma = Lemma(text=word, pos="NOUN")
+    occurrence = Occurrence(
+        book=Book(title="CLI-Testbuch", author="Testautorin"),
+        chapter_number=1,
+        lemma=lemma,
+        word_form=word,
+        example_sentence=f"Ein Beispielsatz mit {word}.",
+        frequency=1,
+        proper_noun_frequency=0,
+    )
+    sense = Sense(
+        lemma=lemma,
+        translation="Übersetzung",
+        wikdict_sense="eine Bedeutung",
+        wikdict_trans_list="Übersetzung",
+        wikdict_lexentry=f"eng/{word}__Noun__1",
+    )
+    direction = CardDirection.EN_DE
+    return Card(
+        sense=sense,
+        occurrence=occurrence,
+        card_direction=direction,
+        guid=anki.new_card_guid(occurrence, sense, direction),
+    )
+
+
+def _read_new_profile_no_preset(prompt: str) -> str:
+    """Beantwortet nur die beiden generischen Rückfragen vor der Triage („Neu anlegen",
+    „Sprachniveau") — für die beiden Tests unten, in denen `run_triage_blocks` selbst eine
+    Attrappe ist und deshalb nie nach einer Triage-Entscheidung fragt."""
+    if "Neu anlegen" in prompt:
+        return "j"
+    if "Sprachniveau" in prompt:
+        return "keine angabe"
+    raise AssertionError(f"unerwartete Frage: {prompt!r}")
+
+
+def test_a_failure_in_the_expression_pass_exports_the_word_cards_and_exits_with_code_one(
+    tmp_path: Path, book_epub: Path, mini_dictionary_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """technik.md §12, „Entschieden 15.09.2026: ein abgebrochener Lauf exportiert, was er
+    hat": Scheitert der Wendungsteil, werden die im Wortdurchlauf bereits entschiedenen
+    Karten trotzdem als Teilexport geschrieben (Dateiname mit `_teilexport`, `profile.
+    record_card` gebucht), und der Lauf endet danach sichtbar mit Exit-Code 1 und der
+    deutschen Meldung zur `ValueError` — dieselbe Ausnahme, unverändert bis zu `main`s
+    eigenem Fang durchgereicht (Regel 13, dokumentation.md §4).
+
+    `cli.interaction.run_triage_blocks` ist hier selbst eine Attrappe: Was einen Block zu
+    einem abgeschlossenen macht und wie die Sammelliste ihn aufnimmt, prüft
+    `tests/test_cli_interaction.py` bereits (`test_run_triage_blocks_keeps_a_completed_
+    blocks_cards_in_partial_cards_when_a_later_block_fails`). Hier zählt nur, dass
+    `cli.main._run` die von beiden Durchläufen geteilte Sammelliste tatsächlich für den
+    Export verwendet, sobald einer der beiden scheitert.
+
+    Verfälschungsprobe: Übergibt `_run` beiden Aufrufen von `run_triage_blocks` je eine
+    eigene, frische Liste statt derselben (kein gemeinsames `partial_cards = []` vor
+    beiden Aufrufen), bleibt die im Wortdurchlauf gesammelte Karte für den `except`-Zweig
+    unsichtbar — `decks`/`printouts` unten blieben leer, `pytest.raises`-Ersatz `assert
+    decks` schlägt fehl. Test war damit rot, bevor beide Aufrufe dieselbe Liste bekamen."""
+    data_dir = tmp_path / "data"
+    _write_config(
+        data_dir,
+        model_url="http://127.0.0.1:0/v1",
+        model_name="mini-model",
+        dictionary_path=mini_dictionary_db,
+    )
+    output_dir = tmp_path / "export"
+    word_card = _make_card("watch")
+
+    def _fake_run_triage_blocks(
+        *, label: str, partial_cards: list[Card], **_kwargs: object
+    ) -> list[Card]:
+        if label == "Wörter":
+            partial_cards.append(word_card)
+            return [word_card]
+        raise ValueError("Modellserver antwortet nicht mehr.")
+
+    monkeypatch.setattr("cli.main.interaction.run_triage_blocks", _fake_run_triage_blocks)
+    written: list[str] = []
+
+    exit_code = main(
+        [
+            str(book_epub),
+            "--chapter",
+            "1",
+            "--data-dir",
+            str(data_dir),
+            "--output-dir",
+            str(output_dir),
+        ],
+        read_line=_read_new_profile_no_preset,
+        write_line=written.append,
+        style=display.PLAIN_STYLE,
+    )
+
+    assert exit_code == 1
+    assert "Fehler: Modellserver antwortet nicht mehr." in written, "\n".join(written)
+
+    decks = sorted(output_dir.glob("*.apkg"))
+    printouts = sorted(output_dir.glob("*.html"))
+    assert len(decks) == 1 and "_teilexport" in decks[0].name
+    assert len(printouts) == 1 and "_teilexport" in printouts[0].name
+
+    con = profile.open_profile(data_dir / "profil.sqlite3")
+    try:
+        guids = [row[0] for row in con.execute("SELECT guid FROM card").fetchall()]
+    finally:
+        con.close()
+    assert guids == [word_card.guid]
+
+
+def test_a_failure_before_any_card_is_decided_writes_no_export_file(
+    tmp_path: Path, book_epub: Path, mini_dictionary_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """technik.md §12, „Entschieden 15.09.2026 …", Festlegung 5: Ist beim Fehlschlag noch
+    keine einzige Karte entschieden — hier scheitert bereits der Wortdurchlauf, bevor er
+    eine Karte an `partial_cards` meldet —, wird kein Teilexport geschrieben, nur die
+    Fehlermeldung.
+
+    Verfälschungsprobe: Prüft `_export_partial_run` `partial_cards` nicht auf Leere (kein
+    `if not partial_cards: return`), riefe sie `export.write_exports` mit einer leeren
+    Kartenliste auf — `anki.export_deck` schriebe ein leeres, aber existierendes Deck, und
+    `output_dir` entstünde trotzdem. `not output_dir.exists()` schlüge dann fehl."""
+    data_dir = tmp_path / "data"
+    _write_config(
+        data_dir,
+        model_url="http://127.0.0.1:0/v1",
+        model_name="mini-model",
+        dictionary_path=mini_dictionary_db,
+    )
+    output_dir = tmp_path / "export"
+
+    def _fake_run_triage_blocks(
+        *, label: str, partial_cards: list[Card], **_kwargs: object
+    ) -> list[Card]:
+        raise ValueError("Modellserver antwortet nicht mehr.")
+
+    monkeypatch.setattr("cli.main.interaction.run_triage_blocks", _fake_run_triage_blocks)
+    written: list[str] = []
+
+    exit_code = main(
+        [
+            str(book_epub),
+            "--chapter",
+            "1",
+            "--data-dir",
+            str(data_dir),
+            "--output-dir",
+            str(output_dir),
+        ],
+        read_line=_read_new_profile_no_preset,
+        write_line=written.append,
+        style=display.PLAIN_STYLE,
+    )
+
+    assert exit_code == 1
+    assert "Fehler: Modellserver antwortet nicht mehr." in written, "\n".join(written)
+    assert not output_dir.exists()
 
 
 def test_full_run_reports_progress_through_cli_display(

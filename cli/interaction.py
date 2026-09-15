@@ -137,7 +137,10 @@ nicht gestellten Entscheidungen dieses Blocks, keine bereits getroffenen.
 flache Liste. Sie ruft `resolve_silent_block` erneut mit `resolution.remaining` auf, bis
 entweder nichts mehr aussteht, die Einzelabfrage mit `q` abgebrochen wurde (dann **ohne**
 Fortsetzungsfrage) oder der Nutzer die Fortsetzungsfrage verneint — Vorgabe bei Enter ist
-„nein", dieselbe Handhabung wie bei der Sammelaktion (Regel 13).
+„nein", dieselbe Handhabung wie bei der Sammelaktion (Regel 13). Scheitert stattdessen ein
+Block (etwa der Modellserver im Vorladen), läuft die Ausnahme unverändert durch — dieselbe
+Liste steht dann bereits, unvollständig, aber gültig, im optionalen `partial_cards` (siehe
+dort), für den Teilexport in `cli.main._run` (technik.md §12, „Entschieden 15.09.2026 …").
 
 **Nicht** jeder Eintrag lässt sich in jeder Kartenrichtung lernen: Was `anki.card_obstacle`
 zurückweist — ein Wort ohne Wörterbucheintrag unter `de_en`, eine Wortform ohne Wortgrenze
@@ -821,11 +824,26 @@ def run_triage_blocks(
     write_line: WriteLine,
     chosen_before: int = 0,
     style: display.Style = display.PLAIN_STYLE,
+    partial_cards: list[Card] | None = None,
 ) -> list[Card]:
     """Die Blockschleife (technik.md §12, „Blockweise Triage mit Vorladen — entschieden"):
     löst einen Block auf, schickt ihn durch `run_triage_pass`, und macht mit
     `resolution.remaining` weiter, bis nichts mehr aussteht, die Einzelabfrage mit `q`
     abgebrochen wurde, oder der Nutzer die Fortsetzungsfrage verneint.
+
+    `partial_cards` (technik.md §12, „Entschieden 15.09.2026: ein abgebrochener Lauf
+    exportiert, was er hat") ist eine vom Aufrufer übergebene Sammelliste, die diese
+    Funktion nach **jedem abgeschlossenen Block** um dessen Karten ergänzt — abgeschlossen
+    heißt: `run_triage_pass` hat einen `TriagePass` zurückgeliefert, ob vollständig
+    durchgeklickt oder mit `q` verlassen. Scheitert ein späterer Block (etwa der
+    Vorladeblock über `prefetch.join()` unten), läuft die Ausnahme unverändert durch
+    (Regel 13, dokumentation.md §4) — `partial_cards` enthält zu diesem Zeitpunkt aber
+    bereits die Karten jedes zuvor abgeschlossenen Blocks, verloren geht nur, was der
+    Nutzer noch gar nicht entschieden hatte. `cli.main._run` übergibt für die Wörter- und
+    die Wendungsschleife **dieselbe** Liste, damit ein Fehlschlag im Wendungsteil die
+    Wörterkarten mitnimmt. Vorgabe `None` legt intern eine eigene, leere Liste an — für
+    jeden Aufrufer, dem der Teilexport gleichgültig ist (etwa die Tests in dieser Datei),
+    ändert sich damit nichts am bisherigen Rückgabewert.
 
     **Zwei Rückrufe statt einem** (Bauschritt 3/4, technik.md §12, „Vorladen: der nächste
     Block entsteht, während der Nutzer entscheidet"), bewusst unterschiedlich benannt, damit
@@ -879,6 +897,8 @@ def run_triage_blocks(
     `style` (Vorgabe `display.PLAIN_STYLE`, Auftragstext vom 02.09.2026, Bauschritt 2/2)
     reicht bis in `run_triage_pass` durch; die eigenen Meldungen dieser Funktion (Blockende,
     Fortsetzungsfrage) fügen sich in dieselbe Einrückung ein wie die übrige Anzeige."""
+    if partial_cards is None:
+        partial_cards = []
     cards: list[Card] = []
     resolution = resolve_visible_block(entries)
     block_number = 1
@@ -909,6 +929,10 @@ def run_triage_blocks(
             style=style,
         )
         cards.extend(triage_pass.cards)
+        # technik.md §12, „Entschieden 15.09.2026 …": Dieser Block ist mit dem
+        # zurückgelieferten TriagePass abgeschlossen — seine Karten dürfen jetzt in die
+        # Sammelliste, unabhängig davon, ob ein späterer Block gleich scheitert.
+        partial_cards.extend(triage_pass.cards)
         current = resolution.remaining
 
         if triage_pass.aborted:
