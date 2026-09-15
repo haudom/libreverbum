@@ -788,20 +788,28 @@ betroffenen Testdateien laufen lassen" verkleinert das Problem, löst es aber ni
 
 > **Regel:** Die Durchsicht prüft gegen `git archive <commit>` in einem Wegwerfordner, nicht
 > gegen den Arbeitsbaum. `tools/en-de.sqlite3` und `tools/*.epub` werden dorthin
-> mitkopiert. Die **Gegenprobe** dafür ist die Schlusszeile von `pytest`: Mit installiertem
-> PySide6 muss sie genau **zwei** Übersprungene nennen — `needs_model` und `needs_wordfreq`,
-> die einzigen beiden Marken, die nicht an `tools/` hängen (`addopts = ["-rs"]` in
-> `pyproject.toml` nennt jeden Skip namentlich, ohne Zusatzaufwand). Ab AP 1 kommt
-> `needs_gui` dazu, sobald PySide6 in der Prüfumgebung fehlt — dann sind es **drei**; mit
-> installiertem PySide6 bleibt es bei zwei. Meldet der Lauf stattdessen rund fünfunddreißig
-> Übersprungene, ist die Kopie missraten — `tools/en-de.sqlite3` oder ein EPUB fehlt —, und
-> die Durchsicht hält für grün, was gar nicht gelaufen ist. Zur Einordnung: 33 der 559
-> Tests hängen an `tools/` (`needs_dictionary`, `needs_epub`, `needs_calibre_split_epub`) —
-> diese Größenordnung darf danebenstehen, ist aber nicht die Prüfgröße; geprüft wird die
-> Zahl **zwei** (bzw. ab AP 1 ohne PySide6: **drei**). Meldet der Lauf **eine** statt zwei,
-> hängt in der Umgebung `LIBREVERBUM_MODEL_URL` oder `LIBREVERBUM_WORDFREQ_PYTHON`
-> (`tests/conftest.py`) — falscher Alarm, kein falsches Grün; die betreffende Variable vor
-> dem Lauf löschen.
+> mitkopiert. Die **Gegenprobe** dafür ist die Schlusszeile von `pytest`: Vor AP 1 muss sie
+> mit installiertem PySide6 genau **zwei** Übersprungene nennen — `needs_model` und
+> `needs_wordfreq`, die einzigen beiden Marken, die nicht an `tools/` hängen (`addopts =
+> ["-rs"]` in `pyproject.toml` nennt jeden Skip namentlich, ohne Zusatzaufwand); ohne
+> PySide6 bleibt es dort bei zwei, weil es noch keine `needs_gui`-Marke gibt. Seit AP 1 sind
+> es je eine mehr: **drei** mit installiertem PySide6, **vier** ohne — `needs_gui` kommt als
+> dritte Marke dazu, sobald PySide6 in der Prüfumgebung fehlt, und unabhängig davon zählt ab
+> AP 1 ein dritter Übersprungener, der an **keiner** Marke hängt: `pytest.skip()` im Rumpf
+> von `test_rule_9_app_package_does_not_import_the_interfaces`
+> (`tests/test_architecture.py`), solange `app/` noch nicht existiert. Dieser dritte
+> Übersprungene ist **vorübergehend** — AP 3 legt `app/` an, danach fällt die Zahl um einen
+> zurück: **zwei** mit installiertem PySide6, **drei** ohne — zahlenmäßig wie vor AP 1 mit
+> installiertem PySide6, aber nicht mehr unabhängig von PySide6, weil `needs_gui` bleibt
+> (bauplan-phase2.md, Abnahme von AP 3). Meldet der Lauf stattdessen
+> rund fünfunddreißig Übersprungene, ist die Kopie missraten — `tools/en-de.sqlite3` oder
+> ein EPUB fehlt —, und die Durchsicht hält für grün, was gar nicht gelaufen ist. Zur
+> Einordnung: 33 der 559 Tests hängen an `tools/` (`needs_dictionary`, `needs_epub`,
+> `needs_calibre_split_epub`) — diese Größenordnung darf danebenstehen, ist aber nicht die
+> Prüfgröße; geprüft wird die Zahl **drei** (bzw. ohne PySide6: **vier**, bzw. nach AP 3:
+> **zwei**/**drei**). Meldet der Lauf einen weniger als hier genannt, hängt in der Umgebung
+> `LIBREVERBUM_MODEL_URL` oder `LIBREVERBUM_WORDFREQ_PYTHON` (`tests/conftest.py`) —
+> falscher Alarm, kein falsches Grün; die betreffende Variable vor dem Lauf löschen.
 
 **Das Vergleichspaar einer Durchsicht ist der Commit selbst — `git show <commit>`,
 gleichwertig `git diff <unmittelbarer Vorgänger> <commit>`.** Die Falle ist eine

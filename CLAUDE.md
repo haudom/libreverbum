@@ -112,9 +112,13 @@ Systemkodierung sonst still typografische Zeichen im Buchtext.
   Modellauflösung, Exportnamen, Triage-Buchung, Vorladen; ohne Qt, ohne Konsole).
   **Importrichtung:** `app/` importiert den Kern, wird von `cli/` und `gui/` importiert,
   vom Kern nie; `cli/` und `gui/` importieren sich nicht gegenseitig.
-  `tests/test_architecture.py` soll ab AP 1 alle drei Richtungen prüfen — heute prüft
-  `GUI_PACKAGES` nur `PySide6`/`PyQt5`/`PyQt6`/`cli`, weder `app` noch `gui` kommen vor.
-  Begründung: technik.md §14
+  `tests/test_architecture.py` prüft seit AP 1, dass der Kern keines der drei Pakete
+  importiert (`FORBIDDEN_IN_CORE`, vormals `GUI_PACKAGES` — umbenannt in der Durchsicht von
+  907ab02, Befund 5, weil `app/` selbst keine Oberfläche ist), und dass `app/` seinerseits
+  weder `cli` noch `gui` noch eine Oberflächenbibliothek importiert — bis `app/` mit AP 3
+  entsteht, überspringt sich dieser zweite Teil sichtbar mit Begründung statt
+  stillschweigend nichts zu prüfen. Die Ausnahme `app/pdf.py` aus E7 (b) ist dabei noch
+  nicht eingebaut, weil E7 noch nicht entschieden ist (Regel 14). Begründung: technik.md §14
 - **Lizenz jeder neuen Bibliothek vor der Aufnahme prüfen** (Regel 15, starkes Copyleft)
 
 ## Prüfen vor „fertig" (technik.md §6)
@@ -176,14 +180,20 @@ Runden.
 
 **Die Durchsicht prüft gar nicht im Arbeitsbaum**, sondern gegen `git archive <commit>` in
 einem Wegwerfordner — `tools/en-de.sqlite3` und `tools/*.epub` gehören mit hinein. Die
-Gegenprobe: Die Schlusszeile von `pytest` muss genau **zwei** Übersprungene nennen
-(`needs_model`, `needs_wordfreq`) — mit installiertem PySide6, dem Stand vor AP 1. Ab AP 1
-kommt `needs_gui` als dritte Marke dazu, sobald PySide6 in der Prüfumgebung **fehlt**; mit
-installiertem PySide6 bleibt es bei zwei. Meldet der Lauf stattdessen rund fünfunddreißig,
-ist die Kopie missraten; meldet er eine, steht `LIBREVERBUM_MODEL_URL` oder
-`LIBREVERBUM_WORDFREQ_PYTHON` noch in der Umgebung (falscher Alarm, kein falsches Grün).
-Begründung: dokumentation.md §10, „Woran sie prüft: gegen den Commit, nicht gegen den
-Arbeitsbaum".
+Gegenprobe: Vor AP 1 musste die Schlusszeile von `pytest` unabhängig von PySide6 genau
+**zwei** Übersprungene nennen — `needs_model` und `needs_wordfreq`, die `needs_gui`-Marke
+gab es noch nicht. Seit AP 1 sind es **drei** mit installiertem PySide6, **vier** ohne:
+`needs_gui` kommt als dritte Marke dazu, sobald PySide6 in der Prüfumgebung fehlt. Unabhängig
+davon zählt seit AP 1 ein weiterer Übersprungener, der an **keiner** Marke hängt — ein
+`pytest.skip()` im Testrumpf von `test_rule_9_app_package_does_not_import_the_interfaces`
+(`tests/test_architecture.py`). Er greift, solange `app/` noch nicht existiert, und ist
+**vorübergehend**: AP 3 legt `app/` an, und ab dann fällt die Zahl auf den Stand von vor
+AP 1 zurück, jetzt aber wieder von PySide6 abhängig (zwei mit installiertem PySide6, drei
+ohne, wegen `needs_gui`) (bauplan-phase2.md, Abnahme von AP 3). Meldet der Lauf stattdessen
+rund fünfunddreißig, ist die Kopie missraten; meldet er einen weniger als hier genannt, steht
+`LIBREVERBUM_MODEL_URL` oder `LIBREVERBUM_WORDFREQ_PYTHON` noch in der Umgebung (falscher
+Alarm, kein falsches Grün). Begründung: dokumentation.md §10, „Woran sie prüft: gegen den
+Commit, nicht gegen den Arbeitsbaum".
 
 ## Daten
 

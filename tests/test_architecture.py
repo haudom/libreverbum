@@ -17,10 +17,15 @@ APP = Path(__file__).resolve().parent.parent / "app"
 # "cli" (Befund mittel 5, Durchsicht T16): Mit bauplan.md T16 gibt es eine zweite
 # Oberfläche neben der künftigen Qt-Oberfläche — ohne diesen Eintrag prüfte dieser Test
 # nur PySide6/PyQt und ein `from cli import ...` im Kern bliebe grün.
-# "gui", "app" (bauplan-phase2.md AP 1): Mit technik.md §14, E4 gibt es eine dritte
-# Oberflächenschicht — ein `from gui import ...` oder `from app import ...` im Kern bliebe
-# ohne diese beiden Einträge grün.
-GUI_PACKAGES = frozenset({"PySide6", "PyQt5", "PyQt6", "cli", "gui", "app"})
+# "gui" (bauplan-phase2.md AP 1): Mit technik.md §14, E4 gibt es eine dritte
+# Oberflächenschicht — ein `from gui import ...` im Kern bliebe ohne diesen Eintrag grün.
+# "app" (bauplan-phase2.md AP 1, technik.md §14, E4): app/ ist selbst keine Oberfläche —
+# E4 definiert es ausdrücklich als „ohne Qt, ohne Konsole" —, gehört aber dennoch in diese
+# Liste, weil der Kern auch app/ nie importieren darf. Der Konstantenname nennt deshalb den
+# gemeinsamen Nenner „im Kern verboten", nicht „Oberfläche" (Durchsicht 907ab02, Befund 5):
+# Ein Bearbeiter, der wegen dieser Konstante nach einem Qt-Import sucht, fände sonst einen
+# app-Import und wäre in die Irre geführt.
+FORBIDDEN_IN_CORE = frozenset({"PySide6", "PyQt5", "PyQt6", "cli", "gui", "app"})
 
 # Was app/ selbst nicht importieren darf: keine der beiden Oberflächen, keine
 # Oberflächenbibliothek (technik.md §14, E4 — „ein drittes Paket app/ … importiert den
@@ -55,9 +60,9 @@ def test_rule_9_core_does_not_import_the_user_interface() -> None:
         # utf-8-sig statt utf-8 (dokumentation.md §8): Python akzeptiert eine BOM in
         # Quelldateien, ast.parse nicht. Unter Windows erzeugt jedes `Out-File` eine —
         # sonst stürzt dieser Test an gültigem Code ab, statt ihn zu prüfen.
-        if (found := imported_packages(module.read_text(encoding="utf-8-sig")) & GUI_PACKAGES)
+        if (found := imported_packages(module.read_text(encoding="utf-8-sig")) & FORBIDDEN_IN_CORE)
     }
-    assert not offenders, f"Oberflächen-Import im Kern: {offenders}"
+    assert not offenders, f"Im Kern verbotener Import: {offenders}"
 
 
 # Diese beiden Module verkettet die Importregel nicht: `__init__` trägt nur den

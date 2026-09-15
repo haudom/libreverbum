@@ -336,15 +336,21 @@ außer `beobachtungen/`. **nach** AP 0 (beide berühren dokumentation.md).
 `uv lock` — **nicht** `uv sync` (technik.md §6, „Falle"). Neue Marke `needs_gui`
 (Registrierung in `pyproject.toml`, Skip in `conftest.py`, wenn `PySide6` nicht importierbar);
 `conftest.py` setzt für diese Tests `QT_QPA_PLATFORM=offscreen` und stellt genau **eine**
-`QGuiApplication` je Testlauf bereit. `test_architecture.py`: `GUI_PACKAGES` um `gui` und
-`app` erweitert; neue Prüfung, dass `app/` weder `cli`, `gui` noch `PySide6` importiert
-(Ausnahme `app/pdf.py`, falls E7 (b)). Ein erster `needs_gui`-Test lädt ein leeres QML
-offscreen und schlägt bei jeder QML-Warnung fehl. **Keine** weitere Abhängigkeit:
+`QGuiApplication` je Testlauf bereit. `test_architecture.py`: `FORBIDDEN_IN_CORE` (vormals
+`GUI_PACKAGES`, umbenannt in der Durchsicht von 907ab02, Befund 5 — `app/` ist selbst keine
+Oberfläche) um `gui` und `app` erweitert; neue Prüfung, dass `app/` weder `cli`, `gui` noch
+`PySide6` importiert (Ausnahme `app/pdf.py`, falls E7 (b)). Ein erster `needs_gui`-Test lädt
+ein leeres QML offscreen und schlägt bei jeder QML-Warnung fehl — auch bei einer, die nur
+über den Qt-Meldungs-Handler läuft (`qInstallMessageHandler`), nicht nur über
+`QQmlEngine.warnings` (Durchsicht von 907ab02, Befund 1). **Keine** weitere Abhängigkeit:
 `PySide6.QtTest` (`QSignalSpy`, `QTest.qWait`) genügt; sollte der Bauende `pytest-qt`
 brauchen, vorher Regel 15 (MIT laut PyPI-JSON — zu belegen). **Prüfung.** Mit deinstalliertem
-PySide6 nennt die Schlusszeile drei Übersprungene, mit installiertem weiterhin genau zwei
-(dokumentation.md §10, „Gegenprobe") — beide Läufe im Bericht. Verfälschung: QML mit
-absichtlichem Bindungsfehler laden → Test rot. **nach** AP 0.
+PySide6 nennt die Schlusszeile **vier** Übersprungene, mit installiertem **drei**
+(dokumentation.md §10, „Gegenprobe" — der dritte bzw. vierte ist der vorübergehende
+`app/`-Skip aus `test_rule_9_app_package_does_not_import_the_interfaces`, der erst mit AP 3
+wegfällt, siehe dort) — beide Läufe im Bericht. Verfälschung: QML mit absichtlichem
+Bindungsfehler laden → Test rot; eine zweite Verfälschung nur über `console.warn` (kein
+`QQmlEngine.warnings`-Eintrag) prüft die Meldungs-Handler-Hälfte gesondert. **nach** AP 0.
 
 #### AP 2 — Export-Verkettung in den Kern · M · `libreverbum/pipeline.py`, `libreverbum/profile.py`, `cli/export.py`, `tests/test_pipeline.py`, `tests/test_cli_export.py`, `tests/test_profile.py`
 
@@ -371,8 +377,12 @@ bestimmt der Bauende, `cli/main.py` ruft danach `app.export`. **Form (fest).** S
 unverändert; `app/__init__.py` trägt den Paket-Docstring nach dokumentation.md §3 mit dem
 Satz „importiert `libreverbum`, nie `cli`, `gui` oder Qt". **Prüfung.** Architekturtest
 aus AP 1 rot, sobald `app/` eines der drei importiert (Verfälschung: `import cli` in
-`app/config.py`). Alle CLI-Tests unverändert grün. **nach** AP 2 (beide berühren
-`cli/export.py`).
+`app/config.py`). Alle CLI-Tests unverändert grün. **Zur Abnahme gehört außerdem** (Durchsicht
+von 907ab02, Befund 6): Die Schlusszeile von `pytest` nennt den `app/`-Skip aus
+`test_rule_9_app_package_does_not_import_the_interfaces` nicht mehr — er greift nur,
+solange `app/` fehlt —, und die Zahl der Übersprungenen fällt um einen zurück: **zwei** mit
+installiertem PySide6, **drei** ohne (dokumentation.md §10, „Woran sie prüft").
+**nach** AP 2 (beide berühren `cli/export.py`).
 
 ### Block B — Kern und Kommandozeile (läuft neben Block C; untereinander nach Dateien geordnet)
 

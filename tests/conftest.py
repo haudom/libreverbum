@@ -46,7 +46,7 @@ optionalen Gruppe `gui` (technik.md §1, §6, „Die Architekturregel steht jetz
 Umgebung") und ist nicht Teil der Kernabhängigkeiten — ein versehentlicher Import im Kern
 soll sofort scheitern, nicht erst im Gespräch über die Architektur. Tests, die PySide6
 brauchen, werden ohne die Gruppe übersprungen statt zu scheitern, wie bei den Marken oben.
-`QT_QPA_PLATFORM` wird hier fest auf `offscreen` gesetzt, bevor irgendein Qt-Objekt
+`QT_QPA_PLATFORM` wird hier als Vorgabe auf `offscreen` gesetzt, bevor irgendein Qt-Objekt
 entsteht — ein Testlauf soll kein Fenster öffnen und auf keinem echten Bildschirm
 angewiesen sein. Die Vorrichtung `qt_gui_app` hält dazu genau **eine** `QGuiApplication` je
 Prozess vor (Abschnitt 8 des Bauplans: „Genau eine QGuiApplication je Prozess — im Test ein
@@ -603,7 +603,13 @@ def qt_gui_app() -> Iterator[QGuiApplication]:
     """Stellt für `needs_gui`-Tests genau **eine** `QGuiApplication` je Testlauf bereit
     (bauplan-phase2.md AP 1; Abschnitt 8, „Genau eine QGuiApplication je Prozess"). Der
     Sitzungsumfang sorgt dafür, dass jeder Test dieselbe Instanz bekommt statt einer
-    eigenen — eine zweite Instanz im selben Prozess ist mit Qt nicht vorgesehen."""
+    eigenen — eine zweite Instanz im selben Prozess ist mit Qt nicht vorgesehen.
+
+    `importorskip` statt eines unbedingten Imports (Durchsicht 907ab02, Befund 4): Allein
+    die Marke `needs_gui` am Test schützt sonst vor `ModuleNotFoundError` ohne PySide6, und
+    nichts koppelt beides — ein künftiger Test, der die Vorrichtung anfordert und die Marke
+    vergisst, bräche sonst ab statt zu überspringen."""
+    pytest.importorskip("PySide6")
     from PySide6.QtGui import QGuiApplication
 
     app = QGuiApplication.instance()
