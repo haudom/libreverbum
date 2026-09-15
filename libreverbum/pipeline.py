@@ -68,7 +68,12 @@ für die beiden EPUBs unter `tools/` (siehe Bericht zur Abnahme), statt der zuvo
 diese Vorarbeit ließe sich der `Sibyl`-Fall aus Kapitel 10 nicht auflösen: Ein Tagger-Fehler
 in drei Vorkommen eines einzelnen Kapitels verfälscht dessen eigenen Anteil, der buchweite
 Anteil bleibt davon unberührt. **Netzlos** bleibt sie trotzdem — kein Modellserver ist dafür
-nötig, nur spaCy und die beiden lokalen Dateien. Was aus der Auswahlliste für die Triage
+nötig, nur spaCy und die beiden lokalen Dateien. Seit dem 15.09.2026 kostet das nur noch den
+ersten Durchlauf über ein Buch: Ein optionaler Zwischenspeicher (`cache_dir`, technik.md §5,
+„Entschieden 15.09.2026: Zwischenspeicher für den buchweiten Eigennamenanteil") hält das
+Ergebnis von `extraction.book_proper_noun_ratios` unter einer aus EPUB-Datei, spaCy- und
+Modellfassung gebildeten Kennung fest; ein Treffer überspringt Buchlektüre und spaCy-Lauf
+vollständig. Was aus der Auswahlliste für die Triage
 wird, macht seit der zweiten T16-Durchsicht (Befund schwer 1) eine zweite Funktion,
 `resolve_triage_entries`: Sie ruft `translation.choose_sense` auf — den einzigen Ort mit
 Modellzugriff (technik.md §7) — und ist deshalb bewusst **nicht** Teil von `run_chapter`.
@@ -114,6 +119,8 @@ Wörterbucheintrag auch hier.
 from __future__ import annotations
 
 import enum
+import hashlib
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -133,7 +140,7 @@ from libreverbum.profile import VocabularyStatus
 
 if TYPE_CHECKING:
     import sqlite3
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Mapping, Sequence
     from datetime import datetime
 
     from spacy.language import Language
@@ -243,6 +250,103 @@ class ChapterProgress:
     total: int
 
 
+# --------------------- Zwischenspeicher für den buchweiten Eigennamenanteil (15.09.2026)
+#
+# Entschieden am 15.09.2026 (technik.md §5, „Entschieden 15.09.2026: Zwischenspeicher für
+# den buchweiten Eigennamenanteil"): Der offene Punkt aus dem Nachtrag vom 26.08.2026 ist
+# damit beantwortet. Die Funktionen liegen hier und nicht in einem eigenen Modul (Regel 14,
+# dokumentation.md §4) — `pipeline` stellt als einziger Ort die Kapitelliste ohnehin
+# zusammen, um `extraction.book_proper_noun_ratios` aufzurufen.
+
+
+def _proper_noun_ratio_cache_key(epub_path: Path, nlp: Language) -> str:
+    """Kennung des Zwischenspeichers: SHA-256 der vollen EPUB-Bytes, dazu installierte
+    spaCy-Fassung und Name/Fassung des geladenen Sprachmodells (technik.md §5, Entscheidung
+    15.09.2026). Trifft die Kennung nicht — andere Datei, andere spaCy- oder Modellfassung
+    —, wird neu gerechnet; es gibt keinen Verfallszeitpunkt und keinen Vergleich im Code,
+    den jemand zu schreiben vergessen könnte.
+
+    Falle: `nlp.meta["spacy_version"]` ist ein Anforderungsbereich der Modelldatei
+    (`">=3.8.0,<3.9.0"` bei `en_core_web_md` 3.8.0), nicht die installierte Fassung —
+    `spacy.__version__` liefert stattdessen die tatsächlich geladene (heute `3.8.15`).
+    Modellname und -fassung kommen aus `nlp.meta["name"]`/`nlp.meta["version"]` (heute
+    `core_web_md`/`3.8.0`).
+
+    Gelesen über `spacy.about.__version__`, nicht `spacy.__version__`: `spacy/__init__.py`
+    reicht den Namen selbst nur mit `from .about import __version__` durch, ohne ihn erneut
+    als `__version__` zu benennen — unter `mypy --strict` (`pyproject.toml`, „Prüfen vor
+    »fertig«") zählt das nicht als Wiederausfuhr, `spacy.about` ist aber derselbe Wert an
+    seiner eigentlichen Definitionsstelle."""
+    import spacy.about
+
+    digest = hashlib.sha256(epub_path.read_bytes()).hexdigest()
+    spacy_version = spacy.about.__version__
+    return f"{digest}-{spacy_version}-{nlp.meta['name']}-{nlp.meta['version']}"
+
+
+def _proper_noun_ratio_cache_path(cache_dir: Path, cache_key: str) -> Path:
+    """Pfad der Zwischenspeicherdatei zu einer Kennung — eigens benannt, damit ein Test den
+    Dateinamen prüfen kann, ohne `_read_proper_noun_ratio_cache`/`_write_proper_noun_ratio_
+    cache` anzufassen (Auftragstext vom 15.09.2026: „einzeln prüfbare Funktionen")."""
+    return cache_dir / f"book_proper_noun_ratios_{cache_key}.json"
+
+
+def _read_proper_noun_ratio_cache(path: Path) -> dict[str, float] | None:
+    """Liest den Zwischenspeicher — `None`, wenn die Datei fehlt (der Normalfall beim
+    ersten Lauf über ein Buch, eine neue spaCy- oder eine neue Modellfassung: kein
+    Verfallszeitpunkt, nur eine andere Kennung im Dateinamen).
+
+    REGEL (dokumentation.md §4 Regel 13, Auftragstext vom 15.09.2026, Punkt 7): Trifft der
+    Dateiname, lässt sich die Datei aber nicht als die erwartete Tabelle lesen (kaputtes
+    JSON, kein Objekt, ein Wert, der keine Zahl ist), bricht der Lauf sichtbar ab und nennt
+    den vollen Pfad der zu löschenden Datei — geschrieben wird atomar
+    (`_write_proper_noun_ratio_cache`), eine unlesbare Datei ist deshalb kein Normalfall,
+    sondern ein Befund, kein Fall zum stillen Übergehen oder Überschreiben."""
+    if not path.is_file():
+        return None
+    try:
+        with path.open(encoding="utf-8") as handle:
+            raw = json.load(handle)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError(
+            f"Zwischenspeicher {path} lässt sich nicht lesen ({error}) — Datei löschen, "
+            "damit der buchweite Eigennamenanteil neu berechnet wird."
+        ) from error
+    if not isinstance(raw, dict) or not all(
+        isinstance(key, str) and isinstance(value, int | float) and not isinstance(value, bool)
+        for key, value in raw.items()
+    ):
+        raise ValueError(
+            f"Zwischenspeicher {path} hat nicht die erwartete Form (Grundform → Anteil) "
+            "— Datei löschen, damit der buchweite Eigennamenanteil neu berechnet wird."
+        )
+    return {key: float(value) for key, value in raw.items()}
+
+
+def _write_proper_noun_ratio_cache(path: Path, ratios: Mapping[str, float]) -> None:
+    """Schreibt den Zwischenspeicher atomar: Temporärdatei im selben Verzeichnis, danach
+    `Path.replace` — dieselbe Bauart wie `dictionary.fetch_dictionary`s `.part`-Datei,
+    damit ein abgebrochener Lauf nie eine halbe, aber gültig benannte Datei hinterlässt
+    (Auftragstext vom 15.09.2026, Punkt 6). Geschrieben wird die **volle** Tabelle, so wie
+    `extraction.book_proper_noun_ratios` sie liefert, nicht nur die Werte oberhalb von
+    `extraction._PROPER_NOUN_RATIO_THRESHOLD` — sonst wanderte der Schwellwert in die
+    Kennung, und wer ihn ändert, bekäme still den alten Filter (Regel 13).
+
+    Ein Fehlschlag beim Schreiben (Verzeichnis nicht anlegbar, Platte voll) bricht sichtbar
+    ab statt den Aufruf nur langsamer zu machen (Auftragstext, Punkt 7) — dieselbe
+    `except Exception: … ; raise`-Bauart wie in `dictionary.fetch_dictionary`, die die
+    Nebendatei aufräumt und den Fehler danach unverändert weiterreicht."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(path.name + ".part")
+    try:
+        with tmp_path.open("w", encoding="utf-8") as handle:
+            json.dump(dict(ratios), handle)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
+    tmp_path.replace(path)
+
+
 def run_chapter(
     *,
     epub_path: Path,
@@ -250,6 +354,7 @@ def run_chapter(
     dictionary_path: Path,
     profile_path: Path,
     nlp: Language,
+    cache_dir: Path | None = None,
     on_progress: Callable[[ChapterProgress], None] | None = None,
 ) -> ChapterVocabulary:
     """Ein Durchlauf für ein Kapitel (bauplan.md T15): Wörterbuchdatei vorab prüfen (Befund
@@ -276,7 +381,21 @@ def run_chapter(
     bis 29 s je Buch, siehe oben) war der stille Fehlschlag aus Regel 13 (dokumentation.md
     §4); die Entscheidung, deshalb überhaupt zu melden, steht in technik.md §13,
     „Konsolenausgabe". Der Kern gibt selbst keinen deutschen Text aus (technik.md §7) —
-    `cli.main` bedient den Rückruf über `cli.display.safe_print_progress`."""
+    `cli.main` bedient den Rückruf über `cli.display.safe_print_progress`.
+
+    `cache_dir` (technik.md §5, „Entschieden 15.09.2026: Zwischenspeicher für den
+    buchweiten Eigennamenanteil"): `None` (Vorgabe) heißt ausdrücklich **kein**
+    Zwischenspeicher — derselbe Durchlauf wie vor dieser Behebung. Sonst wird zuerst unter
+    einer aus EPUB-Datei, installierter spaCy- und Modellfassung gebildeten Kennung
+    nachgesehen (`_proper_noun_ratio_cache_key`); trifft sie, entfällt der ganze Abschnitt
+    unten — weder werden die übrigen Kapitel gelesen noch läuft spaCy über sie, `nlp` wird
+    für diesen Teil des Durchlaufs überhaupt nicht aufgerufen, und `READING_BOOK`/
+    `ANALYZING_BOOK` werden dann auch nicht gemeldet, weil es nichts mehr zu melden gibt.
+    Trifft sie nicht, läuft der Abschnitt wie gehabt und schreibt sein Ergebnis anschließend
+    in den Zwischenspeicher, wie es der Aufrufer (der Pfad kommt von außen, technik.md §9)
+    über `cache_dir` vorgesehen hat. `cache_dir` bleibt wie jeder andere Pfad Sache des
+    Aufrufers — der Kern kennt auch hier keine Vorgabe (`cli` setzt ihn auf
+    `<data_dir>/cache`)."""
     if not dictionary_path.is_file():
         raise FileNotFoundError(f"Wörterbuch nicht lesbar: {dictionary_path}")
 
@@ -289,51 +408,71 @@ def run_chapter(
         )
     chapter = epub.read_chapter(epub_path, structure.book, reference)
 
-    # (T17-Nachbesserung, schwer 1, zweiter Anlauf, 26.08.2026): Der Eigennamenfilter aus
-    # extraction.extract_vocabulary braucht den buchweiten Anteil je Grundform (technik.md
-    # §5, REGEL bei extraction._PROPER_NOUN_RATIO_THRESHOLD) — dafür müssen alle Kapitel des
-    # Buchs gelesen und geparst werden, nicht nur das gewählte. `pipeline` ist nach
-    # technik.md §7 der einzige Ort, der `epub` und `extraction` gemeinsam kennen darf;
-    # die Vorberechnung gehört deshalb hierher, nicht nach `extraction` (das kennt kein
-    # EPUB) und nicht nach `cli` (das läuft nach Regel 9 nie im selben Thread wie die
-    # Oberfläche, hat mit dieser Funktion aber ohnehin keinen eigenen Berührungspunkt).
-    # Kostet einen vollen spaCy-Lauf je Kapitel des Buchs (siehe Bericht zur Abnahme,
-    # rund 22 respektive 29 s für die beiden tools/-EPUBs) — der Preis dafür, dass ein
-    # Tagger-Fehler in drei Vorkommen eines einzelnen Kapitels („Sibyl dead!", „Sibyl!")
-    # den je Kapitel berechneten Anteil nicht mehr verfälschen kann.
-    total_chapters = len(structure.chapters)
-    all_chapters: list[Chapter] = []
-    for done, other_reference in enumerate(structure.chapters, start=1):
-        if other_reference.number == chapter_number:
-            all_chapters.append(chapter)
-        else:
-            try:
-                all_chapters.append(epub.read_chapter(epub_path, structure.book, other_reference))
-            except ValueError as error:
-                # Vorspann-/Impressum- und reine Bildband-Kapitel (epub.read_chapter, „Bricht
-                # mit einer deutschen Meldung ab") tragen keinen Wortschatz bei und dürfen bei
-                # der buchweiten Zählung fehlen — jeder andere ValueError (kaputtes Archiv,
-                # falsche Kodierung, fehlendes Dokument im Archiv) bleibt dagegen sichtbar
-                # (Regel 13) statt die Statistik lautlos zu verfälschen.
-                message = str(error)
-                if "besteht nur aus Vorspann bzw. Impressum" not in message and (
-                    "Bildband ohne Text" not in message
-                ):
-                    raise
-        if on_progress is not None:
-            on_progress(
-                ChapterProgress(stage=ChapterStage.READING_BOOK, done=done, total=total_chapters)
-            )
-
-    def _report_analysis_progress(done: int, total: int) -> None:
-        if on_progress is not None:
-            on_progress(ChapterProgress(stage=ChapterStage.ANALYZING_BOOK, done=done, total=total))
-
-    book_proper_noun_ratios = extraction.book_proper_noun_ratios(
-        all_chapters,
-        nlp,
-        on_progress=_report_analysis_progress if on_progress is not None else None,
+    cache_path = (
+        _proper_noun_ratio_cache_path(cache_dir, _proper_noun_ratio_cache_key(epub_path, nlp))
+        if cache_dir is not None
+        else None
     )
+    book_proper_noun_ratios = (
+        _read_proper_noun_ratio_cache(cache_path) if cache_path is not None else None
+    )
+
+    if book_proper_noun_ratios is None:
+        # (T17-Nachbesserung, schwer 1, zweiter Anlauf, 26.08.2026): Der Eigennamenfilter aus
+        # extraction.extract_vocabulary braucht den buchweiten Anteil je Grundform (technik.md
+        # §5, REGEL bei extraction._PROPER_NOUN_RATIO_THRESHOLD) — dafür müssen alle Kapitel des
+        # Buchs gelesen und geparst werden, nicht nur das gewählte. `pipeline` ist nach
+        # technik.md §7 der einzige Ort, der `epub` und `extraction` gemeinsam kennen darf;
+        # die Vorberechnung gehört deshalb hierher, nicht nach `extraction` (das kennt kein
+        # EPUB) und nicht nach `cli` (das läuft nach Regel 9 nie im selben Thread wie die
+        # Oberfläche, hat mit dieser Funktion aber ohnehin keinen eigenen Berührungspunkt).
+        # Kostet einen vollen spaCy-Lauf je Kapitel des Buchs (siehe Bericht zur Abnahme,
+        # rund 22 respektive 29 s für die beiden tools/-EPUBs) — der Preis dafür, dass ein
+        # Tagger-Fehler in drei Vorkommen eines einzelnen Kapitels („Sibyl dead!", „Sibyl!")
+        # den je Kapitel berechneten Anteil nicht mehr verfälschen kann. Seit dem 15.09.2026
+        # nur der Preis des **ersten** Durchlaufs über ein Buch — trifft der Zwischenspeicher
+        # (`cache_path` oben), entfällt dieser ganze Abschnitt.
+        total_chapters = len(structure.chapters)
+        all_chapters: list[Chapter] = []
+        for done, other_reference in enumerate(structure.chapters, start=1):
+            if other_reference.number == chapter_number:
+                all_chapters.append(chapter)
+            else:
+                try:
+                    all_chapters.append(
+                        epub.read_chapter(epub_path, structure.book, other_reference)
+                    )
+                except ValueError as error:
+                    # Vorspann-/Impressum- und reine Bildband-Kapitel (epub.read_chapter, „Bricht
+                    # mit einer deutschen Meldung ab") tragen keinen Wortschatz bei und dürfen bei
+                    # der buchweiten Zählung fehlen — jeder andere ValueError (kaputtes Archiv,
+                    # falsche Kodierung, fehlendes Dokument im Archiv) bleibt dagegen sichtbar
+                    # (Regel 13) statt die Statistik lautlos zu verfälschen.
+                    message = str(error)
+                    if "besteht nur aus Vorspann bzw. Impressum" not in message and (
+                        "Bildband ohne Text" not in message
+                    ):
+                        raise
+            if on_progress is not None:
+                on_progress(
+                    ChapterProgress(
+                        stage=ChapterStage.READING_BOOK, done=done, total=total_chapters
+                    )
+                )
+
+        def _report_analysis_progress(done: int, total: int) -> None:
+            if on_progress is not None:
+                on_progress(
+                    ChapterProgress(stage=ChapterStage.ANALYZING_BOOK, done=done, total=total)
+                )
+
+        book_proper_noun_ratios = extraction.book_proper_noun_ratios(
+            all_chapters,
+            nlp,
+            on_progress=_report_analysis_progress if on_progress is not None else None,
+        )
+        if cache_path is not None:
+            _write_proper_noun_ratio_cache(cache_path, book_proper_noun_ratios)
 
     if on_progress is not None:
         on_progress(ChapterProgress(stage=ChapterStage.EXTRACTING_VOCABULARY, done=0, total=0))

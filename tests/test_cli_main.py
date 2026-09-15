@@ -1361,6 +1361,7 @@ def test_run_chapter_with_progress_closes_the_progress_line_at_every_stage_chang
         dictionary_path: Path,
         profile_path: Path,
         nlp: Language,
+        cache_dir: Path | None = None,
         on_progress: Callable[[pipeline.ChapterProgress], None] | None = None,
     ) -> pipeline.ChapterVocabulary:
         assert on_progress is not None
@@ -1376,6 +1377,7 @@ def test_run_chapter_with_progress_closes_the_progress_line_at_every_stage_chang
         dictionary_path=Path("en-de.sqlite3"),
         profile_path=Path("profil.sqlite3"),
         nlp=cast("Language", None),
+        cache_dir=Path("cache"),
         write_line=lambda text: log.append(f"zeile: {text}"),
     )
 
@@ -1417,6 +1419,7 @@ def test_run_chapter_with_progress_closes_the_line_even_when_the_run_fails(
         dictionary_path: Path,
         profile_path: Path,
         nlp: Language,
+        cache_dir: Path | None = None,
         on_progress: Callable[[pipeline.ChapterProgress], None] | None = None,
     ) -> pipeline.ChapterVocabulary:
         assert on_progress is not None
@@ -1434,6 +1437,7 @@ def test_run_chapter_with_progress_closes_the_line_even_when_the_run_fails(
             dictionary_path=Path("en-de.sqlite3"),
             profile_path=Path("profil.sqlite3"),
             nlp=cast("Language", None),
+            cache_dir=Path("cache"),
             write_line=lambda _text: None,
         )
 

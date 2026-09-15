@@ -1385,19 +1385,81 @@ rund 1,1 s, die `run_chapter` zuvor für Nachschlagen und Profilabgleich allein 
 reinen Bildband — ganz ohne Fließtext besteht, trägt nichts zur Statistik bei und wird
 übersprungen (dieselbe Meldung, die `epub.read_chapter` dafür schon liefert).
 
+### Entschieden 15.09.2026: Zwischenspeicher für den buchweiten Eigennamenanteil
+
+**Ein Zwischenspeicher für `extraction.book_proper_noun_ratios`, als eigene JSON-Datei
+unter `<data_dir>/cache/`. Die Kennung steht im Dateinamen; es gibt keinen
+Verfallszeitpunkt.** Regel 14 verlangt für einen Zwischenspeicher einen gemessenen Anlass
+(der obige Abschnitt „Kosten") — es ist der erste im Projekt.
+
+**Nicht in der Profildatei.** Der offene Punkt oben nannte die `book`-Tabelle als
+naheliegend; entschieden wurde dagegen. Der Anteil ist ein Wegwerfwert — Löschen kostet
+Rechenzeit, nie Nutzerwert, anders als jede Zeile in `profil.sqlite3`. Er hängt zudem am
+**Dateiinhalt**, während `book` über `(title, author)` identifiziert ist (Abschnitt 4) —
+zwei EPUB-Ausgaben desselben Titels bräuchten unterschiedliche Anteile unter demselben
+Schlüssel. Eine eigene Datei erspart damit auch die sonst nötige Schemafassung 3 samt
+Migration für einen Wert, der keine Nutzerdaten sind.
+
+**Kennung statt Verfallszeitpunkt.** Der Dateiname trägt den SHA-256 der vollen
+EPUB-Bytes, dazu die installierte spaCy-Fassung und Name/Fassung des geladenen
+Sprachmodells — beide ändern die Vertaggung, aus der der Anteil entsteht, und damit den
+Anlass für den offenen Punkt oben („wann er verfällt"). Trifft der Name nicht, wird neu
+gerechnet; es gibt keinen Vergleich im Code, den jemand zu schreiben vergessen könnte.
+Falle dabei: `nlp.meta["spacy_version"]` ist ein Anforderungsbereich der Modelldatei
+(`">=3.8.0,<3.9.0"` bei `en_core_web_md` 3.8.0), nicht die installierte Fassung — die
+richtige Quelle ist `spacy.__version__` (heute `3.8.15`), gelesen über `spacy.about`, weil
+`spacy/__init__.py` den Namen unter `mypy --strict` nicht wiederausführt. Modellname und
+-fassung kommen aus `nlp.meta["name"]`/`nlp.meta["version"]` (heute `core_web_md`/`3.8.0`).
+
+**Geschrieben wird die volle Tabelle**, so wie `book_proper_noun_ratios` sie liefert —
+nicht nur die Werte oberhalb von `_PROPER_NOUN_RATIO_THRESHOLD`. Sonst wanderte der
+Schwellwert faktisch in die Kennung, und wer ihn ändert, bekäme still den alten Filter
+zurück (Regel 13). Gemessen am 15.09.2026: volle Tabelle 80,7 kB (`dorian_gray.epub`,
+5.171 Grundformen), 93,7 kB (`sherlock.epub`, 5.945), 141,0 kB (`dune.epub`, 8.641) — nur
+die Werte ≥ 0,90 wären 8,1/8,5/9,0 kB. Das Sparen lohnt die zusätzliche Fehlerquelle nicht.
+
+**Der Pfad kommt von außen** (Abschnitt 9, „Der Kern kennt keine Vorgabe"):
+`pipeline.run_chapter` bekommt ihn als `cache_dir: Path | None = None` — `None` heißt
+ausdrücklich kein Zwischenspeicher, unverändertes Verhalten. `cli` setzt ihn auf
+`<data_dir>/cache`. Kein Schalter dafür in `config.toml`: Es gibt nur diesen einen
+Anwendungsfall (Regel 14). Die Funktionen liegen in `pipeline.py`, nicht in einem eigenen
+Modul (Abschnitt 7 bekommt kein elftes) — `pipeline` stellt als einziger Ort die
+Kapitelliste ohnehin zusammen, um `book_proper_noun_ratios` aufzurufen.
+
+**Geschrieben wird atomar** (Temporärdatei im selben Verzeichnis, danach umbenannt) —
+dieselbe Bauart wie die `.part`-Datei in `dictionary.fetch_dictionary` — und mit
+`encoding="utf-8"` (CLAUDE.md). Ein Treffer im Zwischenspeicher überspringt bei einem
+`run_chapter`-Aufruf nicht nur den spaCy-Lauf, sondern auch das Einlesen der übrigen
+Kapitel: Beides hängt allein an der buchweiten Anteilsberechnung.
+
+**Eine unlesbare, aber namentlich treffende Datei ist ein Befund, kein Normalfall**
+(Regel 13): kaputtes JSON, kein Objekt oder ein Wert, der keine Zahl ist, bricht den Lauf
+sichtbar ab und nennt den vollen Pfad der zu löschenden Datei — weder stillschweigend
+übergangen noch stillschweigend überschrieben. Weil geschrieben wird atomar, kommt eine
+solche Datei nicht durch einen abgebrochenen Schreibvorgang zustande. Ein Fehlschlag beim
+**Schreiben** (Verzeichnis nicht anlegbar, Platte voll) bricht ebenso sichtbar ab, statt
+den Lauf nur langsamer zu machen.
+
+**Eigene Messung, 15.09.2026** (nicht mit den 22 s/29 s oben zu verwechseln, siehe unten):
+Nur `extraction.book_proper_noun_ratios` über die bereits eingelesenen Kapitel, ohne
+EPUB-Lesezeit, warmer Prozess (spaCy bereits geladen) — `dorian_gray.epub` 12,2 s (22
+Kapitel), `sherlock.epub` 15,8 s (13 Kapitel mit Fließtext), `dune.epub` 32,3 s (4 Kapitel
+mit Fließtext, 8.641 Grundformen). Die 22 s/29 s vom 26.08.2026 oben bleiben unverändert
+stehen — sie maßen den vollen `run_chapter`-Durchlauf einschließlich EPUB-Lesen an
+denselben zwei Büchern, diese Messung nur die reine Anteilsberechnung an drei Büchern mit
+anderer Methode. Die Abweichung zwischen beiden Messungen ist nicht aufgeklärt und **keine
+Korrektur** der ersten. Ein Zwischenspeichertreffer selbst braucht weder EPUB-Lesen noch
+spaCy-Lauf und liegt damit im Bereich von Sekundenbruchteilen (Hashen der EPUB-Datei plus
+ein Dateizugriff).
+
 ### Offene Punkte
 
 - Über-Lemmatisierung von Eigennamen (`Holmes` → `holme`) — harmlos, solange der Filter
   aus dem vorigen Abschnitt greift, aber beim Anlegen der Liste „Figuren & Orte" zu
   beachten
-- **Ob der buchweite Eigennamenanteil zwischengespeichert wird.** Er kostet je
-  Kapiteldurchlauf einen vollen spaCy-Lauf über **alle** Kapitel des Buchs — 22 s
-  (`dorian_gray.epub`) beziehungsweise 29 s (`sherlock.epub`) gegenüber rund 1,1 s vorher
-  (Nachtrag 26.08.2026 oben). Regel 14 verlangt für einen Zwischenspeicher einen gemessenen
-  Anlass; der liegt damit vor, und er ist der erste im Projekt. Naheliegend ist, den Wert je
-  Buch im Profil zu halten (`book`-Tabelle, Abschnitt 4) — zu entscheiden ist dabei vor
-  allem, **wann er verfällt**: bei geänderter Datei und bei neuer spaCy- oder
-  Modellfassung, denn beide ändern die Vertaggung, aus der der Anteil entsteht
+- ~~Ob der buchweite Eigennamenanteil zwischengespeichert wird~~ — **entschieden am
+  15.09.2026**, siehe oben, „Entschieden 15.09.2026: Zwischenspeicher für den buchweiten
+  Eigennamenanteil"
 - ~~Ob die Wortart als Vorfilter für lange Auswahllisten taugt~~ — **gemessen am
   26.08.2026** (Abschnitt 3, „Nachtrag 26.08.2026: was der Wortartfilter kürzt — und was er
   kostet"): Sie taugt dafür, aber schwächer als angenommen. Was daran offen bleibt, steht in
@@ -1618,6 +1680,11 @@ Vorratsarbeit, die Regel 14 untersagt.
 | `anki` | Schritt 6: Anki-Deck samt GUID je Karte |
 | `printout` | Schritt 6: Kapitelliste als Druckseite |
 | `pipeline` | Verkettet die Schritte zu einem Durchlauf für ein Kapitel — dem Abnahmeziel der Phase 1 |
+
+Kein elftes Modul für den Zwischenspeicher aus Abschnitt 5, „Entschieden 15.09.2026:
+Zwischenspeicher für den buchweiten Eigennamenanteil": Die Funktionen liegen in
+`pipeline`, dem einzigen Ort, der die Kapitelliste für `extraction.
+book_proper_noun_ratios` ohnehin zusammenstellt.
 
 Vier dieser Grenzen sind keine Geschmacksfrage. Sie machen Regeln aus den Abschnitten 1
 bis 5 zu Modulgrenzen, und das ist ihr eigentlicher Zweck: Eine Regel, die auf einer
@@ -2171,7 +2238,10 @@ Standardbibliothek.**
 | abweichend je Lauf | `--data-dir` |
 | abweichend je Datei | `paths.dictionary`, `paths.profile` in `config.toml` |
 
-Darin `profil.sqlite3`, `en-de.sqlite3` und `config.toml`. `cli.config.default_data_dir`
+Darin `profil.sqlite3`, `en-de.sqlite3`, `config.toml` und, seit dem 15.09.2026, das
+Unterverzeichnis `cache/` für den Zwischenspeicher aus Abschnitt 5 („Entschieden
+15.09.2026: Zwischenspeicher für den buchweiten Eigennamenanteil") — `cli` setzt ihn auf
+`<data_dir>/cache`, ohne eigenen Schlüssel in `config.toml`. `cli.config.default_data_dir`
 misst den Pfad vom Ort der eigenen Datei aus, **nicht** vom Arbeitsverzeichnis: Ein am
 Arbeitsverzeichnis hängendes Datenverzeichnis träfe je nach Aufrufort ein anderes Profil.
 `data/` steht in `.gitignore`, und jeder Lauf gibt das benutzte Verzeichnis als erste Zeile
@@ -2213,7 +2283,9 @@ Entwicklungsmaschine keine Installation gibt, die etwas zu übernehmen hätte.
 
 Das ist die Datei-Hälfte der Architekturregel aus Abschnitt 1 und zahlt zweifach: Tests
 fassen nie das echte Profil an, sondern bekommen ein Wegwerfverzeichnis; und die
-Oberfläche muss die Vorgabe später nicht beim Kern erfragen, sondern setzt ihre eigene.
+Oberfläche muss die Vorgabe später nicht beim Kern erfragen, sondern setzt ihre eigene. Der
+Zwischenspeicher aus Abschnitt 5 folgt derselben Regel: `pipeline.run_chapter` bekommt ihn
+als `cache_dir: Path | None = None`, `cli` setzt ihn auf `<data_dir>/cache`.
 
 ### Die Regel gilt für Nutzerdaten, nicht für Programmbestandteile (31.08.2026)
 

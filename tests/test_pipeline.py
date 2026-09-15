@@ -7,7 +7,7 @@ import sqlite3
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
@@ -741,6 +741,230 @@ def test_run_chapter_checks_the_dictionary_file_before_extracting_any_vocabulary
             profile_path=profile_path,
             nlp=nlp,
         )
+
+
+# --------------------- Zwischenspeicher für den buchweiten Eigennamenanteil (15.09.2026)
+
+
+class _FakeNlp:
+    """Steht für ein geladenes spaCy-Modell, soweit `_proper_noun_ratio_cache_key` es
+    braucht — nur `.meta`, kein echtes Sprachmodell. Ein echtes `nlp` liefe für jede
+    Kennungsvariante erneut eine Sekunde Ladezeit ein, ohne dass diese Tests je ein Token
+    verarbeiten (technik.md §5)."""
+
+    def __init__(self, meta: dict[str, str]) -> None:
+        self.meta = meta
+
+
+def _fake_nlp(meta: dict[str, str]) -> Language:
+    """Tarnt `_FakeNlp` als `Language` für den Typprüfer — dieselbe Bauart wie
+    `cast("Language", None)` in `tests/test_cli_main.py`: Die Attrappe erfüllt nur den
+    Ausschnitt der Schnittstelle, den `_proper_noun_ratio_cache_key` tatsächlich anfasst
+    (`.meta`), nicht die volle `Language`-Schnittstelle.
+
+    Führt `spacy_version` als festen Anforderungsbereich mit (wie ihn ein echtes `nlp.meta`
+    trägt, „>=3.8.0,<3.9.0" bei `en_core_web_md` 3.8.0) — sonst prüfte
+    `test_proper_noun_ratio_cache_key_differs_for_a_different_installed_spacy_version` die
+    Falle aus dem Auftragstext gar nicht sauber isoliert: Läse `_proper_noun_ratio_cache_key`
+    versehentlich `nlp.meta['spacy_version']` statt `spacy.about.__version__`, bliebe dieser
+    Wert hier über beide Aufrufe hinweg gleich, während jeder andere Test in diesem
+    Abschnitt unverändert bestünde, weil er eine andere Zutat der Kennung variiert."""
+    full_meta = {"spacy_version": ">=3.8.0,<3.9.0", **meta}
+    return cast("Language", _FakeNlp(full_meta))
+
+
+def test_proper_noun_ratio_cache_key_differs_for_a_different_epub_file(tmp_path: Path) -> None:
+    """Auftragstext vom 15.09.2026, Punkt 2: Eine geänderte EPUB-Datei ergibt einen anderen
+    Dateinamen — die Kennung trägt den SHA-256 der vollen Bytes, nicht nur den Dateinamen
+    oder die Dateigröße."""
+    file_a = tmp_path / "a.epub"
+    file_b = tmp_path / "b.epub"
+    file_a.write_bytes(b"erster Buchinhalt")
+    file_b.write_bytes(b"zweiter Buchinhalt")
+    fake_nlp = _fake_nlp({"name": "core_web_md", "version": "3.8.0"})
+
+    assert pipeline._proper_noun_ratio_cache_key(
+        file_a, fake_nlp
+    ) != pipeline._proper_noun_ratio_cache_key(file_b, fake_nlp)
+
+
+def test_proper_noun_ratio_cache_key_is_stable_for_unchanged_input(tmp_path: Path) -> None:
+    """Gegenprobe zum vorigen Test: dieselbe Datei, dasselbe `nlp.meta` ergibt zweimal
+    dieselbe Kennung — sonst träfe ein Zwischenspeicher nie, selbst beim unveränderten
+    Buch."""
+    epub_path = tmp_path / "buch.epub"
+    epub_path.write_bytes(b"unveraenderter Inhalt")
+    fake_nlp = _fake_nlp({"name": "core_web_md", "version": "3.8.0"})
+
+    assert pipeline._proper_noun_ratio_cache_key(
+        epub_path, fake_nlp
+    ) == pipeline._proper_noun_ratio_cache_key(epub_path, fake_nlp)
+
+
+def test_proper_noun_ratio_cache_key_differs_for_a_different_installed_spacy_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Auftragstext vom 15.09.2026, Punkt 2: eine andere installierte spaCy-Fassung ergibt
+    einen anderen Dateinamen. Geprüft über `spacy.about.__version__` — dieselbe Fassung,
+    die `spacy.__version__` nach außen reicht (`spacy/__init__.py`, `from .about import
+    __version__`) —, **nicht** `nlp.meta['spacy_version']`: Letzteres ist bei
+    `en_core_web_md` der Anforderungsbereich `'>=3.8.0,<3.9.0'` der Modelldatei, ändert
+    sich mit einer neuen spaCy-Fassung also gerade nicht (die Falle aus dem Auftragstext)."""
+    import spacy.about
+
+    epub_path = tmp_path / "buch.epub"
+    epub_path.write_bytes(b"Inhalt")
+    fake_nlp = _fake_nlp({"name": "core_web_md", "version": "3.8.0"})
+
+    key_before = pipeline._proper_noun_ratio_cache_key(epub_path, fake_nlp)
+    monkeypatch.setattr(spacy.about, "__version__", "9.9.9")
+    key_after = pipeline._proper_noun_ratio_cache_key(epub_path, fake_nlp)
+
+    assert key_before != key_after
+
+
+def test_proper_noun_ratio_cache_key_differs_for_a_different_model_name_or_version(
+    tmp_path: Path,
+) -> None:
+    """Auftragstext vom 15.09.2026, Punkt 2: ein anderer Modellname oder eine andere
+    Modellfassung (`nlp.meta['name']`/`nlp.meta['version']`) ergibt je einen anderen
+    Dateinamen."""
+    epub_path = tmp_path / "buch.epub"
+    epub_path.write_bytes(b"Inhalt")
+
+    key_md = pipeline._proper_noun_ratio_cache_key(
+        epub_path, _fake_nlp({"name": "core_web_md", "version": "3.8.0"})
+    )
+    key_lg = pipeline._proper_noun_ratio_cache_key(
+        epub_path, _fake_nlp({"name": "core_web_lg", "version": "3.8.0"})
+    )
+    key_newer_version = pipeline._proper_noun_ratio_cache_key(
+        epub_path, _fake_nlp({"name": "core_web_md", "version": "3.9.0"})
+    )
+
+    assert len({key_md, key_lg, key_newer_version}) == 3
+
+
+def test_write_proper_noun_ratio_cache_is_read_back_unchanged(tmp_path: Path) -> None:
+    """Auftragstext vom 15.09.2026, Punkt 6: geschrieben wird mit `encoding='utf-8'`
+    (CLAUDE.md) — die Umlaute in `café` prüfen das — und atomar: Nach dem Schreiben bleibt
+    keine `.part`-Nebendatei liegen (dieselbe Bauart wie `dictionary.fetch_dictionary`)."""
+    path = tmp_path / "cache" / "book_proper_noun_ratios_test.json"
+    ratios = {"street": 0.42, "bank": 0.0, "café": 0.75}
+
+    pipeline._write_proper_noun_ratio_cache(path, ratios)
+
+    assert pipeline._read_proper_noun_ratio_cache(path) == ratios
+    assert not path.with_name(path.name + ".part").exists()
+
+
+def test_read_proper_noun_ratio_cache_returns_none_when_the_file_is_missing(tmp_path: Path) -> None:
+    """Eine fehlende Datei ist der Normalfall beim ersten Lauf über ein Buch — `None`,
+    keine Meldung, keine Ausnahme (Auftragstext vom 15.09.2026, Punkt 7)."""
+    missing = tmp_path / "book_proper_noun_ratios_missing.json"
+
+    assert pipeline._read_proper_noun_ratio_cache(missing) is None
+
+
+def test_read_proper_noun_ratio_cache_raises_and_names_the_path_for_broken_json(
+    tmp_path: Path,
+) -> None:
+    """Auftragstext vom 15.09.2026, Punkt 7: Eine Datei, deren Name trifft, die sich aber
+    nicht lesen lässt, bricht sichtbar ab (Regel 13) und nennt den vollen Pfad der Datei,
+    die zu löschen ist — statt sie stillschweigend zu übergehen oder zu überschreiben."""
+    path = tmp_path / "book_proper_noun_ratios_broken.json"
+    path.write_text("das ist kein JSON {{{", encoding="utf-8")
+
+    with pytest.raises(ValueError) as error:
+        pipeline._read_proper_noun_ratio_cache(path)
+    assert str(path) in str(error.value)
+
+
+def test_read_proper_noun_ratio_cache_raises_and_names_the_path_for_the_wrong_shape(
+    tmp_path: Path,
+) -> None:
+    """Wie der vorige Test, aber für gültiges JSON in der falschen Form (eine Liste statt
+    einer Grundform-Anteil-Tabelle) — auch das ist kein Normalfall, sondern ein Befund
+    (Auftragstext vom 15.09.2026, Punkt 7)."""
+    path = tmp_path / "book_proper_noun_ratios_wrong_shape.json"
+    path.write_text('["street", "bank"]', encoding="utf-8")
+
+    with pytest.raises(ValueError) as error:
+        pipeline._read_proper_noun_ratio_cache(path)
+    assert str(path) in str(error.value)
+
+
+def test_read_proper_noun_ratio_cache_matches_a_fresh_computation(
+    pipeline_epub: Path, nlp: Language, tmp_path: Path
+) -> None:
+    """Auftragstext vom 15.09.2026: ein Treffer im Zwischenspeicher liefert dieselbe
+    Tabelle wie `extraction.book_proper_noun_ratios` selbst — geschrieben wird die volle
+    Tabelle, nicht nur die Werte oberhalb von `extraction._PROPER_NOUN_RATIO_THRESHOLD`
+    (Auftragstext, Punkt 3)."""
+    structure = epub.read_structure(pipeline_epub)
+    chapters = [
+        epub.read_chapter(pipeline_epub, structure.book, reference)
+        for reference in structure.chapters
+    ]
+    computed = extraction.book_proper_noun_ratios(chapters, nlp)
+
+    cache_path = tmp_path / "cache" / "book_proper_noun_ratios_test.json"
+    pipeline._write_proper_noun_ratio_cache(cache_path, computed)
+
+    assert pipeline._read_proper_noun_ratio_cache(cache_path) == computed
+
+
+def test_run_chapter_does_not_recompute_proper_noun_ratios_on_a_cache_hit(
+    pipeline_epub: Path,
+    mini_dictionary_db: Path,
+    profile_path: Path,
+    nlp: Language,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Auftragstext vom 15.09.2026: Ein Treffer im Zwischenspeicher ruft
+    `extraction.book_proper_noun_ratios` nicht erneut auf — geprüft an einer Attrappe, die
+    bei jedem Aufruf abbricht (dokumentation.md §5, „Woran geprüft wird"). Bestünde
+    `run_chapter` trotz Treffer weiterhin auf dem vollen Buchlauf, schlüge dieser Test mit
+    der Attrappen-Ausnahme fehl, statt mit dem erwarteten Ergebnis durchzulaufen."""
+    cache_dir = tmp_path / "cache"
+    cache_key = pipeline._proper_noun_ratio_cache_key(pipeline_epub, nlp)
+    cache_path = pipeline._proper_noun_ratio_cache_path(cache_dir, cache_key)
+    pipeline._write_proper_noun_ratio_cache(cache_path, {"street": 0.5})
+
+    def _must_not_be_called(*args: object, **kwargs: object) -> dict[str, float]:
+        raise AssertionError(
+            "extraction.book_proper_noun_ratios wurde trotz Zwischenspeicher-Treffer "
+            "erneut aufgerufen"
+        )
+
+    monkeypatch.setattr(extraction, "book_proper_noun_ratios", _must_not_be_called)
+
+    result = pipeline.run_chapter(
+        epub_path=pipeline_epub,
+        chapter_number=1,
+        dictionary_path=mini_dictionary_db,
+        profile_path=profile_path,
+        nlp=nlp,
+        cache_dir=cache_dir,
+    )
+
+    assert result.chapter.number == 1
+
+
+def test_run_chapter_without_a_cache_dir_behaves_as_before(
+    pipeline_epub: Path, mini_dictionary_db: Path, profile_path: Path, nlp: Language
+) -> None:
+    """`cache_dir=None` (Vorgabe) heißt ausdrücklich kein Zwischenspeicher — unverändertes
+    Verhalten gegenüber dem Durchlauf vor dieser Behebung."""
+    result = pipeline.run_chapter(
+        epub_path=pipeline_epub,
+        chapter_number=1,
+        dictionary_path=mini_dictionary_db,
+        profile_path=profile_path,
+        nlp=nlp,
+    )
+    assert result.chapter.number == 1
 
 
 def test_run_chapter_raises_for_a_profile_file_with_a_foreign_table(

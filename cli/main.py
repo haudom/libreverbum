@@ -331,6 +331,7 @@ def _run_chapter_with_progress(
     dictionary_path: Path,
     profile_path: Path,
     nlp: Language,
+    cache_dir: Path,
     write_line: WriteLine,
 ) -> pipeline.ChapterVocabulary:
     """Ruft `pipeline.run_chapter` mit einer Fortschrittsanzeige auf (Auftragstext vom
@@ -359,7 +360,12 @@ def _run_chapter_with_progress(
     ohne Fließtext übersprungen wurde (`pipeline.run_chapter`, Vorspann und Impressum) —
     bei `tools/sherlock.epub` 13 gegen 14. Die Zeile nennt ihn deshalb ausdrücklich als
     Kapitel **mit Text** (Befund 6, Durchsicht cf09744): Eine Zahl, die zwischen zwei
-    aufeinanderfolgenden Zeilen unerklärt schrumpft, liest sich wie ein Fehler."""
+    aufeinanderfolgenden Zeilen unerklärt schrumpft, liest sich wie ein Fehler.
+
+    `cache_dir` wird unverändert an `pipeline.run_chapter` weitergereicht (technik.md §5,
+    „Entschieden 15.09.2026: Zwischenspeicher für den buchweiten Eigennamenanteil") — trifft
+    dessen Zwischenspeicher, bleiben `READING_BOOK`/`ANALYZING_BOOK` ganz aus, weil es dann
+    nichts mehr zu melden gibt."""
     progress_open = False
     last_stage: pipeline.ChapterStage | None = None
 
@@ -395,6 +401,7 @@ def _run_chapter_with_progress(
             dictionary_path=dictionary_path,
             profile_path=profile_path,
             nlp=nlp,
+            cache_dir=cache_dir,
             on_progress=_on_progress,
         )
     finally:
@@ -635,6 +642,7 @@ def _run(
         dictionary_path=cfg.dictionary_path,
         profile_path=cfg.profile_path,
         nlp=nlp,
+        cache_dir=data_dir / "cache",
         write_line=write_line,
     )
     write_line(
