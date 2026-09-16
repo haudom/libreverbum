@@ -67,10 +67,17 @@ Modul kennt `en-de.sqlite3` weiterhin an keiner Stelle. Wie `record_event` prüf
 `record_preset` die Bedeutungsidentität der übergebenen Ereignisse nicht (siehe
 `record_event`, „Bedeutungsidentität einer Vorbelegung") — eine zulässige Vorbelegung
 liefert deshalb stets über `dictionary` aufgelöste Bedeutungen.
+
+`backup` (Sichern, technik.md §4, „Sichern und Ausleiten") zieht über `sqlite3.
+Connection.backup` eine konsistente Dateikopie — statt einer rohen Dateikopie, die mitten
+in einem Schreibvorgang eine unbrauchbare Zwischenstufe träfe. `dump` (Ausleiten) schreibt
+den vollständigen Inhalt aller Tabellen als JSON, mit Tabellen- und Spaltenmenge aus dem
+Schema selbst gelesen, nicht hier ein zweites Mal aufgezählt.
 """
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Iterable
 from datetime import UTC, datetime
@@ -798,3 +805,57 @@ def record_preset(con: sqlite3.Connection, events: Iterable[Event], cefr_level: 
         con.rollback()
         raise
     con.commit()
+
+
+# ----------------------------------------------- backup und dump (AP 13, Sicherung und
+# ----------------------------------------------- Ausleiten)
+
+
+def backup(con: sqlite3.Connection, target: Path) -> None:
+    """Zieht eine konsistente Kopie der Profildatei nach `target` (technik.md §4,
+    „Sichern"): über `sqlite3.Connection.backup`, nicht über eine rohe Dateikopie — eine
+    rohe Kopie könnte mitten in einem Schreibvorgang eine unbrauchbare Zwischenstufe
+    treffen, die Sicherung über SQLite selbst dagegen nur als Ganzes oder gar nicht.
+    `target` wird danach vollständig überschrieben und ist ein eigenständiges Profil
+    derselben Schemafassung, mit `open_profile` regulär zu öffnen.
+
+    Committet zuerst jede auf `con` noch offene Transaktion (Regel 13, kein stiller
+    Verlust ungeschriebener Änderungen): Bleibt eine Transaktion auf derselben Verbindung
+    offen, mit der `con.backup(...)` läuft, wartet `sqlite3.Connection.backup` sonst in
+    einer endlosen Folge von `SQLITE_BUSY`-Wiederholungen auf eine Sperre, die nur diese
+    eine Verbindung selbst hält und nie freigibt — ein beim Bauen dieses Bauschritts
+    entdeckter Stillstand, keine dokumentierte Einschränkung der Bibliothek.
+    """
+    con.commit()
+    target_con = sqlite3.connect(target)
+    try:
+        con.backup(target_con)
+    finally:
+        target_con.close()
+
+
+def dump(con: sqlite3.Connection, target: Path) -> None:
+    """Leitet den vollständigen Profilinhalt als JSON nach `target` aus (technik.md §4,
+    „Ausleiten") — lesbar, auch ohne ein zu dieser Schemafassung passendes Programm.
+
+    Tabellen- und Spaltenmenge werden aus dem Schema selbst gelesen (`sqlite_master`,
+    `PRAGMA table_info`), nicht hier ein zweites Mal hingeschrieben: Sonst fehlte einer
+    künftigen Schemafassung mit einer neunten Tabelle oder einer neuen Spalte im Auszug
+    genau das, was sie hinzugefügt hat, ohne dass dieses Modul es bemerkte —
+    Vollständigkeit vor Bequemlichkeit. Jede Tabelle liefert ihre Zeilen als Liste von
+    Objekten, Spaltenname auf Wert, in der Reihenfolge von `PRAGMA table_info`.
+    """
+    table_names = [
+        row[0]
+        for row in con.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE "
+            "'sqlite_%' ORDER BY name"
+        )
+    ]
+    content: dict[str, list[dict[str, object]]] = {}
+    for table in table_names:
+        columns = [row[1] for row in con.execute(f"PRAGMA table_info({table})")]
+        rows = con.execute(f"SELECT {', '.join(columns)} FROM {table}").fetchall()
+        content[table] = [dict(zip(columns, row, strict=True)) for row in rows]
+    with target.open("w", encoding="utf-8") as file:
+        json.dump(content, file, ensure_ascii=False, indent=2)

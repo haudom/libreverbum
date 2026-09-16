@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import UTC, datetime, timedelta, timezone
 from os import PathLike
@@ -1216,3 +1217,154 @@ def test_record_preset_writes_nothing_if_one_event_fails_partway_through(tmp_pat
     assert con.execute("SELECT count(*) FROM sense").fetchone()[0] == 0
     assert con.execute("SELECT count(*) FROM lemma").fetchone()[0] == 0
     assert profile.get_cefr_level(con) is None
+
+
+# ----------------------------------------------- backup und dump (AP 13, Sicherung und
+# ----------------------------------------------- Ausleiten)
+
+
+def test_backup_is_a_valid_profile_of_the_same_schema_version(tmp_path: Path) -> None:
+    """AP 13, Prüfung: Die Sicherung ist wirklich ein gültiges Profil derselben
+    Schemafassung — geöffnet mit `profile.open_profile` und inhaltlich gegen die Quelle
+    verglichen, nicht nur als vorhandene, nicht-leere Datei angenommen."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    book_id = profile.ensure_book(con, _BOOK)
+    _add_chapter(con, book_id)
+    sense = Sense(
+        lemma=Lemma(text="draw", pos="VERB"),
+        wikdict_sense="to pull out, unsheath",
+        wikdict_trans_list="ziehen | herausziehen",
+        wikdict_lexentry="eng/draw__Verb__1",
+    )
+    profile.record_event(con, _event(sense, KnowledgeState.KNOWN, datetime.now(UTC)))
+
+    target = tmp_path / "sicherung.sqlite3"
+    profile.backup(con, target)
+
+    backup_con = profile.open_profile(target)
+    assert backup_con.execute("PRAGMA user_version").fetchone()[0] == profile.SCHEMA_VERSION
+    sense_id = profile.ensure_sense(backup_con, sense)
+    events = profile.events_for_sense(backup_con, sense_id)
+    assert [e.knowledge_state for e in events] == [KnowledgeState.KNOWN]
+    assert events[0].book == _BOOK
+
+
+def test_backup_includes_a_still_uncommitted_change_in_the_open_source_connection(
+    tmp_path: Path,
+) -> None:
+    """AP 13, Prüfung: eine Sicherung während offener Verbindung mit ungeschriebenen
+    Änderungen in der Quelle — genau der Fall, für den `sqlite3.Connection.backup`
+    überhaupt gewählt wurde. Ohne ein Committen zuerst liefe `con.backup(...)` in eine
+    endlose Folge von `SQLITE_BUSY`-Wiederholungen, weil dieselbe Verbindung, die die
+    Sicherung anstößt, noch selbst die offene Transaktion hält, deren Sperre sie nie
+    freigibt (eigener Befund beim Bauen dieses Bauschritts) — `profile.backup` committet
+    deshalb vor der eigentlichen Sicherung."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    profile.ensure_book(con, _BOOK)
+    con.execute("INSERT INTO book (title, author) VALUES (?, ?)", ("Unbestätigtes Buch", "N. N."))
+    # bewusst kein commit an dieser Stelle — die Verbindung bleibt mittendrin offen.
+
+    target = tmp_path / "sicherung.sqlite3"
+    profile.backup(con, target)
+
+    backup_con = profile.open_profile(target)
+    titles = {row[0] for row in backup_con.execute("SELECT title FROM book")}
+    assert "Unbestätigtes Buch" in titles
+
+
+def test_dump_contains_every_table_and_column_of_the_live_schema(tmp_path: Path) -> None:
+    """AP 13, Prüfung: Der Auszug enthält alle acht Tabellen mit allen ihren Spalten.
+    Erwartungsmenge aus dem Schema selbst abgeleitet (`sqlite_master`, `PRAGMA
+    table_info`), nicht hier noch einmal hingeschrieben — sonst schwiege dieser Test bei
+    einer künftigen Schemafassung mit neunter Tabelle oder neuer Spalte
+    (dokumentation.md §5). Die gefundene Tabellenzahl wird gegen die bekannte acht
+    gehalten, damit eine leere Erwartungsmenge nicht grün durchginge (dokumentation.md
+    §10, „ein eigenes Prüfskript wird gegen eine bekannte Größe gehalten")."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    book_id = profile.ensure_book(con, _BOOK)
+    _add_chapter(con, book_id)
+    card = _card_for(_occurrence())
+    profile.record_card(con, card)
+    profile.record_event(con, _event(card.sense, KnowledgeState.KNOWN, datetime.now(UTC)))
+    profile.set_cefr_level(con, CefrLevel.B1)
+
+    target = tmp_path / "auszug.json"
+    profile.dump(con, target)
+
+    with target.open(encoding="utf-8") as file:
+        dumped = json.load(file)
+
+    expected_tables = {
+        row[0]
+        for row in con.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+        )
+    }
+    assert len(expected_tables) == 8
+    assert set(dumped.keys()) == expected_tables
+
+    for table in expected_tables:
+        expected_columns = {row[1] for row in con.execute(f"PRAGMA table_info({table})")}
+        assert dumped[table], f"Tabelle {table} hat im Testaufbau keine Zeile"
+        for row in dumped[table]:
+            assert set(row.keys()) == expected_columns
+
+
+def test_dump_contains_every_event_not_only_the_current_knowledge_state(tmp_path: Path) -> None:
+    """AP 13, Prüfung: „JSON enthält jedes Ereignis" — die volle Ereignisfolge, nicht nur
+    der aktuelle Kenntnisstand (technik.md §4, „Kernentscheidung: Ereignisfolge statt
+    überschreibbarem Zustand"). Zwei Ereignisse zu derselben Bedeutung erscheinen beide im
+    Auszug."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    book_id = profile.ensure_book(con, _BOOK)
+    _add_chapter(con, book_id)
+    sense = Sense(
+        lemma=Lemma(text="give up", pos="VERB"),
+        wikdict_sense="admit defeat",
+        wikdict_trans_list="aufgeben | kapitulieren",
+        wikdict_lexentry="eng/give_up__Verb__1",
+    )
+    first_timestamp = datetime(2026, 8, 10, tzinfo=UTC)
+    second_timestamp = datetime(2026, 8, 17, tzinfo=UTC)
+    profile.record_event(con, _event(sense, KnowledgeState.LEARNING, first_timestamp))
+    profile.record_event(con, _event(sense, KnowledgeState.KNOWN, second_timestamp))
+
+    target = tmp_path / "auszug.json"
+    profile.dump(con, target)
+
+    with target.open(encoding="utf-8") as file:
+        dumped = json.load(file)
+
+    assert len(dumped["event"]) == 2
+    assert {row["knowledge_state"] for row in dumped["event"]} == {"learning", "known"}
+
+
+def test_dump_writes_valid_utf8_for_a_typographic_character_in_the_example_sentence(
+    tmp_path: Path,
+) -> None:
+    """CLAUDE.md, „Dateien immer mit encoding=»utf-8« öffnen": Unter Windows zerstört die
+    Systemkodierung sonst still typografische Zeichen aus dem Buchtext — hier ein
+    typografischer Apostroph in `occurrence.example_sentence`, der den Auszug unlesbar
+    machen würde, wenn `dump` die Datei nicht ausdrücklich als UTF-8 schriebe."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    book_id = profile.ensure_book(con, _BOOK)
+    _add_chapter(con, book_id)
+    occurrence = Occurrence(
+        book=_BOOK,
+        chapter_number=1,
+        lemma=Lemma(text="watch", pos="NOUN"),
+        word_form="watch",
+        example_sentence="He’d checked his watch — half past nine.",
+        frequency=1,
+        proper_noun_frequency=0,
+    )
+    profile.ensure_occurrence(con, occurrence)
+
+    target = tmp_path / "auszug.json"
+    profile.dump(con, target)
+
+    with target.open(encoding="utf-8") as file:
+        dumped = json.load(file)
+
+    sentences = {row["example_sentence"] for row in dumped["occurrence"]}
+    assert "He’d checked his watch — half past nine." in sentences
