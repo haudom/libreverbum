@@ -205,9 +205,10 @@ class ChapterVocabulary:
     `token_count` (bauplan-phase2.md AP 6): jedes alphabetische Token des Kapitels, aus
     `extraction.extract_vocabulary` mitgezählt (`extraction.VocabularyExtraction.
     token_count`) — Nenner für `coverage`. Größer als jede Summe aus `entries`, weil
-    Funktionswörter und ganz eigennamige Grundformen dort gar nicht erst als eigener
-    Eintrag erscheinen (siehe deren Docstrings), für die Abdeckung nach E5 aber als
-    verstanden zählen."""
+    Funktionswörter und Grundformen ab der Eigennamenschwelle
+    (`extraction._PROPER_NOUN_RATIO_THRESHOLD`, nicht nur die ganz eigennamigen, Befund 4
+    Durchsicht 3e71fb8) dort gar nicht erst als eigener Eintrag erscheinen (siehe deren
+    Docstrings), für die Abdeckung nach E5 aber als verstanden zählen."""
 
     chapter: Chapter
     notice: str | None
@@ -708,7 +709,7 @@ def run_chapter(
     )
 
 
-# REGEL (bauplan-phase2.md E5, Festlegung 2): Ein Einzelwort-Vorkommen gilt für die
+# (bauplan-phase2.md AP 6, E5 Festlegung 2): Ein Einzelwort-Vorkommen gilt für die
 # Abdeckung als verstanden, sobald mindestens eine seiner Bedeutungen `known` ODER
 # `new_meaning_of_known_word` ist — die teilweise bekannten Einträge zählen ausdrücklich
 # mit, weil die genaue, im Belegsatz gemeinte Bedeutung aufzulösen einen Modellaufruf je
@@ -728,9 +729,10 @@ class Coverage:
 
     `token_count`: alle alphabetischen Wortformen des Kapitels
     (`ChapterVocabulary.token_count`, E5 Festlegung 1). `understood_tokens`: davon bereits
-    verstanden — Funktionswörter, ganz eigennamige Grundformen und jedes eigennamige
-    Vorkommen zählen automatisch dazu, weil sie in `ChapterVocabulary.entries` gar nicht
-    erst als Kandidat erscheinen oder, bei einem teilweise eigennamigen Vorkommen, nur mit
+    verstanden — Funktionswörter, Grundformen ab der Eigennamenschwelle (nicht nur die
+    ganz eigennamigen, Befund 4 Durchsicht 3e71fb8) und jedes eigennamige Vorkommen zählen
+    automatisch dazu, weil sie in `ChapterVocabulary.entries` gar nicht erst als Kandidat
+    erscheinen oder, bei einem teilweise eigennamigen Vorkommen, nur mit
     ihrem eigennamigen Anteil (`Occurrence.proper_noun_frequency`) — ein
     Einzelwort-Vorkommen zusätzlich, sobald es nach `_UNDERSTOOD_VOCABULARY_STATUSES` als
     verstanden gilt (E5 Festlegung 2). `unknown_lemma_count`: wie viele Grundformen aus
@@ -754,9 +756,11 @@ def coverage(vocabulary: ChapterVocabulary, learned: Collection[Lemma] = ()) -> 
 
     Die Rechnung geht von „alles verstanden" aus (`understood_tokens = token_count`) und
     zieht nur ab, was `vocabulary.entries` als nicht verstanden ausweist — Funktionswörter
-    und ganz eigennamige Grundformen erscheinen dort nach `extraction.extract_vocabulary`
-    gar nicht erst (siehe deren Docstrings) und bleiben deshalb automatisch verstanden, wie
-    E5 Festlegung 1 es verlangt („Funktionswörter und Eigennamen zählen als verstanden").
+    und Grundformen ab der Eigennamenschwelle (nicht nur die ganz eigennamigen, siehe die
+    REGEL bei `extraction._PROPER_NOUN_RATIO_THRESHOLD`, Befund 4 Durchsicht 3e71fb8)
+    erscheinen dort nach `extraction.extract_vocabulary` gar nicht erst (siehe deren
+    Docstrings) und bleiben deshalb automatisch verstanden, wie E5 Festlegung 1 es
+    verlangt („Funktionswörter und Eigennamen zählen als verstanden").
     Für einen **nicht** verstandenen Eintrag zieht nur `occurrence.frequency` ab — die
     nicht-eigennamigen Vorkommen dieser Grundform in diesem Kapitel;
     `occurrence.proper_noun_frequency` bleibt unangetastet und damit immer verstanden,
@@ -770,7 +774,12 @@ def coverage(vocabulary: ChapterVocabulary, learned: Collection[Lemma] = ()) -> 
     Grundformen. Für `share_after_learning` gilt zusätzlich jeder nicht verstandene
     Eintrag als verstanden, dessen `occurrence.lemma` in `learned` steht — eine Grundform,
     die im Kapitel gar nicht vorkommt, bleibt wirkungslos, es gibt keinen Eintrag, dessen
-    Abzug sie rückgängig machen könnte.
+    Abzug sie rückgängig machen könnte. `Lemma` ist `(text, pos)` (`entities.Lemma`) —
+    der Treffer verlangt **beide** Felder gleich; ein `learned`-Eintrag mit derselben
+    Wortform, aber anderer Wortart, trifft keinen Eintrag und lässt `share_after_learning`
+    stillschweigend gleich `share` (Befund 5, Durchsicht 3e71fb8 — für AP 17 die
+    wahrscheinlichste Stolperstelle, weil die Triage die Wortart der Buchung mitgeben
+    muss).
 
     Ein Kapitel ganz ohne alphabetisches Token (`token_count == 0`) lieferte für `share`
     und `share_after_learning` sonst eine Division durch null; hier gibt es nichts zu

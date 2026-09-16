@@ -385,9 +385,12 @@ class VocabularyExtraction:
     (`token.is_alpha`), nicht nur die in `occurrences` verbliebenen Inhaltswörter. Nenner
     von `pipeline.coverage` (bauplan-phase2.md, E5, Festlegung 1: „alle Wortformen des
     Kapitels, jedes alphabetische Token — nicht nur die Inhaltswörter der fünf
-    Wortarten"): Funktionswörter und ganz eigennamige Grundformen fehlen in `occurrences`
-    vollständig (siehe Moduldocstring, „Nur Inhaltswörter werden zu Kandidaten", und die
-    REGEL bei `_PROPER_NOUN_RATIO_THRESHOLD`), zählen für die Abdeckung aber als
+    Wortarten"): Funktionswörter fehlen in `occurrences` vollständig (siehe
+    Moduldocstring, „Nur Inhaltswörter werden zu Kandidaten"), ebenso Grundformen, deren
+    Eigennamenanteil die Schwelle `_PROPER_NOUN_RATIO_THRESHOLD` erreicht oder
+    überschreitet — nicht nur die ganz eigennamigen, sondern auch die mit einem
+    Restanteil gewöhnlicher Vorkommen darunter (Befund 4, Durchsicht 3e71fb8; siehe die
+    REGEL bei `_PROPER_NOUN_RATIO_THRESHOLD`). Beide zählen für die Abdeckung als
     verstanden — der Nenner braucht deshalb die volle Tokenzahl, nicht `len(occurrences)`
     oder eine Summe aus deren Häufigkeiten."""
 

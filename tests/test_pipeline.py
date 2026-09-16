@@ -2965,6 +2965,25 @@ def test_coverage_share_after_learning_adds_back_only_the_learned_lemma() -> Non
     assert result.share_after_learning == pytest.approx(21 / 22)
 
 
+def test_coverage_share_after_learning_ignores_a_learned_lemma_with_the_wrong_pos() -> None:
+    """Befund 5 (Durchsicht 3e71fb8): `Lemma` ist `(text, pos)` — der Treffer in `learned`
+    verlangt beide Felder gleich. „xylophone" steht im Kapitel als NOUN
+    (`_mini_chapter_vocabulary`); ein `learned`-Eintrag mit derselben Wortform, aber der
+    Wortart VERB, trifft deshalb keinen Eintrag und lässt `share_after_learning` **still**
+    gleich `share` — kein Fehler, keine Markierung, nur ein wirkungsloses „Lernen". Für
+    AP 17 (die Triage bucht `learning`) ist das die wahrscheinlichste Stolperstelle, wenn
+    die Buchung die Wortart nicht mitgibt oder falsch mitgibt.
+
+    Verfälschungsprobe: `coverage` auf einen Vergleich nur über `lemma.text` umgestellt
+    (`entry.occurrence.lemma.text in {lemma.text for lemma in learned}`) lässt diesen Test
+    fehlschlagen, weil `share_after_learning` dann wie im Test oberhalb auf 21/22 stiege."""
+    vocabulary = _mini_chapter_vocabulary()
+
+    result = pipeline.coverage(vocabulary, learned=[Lemma(text="xylophone", pos="VERB")])
+
+    assert result.share_after_learning == result.share == pytest.approx(17 / 22)
+
+
 def test_coverage_of_a_chapter_without_a_single_alphabetic_token_is_fully_understood() -> None:
     """Randfall: `token_count == 0` (ein Kapitel ganz ohne alphabetisches Token) teilte
     sonst durch null. Hier gibt es nichts zu verstehen, also gilt beides als vollständig

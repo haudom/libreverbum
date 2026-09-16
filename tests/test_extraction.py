@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -271,6 +272,12 @@ def test_token_count_counts_every_alphabetic_token_not_just_the_extracted_occurr
     assert sum(o.frequency for o in result.occurrences) == 2
 
 
+# Ein von spaCy unabhängiger Maßstab für „was der Leser auf der Seite als Wort liest":
+# Buchstabenfolgen, die auch ein Bindestrich oder ein Apostroph zusammenhalten darf
+# (`bell-pull`, `o'clock`) — Befund 1, Durchsicht 3e71fb8.
+_READER_WORD_PATTERN = re.compile(r"[^\W\d_]+(?:[-'’][^\W\d_]+)*")
+
+
 @pytest.mark.needs_epub
 def test_token_count_is_at_least_the_summed_frequency_of_a_real_chapter(
     nlp: Language, real_epub_paths: dict[str, Path]
@@ -281,12 +288,18 @@ def test_token_count_is_at_least_the_summed_frequency_of_a_real_chapter(
     Vorkommen. Funktionswörter, ganz eigennamige Grundformen und jedes eigennamige
     Vorkommen bleiben in der Summe der `frequency`-Werte unberücksichtigt, tragen aber zu
     `token_count` bei — die Ungleichung kann deshalb nie in die andere Richtung kippen.
-    Die konkrete Zahl steht mit Rezept im Bericht (dokumentation.md §5, „Wer eine Zahl …
-    schreibt das Rezept daneben").
+
+    Selbst nachgemessen (16.09.2026, `extract_vocabulary(chapter, nlp)` ohne
+    `book_proper_noun_ratios` — den Rückfallweg, den `run_chapter` nie nimmt, Befund 2
+    Durchsicht 3e71fb8): `sum(frequency)` = 3497, `token_count` = 8579.
 
     Verfälschungsprobe (bauplan-phase2.md AP 6): Nenner und Zähler vertauscht — assert
-    result.token_count <= total_frequency — wird an diesem echten Kapitel rot, siehe
-    Bericht."""
+    result.token_count <= total_frequency — wird an diesem echten Kapitel rot.
+
+    Befund 1 (Durchsicht 3e71fb8, mittel): Diese Ungleichung allein sichert den Nenner
+    nicht zu — `token_count` dürfte bis auf 41 % seines echten Werts schrumpfen (3497 /
+    8579 = 0,41), ohne dass diese Zusicherung anschlägt. Die zweite, engere Zusicherung
+    unten schließt die Lücke mit einem von `extract_vocabulary` unabhängigen Maßstab."""
     structure = epub.read_structure(real_epub_paths["sherlock"])
     reference = structure.chapters[1]  # Kapitel 2, "A Scandal in Bohemia"
     chapter = epub.read_chapter(real_epub_paths["sherlock"], structure.book, reference)
@@ -295,6 +308,20 @@ def test_token_count_is_at_least_the_summed_frequency_of_a_real_chapter(
 
     total_frequency = sum(occurrence.frequency for occurrence in result.occurrences)
     assert total_frequency <= result.token_count
+
+    # Befund 1 (Durchsicht 3e71fb8, mittel): spaCy-unabhängiger Maßstab statt der zu
+    # schwachen Ungleichung oben — selbst nachgemessen: reader_words = 8542, token_count =
+    # 8579, Verhältnis 1,0043, deutlich innerhalb ±5 %.
+    #
+    # Verfälschungsprobe (i), Pflicht: token_count nur über die ersten 60 % der Sätze
+    # gezählt ergibt an diesem Kapitel 5374 (5374 / 8542 = 0,63) — wird rot.
+    # Verfälschungsprobe (ii), Pflicht: token_count erst nach dem Inhaltswortfilter
+    # gezählt — der Nenner, den E5 Festlegung 1 ausdrücklich verwirft — ergibt an diesem
+    # echten Kapitel 3829 (3829 / 8542 = 0,45) und wird ebenfalls rot. Die alte, zu
+    # schwache Ungleichung oben bliebe dabei unbemerkt grün (3497 <= 3829) — genau die
+    # Lücke, die diese zweite Zusicherung schließt.
+    reader_words = len(_READER_WORD_PATTERN.findall(chapter.text))
+    assert 0.95 * reader_words <= result.token_count <= 1.05 * reader_words
 
 
 def test_mittel_1_frequency_excludes_proper_noun_occurrences_and_reorders_the_ranking(
