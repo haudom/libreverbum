@@ -25,6 +25,12 @@ einem Aufruf, weil nach technik.md §7 nur `pipeline` mehrere Schrittmodule zugl
 darf. `app.export.write_exports` ruft `export_cards` seinerseits nur noch auf. Auch dafür
 kennt nur `pipeline` `anki`, `printout` **und** `profile` zugleich.
 
+Dazu, seit AP 4 (bauplan-phase2.md), `list_chapters`: die Kapitelübersicht für die
+Kapitelauswahl, unabhängig von `run_chapter` und ohne `nlp` — sie liegt hier statt in
+`epub`, weil sie für Kapitel ohne Fließtext denselben `ChapterWithoutTextError`-Fall wie
+`run_chapter` selbst auswertet (technik.md §8, offener Punkt „epub.read_chapter wirft
+ValueError bei Vorspann-Kapiteln").
+
 Voraussetzungen
 ---------------
 `nlp` ist ein bereits geladenes spaCy-Modell (`extraction.load_nlp()`) — das Laden kostet
@@ -126,6 +132,7 @@ Wörterbucheintrag auch hier.
 
 from __future__ import annotations
 
+import contextlib
 import enum
 import hashlib
 import json
@@ -384,6 +391,65 @@ def _write_proper_noun_ratio_cache(path: Path, ratios: Mapping[str, float]) -> N
         ) from error
 
 
+@dataclass(frozen=True)
+class ChapterListing:
+    """Eine Zeile der Kapitelübersicht aus `list_chapters` (bauplan-phase2.md AP 4) —
+    Ablaufwert wie `ChapterProgress`, keine Fachlichkeit, deshalb hier und nicht in
+    `entities`. `word_count` ist `None`, wenn sich das Kapitel gar nicht lesen lässt
+    (kaputtes Archiv, falsche Kodierung, fehlendes Dokument, verschlüsselt —
+    `epub.count_chapter_words`, „die stille Falschaussage 0 wäre …"). `skip_reason` ist
+    gesetzt, wenn das Kapitel keinen Fließtext trägt (Vorspann, Impressum, Bildband —
+    `epub.ChapterWithoutTextError`); die Kapitelauswahl der Kommandozeile zeigt diese
+    Kapitel mit ihrem Grund und lehnt ihre Wahl ab. Bei jedem anderen Lesefehler bleibt
+    `skip_reason` `None` — er meldet sich stattdessen sichtbar beim tatsächlichen Lesen
+    (`run_chapter`, Regel 13), statt hier ein zweites Mal auf Verdacht abgefangen zu
+    werden."""
+
+    number: int
+    title: str
+    word_count: int | None
+    skip_reason: str | None
+
+
+def list_chapters(epub_path: Path) -> list[ChapterListing]:
+    """Kapitelübersicht ohne spaCy (bauplan-phase2.md AP 4) — für die Kapitelauswahl vor
+    einem `run_chapter`-Lauf, unabhängig von ihm: kein `nlp`-Argument, keine Extraktion.
+
+    Der Wortumfang kommt aus `epub.count_chapter_words` — derselben Zählung wie die
+    bisherige Kapitelanzeige (technik.md §8, „Was die Kapitelliste zusätzlich zeigt"). Ein
+    Kapitel ohne Fließtext zählt dabei echt `0`, nicht `unbekannt` (`epub.count_chapter_
+    words`, Docstring): Beide Prüfungen in `epub.read_chapter` laufen über denselben
+    zusammengefügten und von Vorspann/Impressum befreiten Text wie die Zählung selbst, sind
+    also gleichwertig — ein Kapitel mit Wortumfang `0` ist genau eines, für das
+    `read_chapter` `ChapterWithoutTextError` wirft. `read_chapter` läuft deshalb nur für
+    diese wenigen Kapitel noch einmal, um `skip_reason` mit dessen eigenem Meldungstext zu
+    füllen statt mit einer zweiten, unabhängig zu pflegenden Formulierung. Ein Kapitel, das
+    aus einem anderen Grund unlesbar ist (kaputtes Archiv, falsche Kodierung — Wortumfang
+    `None`), bleibt ohne `skip_reason`: Es ist weiterhin wählbar und schlägt beim
+    tatsächlichen Lesen sichtbar fehl (Regel 13), statt hier ein zweites Mal auf Verdacht
+    abgefangen zu werden."""
+    structure = epub.read_structure(epub_path)
+    word_counts = epub.count_chapter_words(epub_path, structure.chapters)
+    listings = []
+    for chapter in structure.chapters:
+        word_count = word_counts[chapter.number]
+        skip_reason: str | None = None
+        if word_count == 0:
+            try:
+                epub.read_chapter(epub_path, structure.book, chapter)
+            except epub.ChapterWithoutTextError as error:
+                skip_reason = error.skip_reason
+        listings.append(
+            ChapterListing(
+                number=chapter.number,
+                title=chapter.title,
+                word_count=word_count,
+                skip_reason=skip_reason,
+            )
+        )
+    return listings
+
+
 def run_chapter(
     *,
     epub_path: Path,
@@ -475,21 +541,19 @@ def run_chapter(
             if other_reference.number == chapter_number:
                 all_chapters.append(chapter)
             else:
-                try:
+                # Vorspann-/Impressum- und reine Bildband-Kapitel tragen keinen Wortschatz
+                # bei und dürfen bei der buchweiten Zählung fehlen — erkannt am Typ
+                # (bauplan-phase2.md AP 4), nicht mehr am Meldungstext: Der Wortlaut darf
+                # sich jederzeit ändern (dokumentation.md §1), ohne dass diese
+                # Unterscheidung leise zerbricht (technik.md §8, offener Punkt). Jeder
+                # andere ValueError (kaputtes Archiv, falsche Kodierung, fehlendes
+                # Dokument im Archiv) ist **kein** ChapterWithoutTextError und bleibt
+                # deshalb sichtbar (Regel 13) statt die Statistik lautlos zu verfälschen —
+                # `contextlib.suppress` fängt ihn absichtlich nicht.
+                with contextlib.suppress(epub.ChapterWithoutTextError):
                     all_chapters.append(
                         epub.read_chapter(epub_path, structure.book, other_reference)
                     )
-                except ValueError as error:
-                    # Vorspann-/Impressum- und reine Bildband-Kapitel (epub.read_chapter, „Bricht
-                    # mit einer deutschen Meldung ab") tragen keinen Wortschatz bei und dürfen bei
-                    # der buchweiten Zählung fehlen — jeder andere ValueError (kaputtes Archiv,
-                    # falsche Kodierung, fehlendes Dokument im Archiv) bleibt dagegen sichtbar
-                    # (Regel 13) statt die Statistik lautlos zu verfälschen.
-                    message = str(error)
-                    if "besteht nur aus Vorspann bzw. Impressum" not in message and (
-                        "Bildband ohne Text" not in message
-                    ):
-                        raise
             if on_progress is not None:
                 on_progress(
                     ChapterProgress(

@@ -146,6 +146,63 @@ def pipeline_epub_without_navigation(tmp_path: Path) -> Path:
     return path
 
 
+# Reiner Vorspann/Impressum (technik.md §8) nach demselben Muster wie
+# tests/test_epub.py, `_LICENSE_ONLY_XHTML`: Die Endmarke steht vor jedem echten Wort, der
+# ganze Text fällt beim Aussteuern weg (bauplan-phase2.md AP 4). Bewusst **ohne**
+# `_chapter_xhtml`, dessen `<h1>{title}</h1>` ein Wort **vor** die Endmarke setzte und die
+# Vorrichtung damit unbrauchbar machte — genau das Wort bliebe nach dem Aussteuern übrig.
+_LICENSE_ONLY_CHAPTER_XHTML = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>Lizenz</title></head>
+<body>
+<p>*** END OF THE PROJECT GUTENBERG EBOOK TESTBUCH ***</p>
+<p>Lizenztext, der komplett aussteuern muss.</p>
+</body>
+</html>
+"""
+
+
+def _build_pipeline_epub_with_a_chapter_without_text(path: Path) -> None:
+    """Wie `_build_pipeline_epub`, aber das zweite Kapitel besteht nur aus Vorspann/
+    Impressum (bauplan-phase2.md AP 4) — für `pipeline.list_chapters`s `skip_reason`."""
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        archive.writestr("META-INF/container.xml", _CONTAINER_XML)
+        archive.writestr("OEBPS/content.opf", _package_opf(with_navigation=True))
+        archive.writestr("OEBPS/chapter1.xhtml", _chapter_xhtml("Erstes Kapitel", _CHAPTER_1_TEXT))
+        archive.writestr("OEBPS/chapter2.xhtml", _LICENSE_ONLY_CHAPTER_XHTML)
+        archive.writestr("OEBPS/nav.xhtml", _nav_xhtml())
+
+
+@pytest.fixture
+def pipeline_epub_with_a_chapter_without_text(tmp_path: Path) -> Path:
+    path = tmp_path / "pipeline_license_only.epub"
+    _build_pipeline_epub_with_a_chapter_without_text(path)
+    return path
+
+
+def _build_pipeline_epub_with_a_missing_chapter_document(path: Path) -> None:
+    """Wie `_build_pipeline_epub`, aber `chapter2.xhtml` fehlt im Archiv, obwohl Manifest
+    und Navigation es nennen — ein echter Fehlschlagweg (kein gepatchter), an dem
+    `epub.read_chapter` einen `ValueError` wirft, der **kein** `ChapterWithoutTextError`
+    ist (bauplan-phase2.md AP 4, zweiter Prüfweg: „jeder andere ValueError … läuft weiter
+    durch")."""
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        archive.writestr("META-INF/container.xml", _CONTAINER_XML)
+        archive.writestr("OEBPS/content.opf", _package_opf(with_navigation=True))
+        archive.writestr("OEBPS/chapter1.xhtml", _chapter_xhtml("Erstes Kapitel", _CHAPTER_1_TEXT))
+        # chapter2.xhtml wird bewusst nicht geschrieben.
+        archive.writestr("OEBPS/nav.xhtml", _nav_xhtml())
+
+
+@pytest.fixture
+def pipeline_epub_with_a_missing_chapter_document(tmp_path: Path) -> Path:
+    path = tmp_path / "pipeline_missing_document.epub"
+    _build_pipeline_epub_with_a_missing_chapter_document(path)
+    return path
+
+
 @pytest.fixture(scope="module")
 def nlp() -> Language:
     """Lädt das spaCy-Modell einmal für alle Tests dieser Datei (technik.md §5, rund eine
@@ -391,12 +448,17 @@ def test_run_chapter_counts_only_chapters_with_text_when_reporting_the_analysis(
     Verfälschungsprobe: `ANALYZING_BOOK` mit `total_chapters` statt der Länge von
     `all_chapters` gemeldet (der Zustand, den Befund 6 für die Anzeige beschreibt) ließ die
     Zusicherung auf `[1]` rot werden — gemeldet wurde dann `[2]`, also auch das
-    übersprungene Kapitel."""
+    übersprungene Kapitel.
+
+    Wirft seit bauplan-phase2.md AP 4 `epub.ChapterWithoutTextError` statt eines
+    allgemeinen `ValueError` — `run_chapter` fängt seither genau diesen Typ, nicht mehr den
+    Meldungstext (siehe `test_run_chapter_lets_other_value_errors_through_the_book_wide_
+    reading` für den Gegenfall, ein anderer `ValueError`, der **nicht** gefangen wird)."""
     real_read_chapter = epub.read_chapter
 
     def _skip_the_second_chapter(path: Path, book: Book, chapter: epub.ChapterReference) -> Chapter:
         if chapter.number == 2:
-            raise ValueError(
+            raise epub.ChapterWithoutTextError(
                 f"{path}: Kapitel {chapter.number} besteht nur aus Vorspann bzw. Impressum."
             )
         return real_read_chapter(path, book, chapter)
@@ -418,6 +480,32 @@ def test_run_chapter_counts_only_chapters_with_text_when_reporting_the_analysis(
     assert [r.total for r in reading] == [2, 2], "Die Lese-Etappe zählt jedes Kapitel mit."
     assert [r.total for r in analyzing] == [1], "Die Analyse-Etappe zählt nur Kapitel mit Text."
     assert [r.done for r in analyzing] == [1]
+
+
+def test_run_chapter_lets_other_value_errors_through_the_book_wide_reading(
+    pipeline_epub_with_a_missing_chapter_document: Path,
+    mini_dictionary_db: Path,
+    profile_path: Path,
+    nlp: Language,
+) -> None:
+    """Bauplan-phase2.md AP 4, zweiter Prüfweg: Ein `ValueError`, der **kein**
+    `ChapterWithoutTextError` ist — hier: ein Kapiteldokument fehlt im Archiv, ein echter
+    Fehlschlagweg über eine eigens gebaute EPUB-Datei statt eines gepatchten
+    `epub.read_chapter` wie im Test oben —, bleibt beim buchweiten Lesen sichtbar und
+    bricht `run_chapter` ab, statt als „kein Fließtext" übersprungen zu werden (Regel 13).
+
+    Verfälschungsprobe: den Fang in `run_chapter` von `except epub.ChapterWithoutTextError`
+    auf `except ValueError` verbreitert ließ diesen Test rot werden — der fehlende
+    Dokumentenfehler wurde dann ebenso stillschweigend übersprungen wie ein Kapitel ohne
+    Fließtext, und `run_chapter` lief scheinbar erfolgreich durch."""
+    with pytest.raises(ValueError, match="fehlt im Archiv"):
+        pipeline.run_chapter(
+            epub_path=pipeline_epub_with_a_missing_chapter_document,
+            chapter_number=1,
+            dictionary_path=mini_dictionary_db,
+            profile_path=profile_path,
+            nlp=nlp,
+        )
 
 
 def test_run_chapter_without_on_progress_behaves_as_before(
@@ -1224,6 +1312,121 @@ def test_run_chapter_returns_the_same_vocabulary_on_a_cache_hit_as_cold(
     )
 
     assert warm_result == cold_result
+
+
+# ------------------------------------------------------- list_chapters (bauplan-phase2.md AP 4)
+
+
+def test_list_chapters_reports_normal_chapters_without_a_skip_reason(pipeline_epub: Path) -> None:
+    """Ein Kapitel mit Fließtext bekommt seinen echten Wortumfang und `skip_reason=None`."""
+    listings = pipeline.list_chapters(pipeline_epub)
+
+    assert [listing.number for listing in listings] == [1, 2]
+    assert all(listing.skip_reason is None for listing in listings)
+    assert all(
+        isinstance(listing.word_count, int) and listing.word_count > 0 for listing in listings
+    )
+
+
+def test_list_chapters_matches_the_titles_from_the_navigation(pipeline_epub: Path) -> None:
+    """`ChapterListing.title` stammt aus derselben Navigation wie `ChapterReference.title`
+    (`epub.read_structure`) — keine zweite, unabhängig zu pflegende Quelle."""
+    structure = epub.read_structure(pipeline_epub)
+
+    listings = pipeline.list_chapters(pipeline_epub)
+
+    assert [listing.title for listing in listings] == [c.title for c in structure.chapters]
+
+
+def test_list_chapters_sets_the_skip_reason_for_a_chapter_without_text(
+    pipeline_epub_with_a_chapter_without_text: Path,
+) -> None:
+    """Bauplan-phase2.md AP 4, erster Prüfweg (an der handgebauten Vorrichtung statt der
+    Fremdquelle erzwungen): Ein Kapitel, das nach dem Aussteuern von Vorspann/Impressum
+    keinen Fließtext mehr trägt, bekommt `skip_reason` — denselben Wortlaut wie
+    `epub.ChapterWithoutTextError` ihn wirft — und den echten Wortumfang `0`, nicht
+    `unbekannt`.
+
+    Verfälschungsprobe: `list_chapters`s Fang von `epub.ChapterWithoutTextError` auf ein
+    einfaches `pass` ohne den `try`/`except` entfernt (`skip_reason` bliebe dann immer
+    `None`) ließ diesen Test rot werden — der Vorspann-Test ist damit tatsächlich an die
+    Zusicherung gebunden, nicht nur an eine Zufallsübereinstimmung."""
+    listings = {
+        listing.number: listing
+        for listing in pipeline.list_chapters(pipeline_epub_with_a_chapter_without_text)
+    }
+
+    assert listings[1].skip_reason is None
+    assert listings[1].word_count and listings[1].word_count > 0
+
+    assert listings[2].word_count == 0
+    assert listings[2].skip_reason is not None
+    assert "Vorspann" in listings[2].skip_reason
+
+    with pytest.raises(epub.ChapterWithoutTextError) as error:
+        structure = epub.read_structure(pipeline_epub_with_a_chapter_without_text)
+        epub.read_chapter(
+            pipeline_epub_with_a_chapter_without_text, structure.book, structure.chapters[1]
+        )
+    assert listings[2].skip_reason == error.value.skip_reason
+
+
+def test_list_chapters_leaves_the_skip_reason_unset_for_a_different_read_failure(
+    pipeline_epub_with_a_missing_chapter_document: Path,
+) -> None:
+    """Ein Kapitel, das aus einem anderen Grund unlesbar ist (hier: ein Dokument fehlt im
+    Archiv), bekommt keinen `skip_reason` — es bleibt wählbar und schlägt erst beim
+    tatsächlichen Lesen sichtbar fehl (Regel 13), statt hier ein zweites Mal auf Verdacht
+    abgefangen zu werden. Sein Wortumfang ist `None` (`epub.count_chapter_words`), nicht
+    `0` — `0` sähe wie ein leeres, aber lesbares Kapitel aus."""
+    listings = {
+        listing.number: listing
+        for listing in pipeline.list_chapters(pipeline_epub_with_a_missing_chapter_document)
+    }
+
+    assert listings[2].word_count is None
+    assert listings[2].skip_reason is None
+
+
+def test_list_chapters_never_loads_a_spacy_model(
+    pipeline_epub: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bauplan-phase2.md AP 4 verlangt ausdrücklich „ohne spaCy" — nachgewiesen statt nur
+    behauptet: `extraction.load_nlp` bricht ab, sobald es aufgerufen wird, und
+    `list_chapters` läuft trotzdem ohne Fehler durch, ruft es also nie auf."""
+
+    def _fail_if_called() -> Language:
+        raise AssertionError("list_chapters darf extraction.load_nlp nie aufrufen (ohne spaCy).")
+
+    monkeypatch.setattr("libreverbum.extraction.load_nlp", _fail_if_called)
+
+    pipeline.list_chapters(pipeline_epub)  # wirft nicht, obwohl load_nlp abbräche
+
+
+@pytest.mark.needs_epub
+def test_list_chapters_reports_the_real_gutenberg_license_chapter_as_skipped(
+    real_epub_paths: dict[str, Path],
+) -> None:
+    """Bauplan-phase2.md AP 4, erster Prüfweg gegen die echte Datei (dokumentation.md §5,
+    „Was über den Inhalt einer Fremdquelle behauptet wird, wird zusätzlich gegen das echte
+    Gegenüber geprüft"): Gegen `tools/sherlock.epub` erscheint genau Sherlocks
+    Gutenberg-Lizenzkapitel („THE FULL PROJECT GUTENBERG™ LICENSE", dasselbe Kapitel wie in
+    tests/test_epub.py, `_LICENSE_ONLY_REAL_CHAPTER_TITLE`) mit gesetztem `skip_reason` und
+    Wortumfang `0`; jedes andere Kapitel bleibt ohne `skip_reason`.
+
+    `run_chapter` behandelt dasselbe Kapitel bereits heute als übersprungen statt als
+    Fehler — mitgeprüft durch die ohnehin laufenden `needs_epub`+`needs_dictionary`-Tests
+    (`test_run_chapter_processes_a_real_chapter_with_the_real_dictionary` und der
+    Cache-Vergleich daneben), die einen vollständigen `run_chapter`-Lauf gegen dieselbe
+    Datei fahren: Bräche das buchweite Lesen an diesem einen Kapitel ab, schlügen sie
+    ebenfalls fehl. Ein eigener, ebenso teurer Lauf (voller spaCy-Durchgang über das ganze
+    Buch, rund 15 bis 29 s, technik.md §3) käme deshalb ohne neuen Erkenntnisgewinn."""
+    listings = pipeline.list_chapters(real_epub_paths["sherlock"])
+
+    skipped = [listing for listing in listings if listing.skip_reason is not None]
+    assert len(skipped) == 1
+    assert skipped[0].title == "THE FULL PROJECT GUTENBERG™ LICENSE"
+    assert skipped[0].word_count == 0
 
 
 # ---------------------------------------- resolve_triage_entries (zweite T16-Durchsicht)

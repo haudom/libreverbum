@@ -1711,9 +1711,13 @@ def test_choose_chapter_shows_the_title_first_then_the_word_count_with_unknown_a
         ],
         notice=None,
     )
-    monkeypatch.setattr(
-        "cli.main.epub.count_chapter_words", lambda _path, _chapters: {1: 78774, 2: None}
-    )
+    listings = [
+        pipeline.ChapterListing(number=1, title="Book 1 DUNE", word_count=78774, skip_reason=None),
+        pipeline.ChapterListing(
+            number=2, title="Kapitel ohne lesbares Dokument", word_count=None, skip_reason=None
+        ),
+    ]
+    monkeypatch.setattr("cli.main.pipeline.list_chapters", lambda _path: listings)
     written: list[str] = []
 
     cli_main._choose_chapter(Path("buch.epub"), structure, lambda _prompt: "1", written.append)
@@ -1751,7 +1755,16 @@ def test_choose_chapter_aligns_the_word_count_column_from_chapter_ten_onward(
         book=Book(title="Testbuch", author="Testautorin"), chapters=chapters, notice=None
     )
     counts = {1: 97, 9: 9865, 10: 8327, **{number: number * 111 for number in range(2, 9)}}
-    monkeypatch.setattr("cli.main.epub.count_chapter_words", lambda _path, _chapters: counts)
+    listings = [
+        pipeline.ChapterListing(
+            number=chapter.number,
+            title=chapter.title,
+            word_count=counts[chapter.number],
+            skip_reason=None,
+        )
+        for chapter in chapters
+    ]
+    monkeypatch.setattr("cli.main.pipeline.list_chapters", lambda _path: listings)
     written: list[str] = []
 
     cli_main._choose_chapter(Path("buch.epub"), structure, lambda _prompt: "1", written.append)
@@ -1797,7 +1810,16 @@ def test_choose_chapter_indents_the_title_by_navigation_level_and_keeps_the_word
         book=Book(title="Testbuch", author="Testautorin"), chapters=chapters, notice=None
     )
     counts = {1: 500, 2: 1234, 3: 60, 4: 700, 5: 9}
-    monkeypatch.setattr("cli.main.epub.count_chapter_words", lambda _path, _chapters: counts)
+    listings = [
+        pipeline.ChapterListing(
+            number=chapter.number,
+            title=chapter.title,
+            word_count=counts[chapter.number],
+            skip_reason=None,
+        )
+        for chapter in chapters
+    ]
+    monkeypatch.setattr("cli.main.pipeline.list_chapters", lambda _path: listings)
     written: list[str] = []
 
     cli_main._choose_chapter(Path("buch.epub"), structure, lambda _prompt: "1", written.append)
@@ -1826,6 +1848,39 @@ def test_choose_chapter_indents_the_title_by_navigation_level_and_keeps_the_word
             # der Titel selbst steht noch in der Zeile.
             assert line[title_start : title_start + 2] == "  "
             assert chapter.title in line
+
+
+def test_choose_chapter_shows_the_skip_reason_and_refuses_to_select_that_chapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bauplan-phase2.md AP 4: Ein Kapitel ohne Fließtext (`skip_reason` gesetzt) erscheint
+    mit seinem Grund in der Kapitelliste und lässt sich nicht wählen — erst eine gültige,
+    nicht übersprungene Nummer beendet die Eingabeschleife."""
+    structure = epub.BookStructure(
+        book=Book(title="Testbuch", author="Testautorin"),
+        chapters=[
+            epub.ChapterReference(number=1, title="Volle Lizenz", documents=["a.xhtml"]),
+            epub.ChapterReference(number=2, title="Erzählung", documents=["b.xhtml"]),
+        ],
+        notice=None,
+    )
+    listings = [
+        pipeline.ChapterListing(
+            number=1, title="Volle Lizenz", word_count=0, skip_reason="besteht nur aus Vorspann"
+        ),
+        pipeline.ChapterListing(number=2, title="Erzählung", word_count=500, skip_reason=None),
+    ]
+    monkeypatch.setattr("cli.main.pipeline.list_chapters", lambda _path: listings)
+    answers = iter(["1", "2"])
+    written: list[str] = []
+
+    number = cli_main._choose_chapter(
+        Path("buch.epub"), structure, lambda _prompt: next(answers), written.append
+    )
+
+    assert number == 2
+    assert any("besteht nur aus Vorspann" in line for line in written)
+    assert any("nicht wählen" in line for line in written)
 
 
 def test_help_text_survives_a_restricted_console_codepage() -> None:

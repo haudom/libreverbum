@@ -1900,6 +1900,41 @@ def test_read_chapter_reports_when_only_boilerplate_remains_after_removing_it(
         )
 
 
+def test_read_chapter_raises_chapter_without_text_error_not_a_plain_value_error(
+    tmp_path: Path,
+) -> None:
+    """Bauplan-phase2.md AP 4: Beide Kapitel-ohne-Fließtext-Fälle (Bildband, reiner
+    Vorspann/Impressum) werfen `ChapterWithoutTextError` — einen `ValueError`-Untertyp mit
+    eigenem `skip_reason` —, nicht einen gewöhnlichen `ValueError`. `run_chapter` und
+    `pipeline.list_chapters` fangen seither genau diesen Typ statt den Meldungstext zu
+    vergleichen; ein Test, der nur `pytest.raises(ValueError, match=...)` prüft (wie die
+    beiden Tests oben), würde einen Rückbau auf `ValueError` nicht bemerken, weil ein
+    `ChapterWithoutTextError` auch ein `ValueError` ist. `skip_reason` trägt denselben Text
+    wie `str(error)` — kein zweiter, unabhängig zu pflegender Wortlaut.
+
+    Verfälschungsprobe: `ChapterWithoutTextError`s beide Vorkommen in `epub.read_chapter`
+    durch `ValueError` ersetzt (der Stand vor AP 4) ließ diesen Test rot werden, die beiden
+    `match=`-Tests oben blieben dabei unverändert grün."""
+    picture_book = tmp_path / "picture_book.epub"
+    _write_single_document_epub(picture_book, document="OEBPS/page1.xhtml", xhtml=_IMAGE_ONLY_XHTML)
+    license_only = tmp_path / "license_only.epub"
+    _write_single_document_epub(
+        license_only, document="OEBPS/license.xhtml", xhtml=_LICENSE_ONLY_XHTML
+    )
+
+    with pytest.raises(epub.ChapterWithoutTextError) as picture_book_error:
+        epub.read_chapter(
+            picture_book, _TEST_BOOK, _chapter_reference("OEBPS/page1.xhtml", title="Bildseite")
+        )
+    assert picture_book_error.value.skip_reason == str(picture_book_error.value)
+
+    with pytest.raises(epub.ChapterWithoutTextError) as license_error:
+        epub.read_chapter(
+            license_only, _TEST_BOOK, _chapter_reference("OEBPS/license.xhtml", title="Lizenz")
+        )
+    assert license_error.value.skip_reason == str(license_error.value)
+
+
 def test_read_chapter_reports_an_encrypted_picture_book_as_encrypted_not_as_a_picture_book(
     tmp_path: Path,
 ) -> None:

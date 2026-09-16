@@ -132,6 +132,7 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | Kapitelbereich | `chapter_range` |
 | Einrichtung, Erstlauf | `setup` |
 | Kapitel ohne Fließtext (Vorspann, Impressum, Bildband) | `ChapterWithoutTextError`, `skip_reason` |
+| Kapitelübersicht für die Kapitelauswahl (Nummer, Titel, Wortumfang, `skip_reason`, ohne spaCy) | `ChapterListing` (`pipeline.list_chapters`, bauplan-phase2.md AP 4) |
 
 Neue Begriffe kommen hierher, **bevor** der erste Bezeichner damit entsteht.
 

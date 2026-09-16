@@ -287,8 +287,8 @@ def _choose_chapter(
     epub_path: Path, structure: epub.BookStructure, read_line: ReadLine, write_line: WriteLine
 ) -> int:
     """Zeigt die Kapitelliste mit Wortumfang je Kapitel und fragt so lange nach, bis eine
-    darin vorhandene Kapitelnummer eingegeben wird. Titel vor Zahl, wie technik.md §8,
-    „Was die Kapitelliste zusätzlich zeigt" es nennt („Book 1 DUNE —
+    darin vorhandene, nicht übersprungene Kapitelnummer eingegeben wird. Titel vor Zahl,
+    wie technik.md §8, „Was die Kapitelliste zusätzlich zeigt" es nennt („Book 1 DUNE —
     78.800 Wörter"): Nummer und Wortumfang stehen rechtsbündig in eigenen Spalten, der
     Titel linksbündig auf die Länge des längsten (eingerückten) Titels aufgefüllt
     dazwischen — erst die aufgefüllte Nummer hält beide Spalten auch ab Kapitel 10
@@ -296,11 +296,20 @@ def _choose_chapter(
     Terminalbreitenerkennung, keine Tabellenbibliothek). „unbekannt" bleibt dabei in
     derselben Spalte sichtbar wie eine Zahl. Die Einrückung (`_indent_title`) zeigt die
     Gliederungsebene der Navigation an, ohne die Nummerierung zu ändern — die Nummer
-    zählt unverändert weiter in der Reihenfolge der `spine`, Elternzeilen bleiben wählbar."""
+    zählt unverändert weiter in der Reihenfolge der `spine`, Elternzeilen bleiben wählbar.
+
+    `pipeline.list_chapters` (bauplan-phase2.md AP 4) liefert dazu je Kapitel dessen
+    `skip_reason`: Ein Kapitel ohne Fließtext (Vorspann, Impressum, Bildband) erscheint mit
+    seinem Grund in einer eigenen Zeile darunter und lässt sich nicht wählen — `run_chapter`
+    lehnte den Lauf sonst ohnehin erst nach dem teuren Einlesen des ganzen Buchs ab
+    (technik.md §8, offener Punkt „epub.read_chapter wirft ValueError bei
+    Vorspann-Kapiteln"). `structure` bleibt trotzdem Parameter: Nur sie trägt `level` für
+    die Einrückung, das `ChapterListing` nicht führt (Ablaufwert ohne diese Angabe,
+    `pipeline.py`)."""
     write_line(f"„{structure.book.title}“ von {structure.book.author}")
-    word_counts = epub.count_chapter_words(epub_path, structure.chapters)
+    listings = {listing.number: listing for listing in pipeline.list_chapters(epub_path)}
     formatted_counts = {
-        chapter.number: _format_word_count(word_counts.get(chapter.number))
+        chapter.number: _format_word_count(listings[chapter.number].word_count)
         for chapter in structure.chapters
     }
     indented_titles = {chapter.number: _indent_title(chapter) for chapter in structure.chapters}
@@ -322,12 +331,21 @@ def _choose_chapter(
             f"  {number_column:>{number_width}}  {title_column:<{title_width}}  "
             f"{count_column:>{count_width}}"
         )
+        skip_reason = listings[chapter.number].skip_reason
+        if skip_reason is not None:
+            write_line(f"      → übersprungen, kein Fließtext: {skip_reason}")
+    skipped_numbers = {
+        number for number, listing in listings.items() if listing.skip_reason is not None
+    }
     while True:
         answer = read_line("Kapitel wählen: ").strip()
         try:
             number = int(answer)
         except ValueError:
             write_line("Bitte eine Zahl eingeben.")
+            continue
+        if number in skipped_numbers:
+            write_line("Dieses Kapitel enthält keinen Fließtext und lässt sich nicht wählen.")
             continue
         if any(chapter.number == number for chapter in structure.chapters):
             return number

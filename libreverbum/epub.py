@@ -109,6 +109,21 @@ NAVIGATION_MISSING_NOTICE = (
 )
 
 
+class ChapterWithoutTextError(ValueError):
+    """Ein Kapitel ohne Fließtext — Vorspann, Impressum oder ein Bildband ohne Text
+    (bauplan-phase2.md AP 4). Eigener Typ statt eines allgemeinen `ValueError`, damit ein
+    Aufrufer, der genau diesen Fall erwartet (`pipeline.run_chapter`,
+    `pipeline.list_chapters`), ihn am **Typ** abfängt statt am Meldungstext: Der Wortlaut
+    darf sich jederzeit ändern (dokumentation.md §1, Sprachregel), ohne dass die
+    Unterscheidung dabei leise zerbricht (technik.md §8, offener Punkt „epub.read_chapter
+    wirft ValueError bei Vorspann-Kapiteln"). `skip_reason` trägt denselben Text wie
+    `str(error)` — ein zweiter, unabhängig zu pflegender Wortlaut entsteht dadurch nicht."""
+
+    def __init__(self, skip_reason: str) -> None:
+        super().__init__(skip_reason)
+        self.skip_reason = skip_reason
+
+
 @dataclass(frozen=True)
 class ChapterReference:
     """Ein Eintrag der Kapitelliste vor dem Einlesen des Fließtexts (bauplan.md T12):
@@ -662,7 +677,10 @@ def read_chapter(path: Path, book: Book, chapter: ChapterReference) -> Chapter:
     (technik.md §8) — oder nach dem Aussteuern
     von Vorspann und Impressum keiner mehr übrig bleibt, gilt für den zusammengefügten
     Text: Ein Trennblatt ohne eigene Wörter zwischen zwei Textdokumenten darf das Kapitel
-    dafür nicht ablehnen.
+    dafür nicht ablehnen. Diese beiden letzten Fälle werfen `ChapterWithoutTextError`
+    (bauplan-phase2.md AP 4), einen eigenen `ValueError`-Untertyp — ein Aufrufer, der sie
+    von jedem anderen Fehlschlag unterscheiden will, fängt diesen Typ ab statt den
+    Meldungstext zu vergleichen (`pipeline.run_chapter`, `pipeline.list_chapters`).
     """
     with _open_archive_for_chapter(path) as archive:
         names = set(archive.namelist())
@@ -675,7 +693,7 @@ def read_chapter(path: Path, book: Book, chapter: ChapterReference) -> Chapter:
     # Absatzgrenze innerhalb eines Dokuments.
     raw_text = "\n".join(document_texts)
     if not _WORD.search(raw_text):
-        raise ValueError(
+        raise ChapterWithoutTextError(
             f"{path}: Kapitel „{chapter.title}“ enthält keinen Fließtext — vermutlich ein "
             "Bildband ohne Text."
         )
@@ -693,7 +711,7 @@ def read_chapter(path: Path, book: Book, chapter: ChapterReference) -> Chapter:
     # reines Lizenzdokument darf danach nicht als leerer Fließtext durchgehen (Regel 13).
     text = _remove_boilerplate(raw_text)
     if not _WORD.search(text):
-        raise ValueError(
+        raise ChapterWithoutTextError(
             f"{path}: Kapitel „{chapter.title}“ besteht nur aus Vorspann bzw. Impressum — "
             "nach dem Aussteuern bleibt kein Fließtext übrig."
         )
