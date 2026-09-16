@@ -11,6 +11,8 @@ import pytest
 
 CORE = Path(__file__).resolve().parent.parent / "libreverbum"
 APP = Path(__file__).resolve().parent.parent / "app"
+CLI = Path(__file__).resolve().parent.parent / "cli"
+GUI = Path(__file__).resolve().parent.parent / "gui"
 
 # PySide6 ist die Oberflächenbibliothek des Projekts (technik.md §1). PyQt steht daneben,
 # weil es dieselbe Schnittstelle bedient und beim Übernehmen fremder Beispiele hereingerät.
@@ -33,6 +35,13 @@ FORBIDDEN_IN_CORE = frozenset({"PySide6", "PyQt5", "PyQt6", "cli", "gui", "app"}
 # (E7 (b), AP 10) ist hier bewusst noch nicht eingebaut — E7 ist noch nicht entschieden,
 # und Regel 14 verbietet einen Schalter ohne zweiten Anwendungsfall.
 APP_FORBIDDEN_IMPORTS = frozenset({"PySide6", "PyQt5", "PyQt6", "cli", "gui"})
+
+# CLAUDE.md, „Architektur": „cli/ und gui/ importieren sich nicht gegenseitig" — bisher eine
+# Zusage ohne Test (Vorbefund V1, Durchsicht von 421cb95). Zwei getrennte Konstanten statt
+# einer, weil die beiden Richtungen unterschiedlich geprüft werden: cli/ gibt es bereits,
+# gui/ entsteht erst mit den kommenden Arbeitspaketen.
+CLI_FORBIDDEN_IMPORTS = frozenset({"gui"})
+GUI_FORBIDDEN_IMPORTS = frozenset({"cli"})
 
 
 def imported_packages(source: str) -> set[str]:
@@ -138,3 +147,45 @@ def test_rule_9_app_package_does_not_import_the_interfaces() -> None:
         )
     }
     assert not offenders, f"Oberflächen-Import in app/: {offenders}"
+
+
+def test_cli_does_not_import_gui() -> None:
+    """CLAUDE.md, „Architektur": „cli/ und gui/ importieren sich nicht gegenseitig" — hier
+    die cli-Hälfte. cli/ gibt es bereits seit Phase 1, die Prüfung greift deshalb ab
+    sofort, nicht erst, wenn gui/ entsteht."""
+    modules = sorted(CLI.rglob("*.py"))
+    assert modules, f"Kein Modul unter {CLI} gefunden — dieser Test prüfte nichts."
+
+    offenders = {
+        module.relative_to(CLI.parent).as_posix(): sorted(found)
+        for module in modules
+        if (
+            found := imported_packages(module.read_text(encoding="utf-8-sig"))
+            & CLI_FORBIDDEN_IMPORTS
+        )
+    }
+    assert not offenders, f"gui-Import in cli/: {offenders}"
+
+
+def test_gui_does_not_import_cli() -> None:
+    """CLAUDE.md, „Architektur": „cli/ und gui/ importieren sich nicht gegenseitig" — hier
+    die gui-Hälfte. gui/ entsteht erst mit den kommenden Arbeitspaketen; bis dahin
+    überspringt sich dieser Test **sichtbar** mit Begründung, genau wie zuvor
+    `test_rule_9_app_package_does_not_import_the_interfaces` vor AP 3 oben."""
+    if not GUI.is_dir():
+        pytest.skip(
+            "gui/ existiert noch nicht (entsteht mit den kommenden Arbeitspaketen) — "
+            "dieser Test greift, sobald das Paket da ist"
+        )
+    modules = sorted(GUI.rglob("*.py"))
+    assert modules, f"Kein Modul unter {GUI} gefunden — dieser Test prüfte nichts."
+
+    offenders = {
+        module.relative_to(GUI.parent).as_posix(): sorted(found)
+        for module in modules
+        if (
+            found := imported_packages(module.read_text(encoding="utf-8-sig"))
+            & GUI_FORBIDDEN_IMPORTS
+        )
+    }
+    assert not offenders, f"cli-Import in gui/: {offenders}"

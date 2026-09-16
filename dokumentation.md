@@ -789,24 +789,27 @@ betroffenen Testdateien laufen lassen" verkleinert das Problem, löst es aber ni
 > **Regel:** Die Durchsicht prüft gegen `git archive <commit>` in einem Wegwerfordner, nicht
 > gegen den Arbeitsbaum. `tools/en-de.sqlite3` und `tools/*.epub` werden dorthin
 > mitkopiert. Die **Gegenprobe** dafür ist die Schlusszeile von `pytest`: Sie muss mit
-> installiertem PySide6 genau **zwei** Übersprungene nennen — `needs_model` und
+> installiertem PySide6 genau **drei** Übersprungene nennen — `needs_model` und
 > `needs_wordfreq`, die einzigen beiden Marken, die nicht an `tools/` hängen (`addopts =
-> ["-rs"]` in `pyproject.toml` nennt jeden Skip namentlich, ohne Zusatzaufwand) —, und
-> **drei** ohne PySide6, weil dann `needs_gui` als dritte Marke dazukommt. Meldet der Lauf
+> ["-rs"]` in `pyproject.toml` nennt jeden Skip namentlich, ohne Zusatzaufwand), dazu der
+> `pytest.skip()` im Rumpf von `test_gui_does_not_import_cli`
+> (`tests/test_architecture.py`), solange das Paket `gui/` noch nicht existiert —, und
+> **vier** ohne PySide6, weil dann `needs_gui` als weitere Marke dazukommt. Meldet der Lauf
 > stattdessen rund fünfunddreißig Übersprungene, ist die Kopie missraten — `tools/en-de.sqlite3`
 > oder ein EPUB fehlt —, und die Durchsicht hält für grün, was gar nicht gelaufen ist. Zur
 > Einordnung: rund 33 der über 560 Tests hängen an `tools/` (`needs_dictionary`,
 > `needs_epub`, `needs_calibre_split_epub`) — diese Größenordnung darf danebenstehen, ist
-> aber nicht die Prüfgröße; geprüft wird die Zahl **zwei** (bzw. ohne PySide6: **drei**).
+> aber nicht die Prüfgröße; geprüft wird die Zahl **drei** (bzw. ohne PySide6: **vier**).
 > Meldet der Lauf einen weniger als hier genannt, hängt in der Umgebung
 > `LIBREVERBUM_MODEL_URL` oder `LIBREVERBUM_WORDFREQ_PYTHON` (`tests/conftest.py`) —
 > falscher Alarm, kein falsches Grün; die betreffende Variable vor dem Lauf löschen.
 >
-> Zwischen AP 1 und AP 3 kam ein dritter, von PySide6 unabhängiger Übersprungener dazu —
+> Zwischen AP 1 und AP 3 kam ein anderer, von PySide6 unabhängiger Übersprungener dazu —
 > `pytest.skip()` im Rumpf von `test_rule_9_app_package_does_not_import_the_interfaces`
 > (`tests/test_architecture.py`), solange das Paket `app/` noch nicht existierte. AP 3 hat
-> `app/` angelegt (`421cb95`); seither ist dieser Skip weg, und es gilt wieder die oben
-> genannte Zahl **zwei**/**drei**.
+> `app/` angelegt (`421cb95`); seither ist dieser Skip weg. Sein Nachfolger ist der oben
+> genannte `gui`-Skip: Sobald `gui/` entsteht, fällt auch er weg, und es gilt wieder
+> **zwei**/**drei**.
 
 **Das Vergleichspaar einer Durchsicht ist der Commit selbst — `git show <commit>`,
 gleichwertig `git diff <unmittelbarer Vorgänger> <commit>`.** Die Falle ist eine
