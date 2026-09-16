@@ -134,9 +134,9 @@ def load_config(data_dir: Path) -> tuple[Config, bool]:
 
     Der zweite Rückgabewert ist `True`, wenn die Datei bei diesem Aufruf gerade erst
     entstanden ist — dann trägt sie noch die unveränderten Vorgabewerte, und der
-    Aufrufer (`cli.main`) meldet das, statt mit einer vermutlich falschen
-    Modellserver-Adresse weiterzulaufen (technik.md §9, „Warum eine Datei und nicht bloß
-    ein Aufrufargument").
+    Aufrufer (heute `cli.main`, künftig ebenso `gui/`) meldet das, statt mit einer
+    vermutlich falschen Modellserver-Adresse weiterzulaufen (technik.md §9, „Warum eine
+    Datei und nicht bloß ein Aufrufargument").
 
     `paths.dictionary` und `paths.profile` bleiben leer in der Vorlage; leer bedeutet
     „im Datenverzeichnis" (technik.md §9, Tabelle „Einstellungen: config.toml").

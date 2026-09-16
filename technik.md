@@ -2216,7 +2216,8 @@ und korrigierbar — der still überschriebene Lernfortschritt der Gegenseite w�
 ### Ein Wort ohne Wörterbucheintrag kostet nicht mehr den ganzen Export
 
 Am 01.09.2026 aus einem Kapiteldurchlauf gemeldet: Ein „lernen" auf `jabbar` — ein Wort,
-das WikDict nicht führt — ließ `cli.export.write_exports` abbrechen, und weil
+das WikDict nicht führt — ließ `app.export.write_exports` (bauplan-phase2.md AP 3; vorher
+`cli.export.write_exports`) abbrechen, und weil
 `anki.export_deck` der **erste** der beiden Exporte ist, entstand gar keine Datei: kein
 Deck, keine Druckseite, auch nicht für die übrigen Karten. Die Triage war da bereits
 vollständig durchlaufen.
@@ -2477,8 +2478,9 @@ sind Profileinträge, keine Fremdschlüssel auf diese Datei.
 legt sich als `…_2` daneben, ein dritter als `…_3`.** Beide Dateien eines Laufs tragen
 dieselbe Nummer, und frei sein müssen beide — Deck und Druckseite gehören zusammen.
 
-Bis zum 27.08.2026 bildete `cli.export.export_paths` den Namen allein aus Buchtitel und
-Kapitelnummer, „damit ein zweiter Lauf über dasselbe Kapitel dieselbe Datei trifft". Das
+Bis zum 27.08.2026 bildete `app.export.export_paths` (bauplan-phase2.md AP 3; vorher
+`cli.export.export_paths`) den Namen allein aus Buchtitel und Kapitelnummer, „damit ein
+zweiter Lauf über dasselbe Kapitel dieselbe Datei trifft". Das
 war für das Anki-Deck richtig gedacht und für die Druckseite falsch:
 
 - **Das Deck verträgt beides.** Deck-Kennung (`anki._deck_id`) und Notiz-GUID
@@ -3391,10 +3393,12 @@ schief.
 
 **Entschieden:** ein drittes Paket `app/` neben `cli/` und `gui/` — ohne Qt, ohne
 Konsole; importiert den Kern, wird von beiden Oberflächen importiert, vom Kern nie.
-`tests/test_architecture.py` prüft das seit AP 1 über `FORBIDDEN_IN_CORE` (vormals
+`tests/test_architecture.py` prüft seit AP 1 über `FORBIDDEN_IN_CORE` (vormals
 `GUI_PACKAGES`, umbenannt in der Durchsicht von `907ab02`, Befund 5, weil `app/` selbst
-keine Oberfläche ist); die Prüfung auf `app/` überspringt sich sichtbar, solange das Paket
-noch nicht angelegt ist — das tut AP 3. Regel 14 ist erfüllt: Der
+keine Oberfläche ist) die beiden Verbotsrichtungen — dass `app/` weder `cli`, `gui` noch
+Qt importiert; dass `app/` seinerseits von beiden Oberflächen benutzt wird, ist damit nicht
+geprüft, nur so gebaut. Die Prüfung auf `app/` läuft seit AP 3 (`421cb95`), das das Paket
+angelegt hat — bis dahin überspringt sie sich sichtbar. Regel 14 ist erfüllt: Der
 zweite Anwendungsfall (zwei Oberflächen) liegt vor. Was dagegen **Verkettung von
 Kernschritten** ist — Anki-Deck schreiben, Druckseite schreiben, Triage-Karte im Profil
 buchen — gehört nach Abschnitt 7 in `pipeline`, nicht nach `app/`; das schließt den

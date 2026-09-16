@@ -180,20 +180,15 @@ Runden.
 
 **Die Durchsicht prüft gar nicht im Arbeitsbaum**, sondern gegen `git archive <commit>` in
 einem Wegwerfordner — `tools/en-de.sqlite3` und `tools/*.epub` gehören mit hinein. Die
-Gegenprobe: Vor AP 1 musste die Schlusszeile von `pytest` unabhängig von PySide6 genau
-**zwei** Übersprungene nennen — `needs_model` und `needs_wordfreq`, die `needs_gui`-Marke
-gab es noch nicht. Seit AP 1 sind es **drei** mit installiertem PySide6, **vier** ohne:
-`needs_gui` kommt als dritte Marke dazu, sobald PySide6 in der Prüfumgebung fehlt. Unabhängig
-davon zählt seit AP 1 ein weiterer Übersprungener, der an **keiner** Marke hängt — ein
-`pytest.skip()` im Testrumpf von `test_rule_9_app_package_does_not_import_the_interfaces`
-(`tests/test_architecture.py`). Er greift, solange `app/` noch nicht existiert, und ist
-**vorübergehend**: AP 3 legt `app/` an, und ab dann fällt die Zahl auf den Stand von vor
-AP 1 zurück, jetzt aber wieder von PySide6 abhängig (zwei mit installiertem PySide6, drei
-ohne, wegen `needs_gui`) (bauplan-phase2.md, Abnahme von AP 3). Meldet der Lauf stattdessen
-rund fünfunddreißig, ist die Kopie missraten; meldet er einen weniger als hier genannt, steht
-`LIBREVERBUM_MODEL_URL` oder `LIBREVERBUM_WORDFREQ_PYTHON` noch in der Umgebung (falscher
-Alarm, kein falsches Grün). Begründung: dokumentation.md §10, „Woran sie prüft: gegen den
-Commit, nicht gegen den Arbeitsbaum".
+Gegenprobe: Die Schlusszeile von `pytest` muss **zwei** Übersprungene nennen, wenn PySide6
+installiert ist — `needs_model` und `needs_wordfreq` —, und **drei**, wenn nicht: `needs_gui`
+kommt dann als dritte Marke dazu. Meldet der Lauf stattdessen rund fünfunddreißig, ist die
+Kopie missraten; meldet er einen weniger als hier genannt, steht `LIBREVERBUM_MODEL_URL`
+oder `LIBREVERBUM_WORDFREQ_PYTHON` noch in der Umgebung (falscher Alarm, kein falsches
+Grün). Begründung: dokumentation.md §10, „Woran sie prüft: gegen den Commit, nicht gegen den
+Arbeitsbaum". (Zwischen AP 1 und AP 3 zählte ein dritter, von PySide6 unabhängiger
+Übersprungener dazu, solange das Paket `app/` noch nicht existierte — seit AP 3 (`421cb95`)
+ist `app/` angelegt, und dieser Skip ist weg.)
 
 ## Daten
 

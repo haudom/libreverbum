@@ -114,7 +114,9 @@ möglich, aber schief.
 
 **Vorgabe:** ein drittes Paket `app/` neben `cli/` und `gui/` — ohne Qt, ohne Konsole;
 importiert den Kern, wird von beiden Oberflächen importiert, vom Kern nie
-(`tests/test_architecture.py` prüft alle drei Richtungen). Regel 14 ist erfüllt: Der zweite
+(`tests/test_architecture.py` prüft nur die beiden Verbotsrichtungen — dass `app/` von
+beiden Oberflächen tatsächlich benutzt wird, ist damit nicht geprüft, nur so gebaut).
+Regel 14 ist erfüllt: Der zweite
 Anwendungsfall liegt vor. Was dagegen **Verkettung von Kernschritten** ist — Anki-Deck
 schreiben, Druckseite schreiben, GUID buchen —, gehört nach technik.md §7 in `pipeline`
 und wandert dorthin (AP 2); das schließt den offenen Punkt „Zurückschreiben der Anki-GUID

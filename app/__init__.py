@@ -12,8 +12,9 @@ hier (bauplan-phase2.md AP 2).
 
 Dieses Paket liegt bewusst **neben** `cli/` und `gui/`, nicht unter einem der beiden:
 Es importiert `libreverbum`, nie `cli`, `gui` oder Qt (`tests/test_architecture.py` prüft
-alle drei Richtungen). Eine Oberfläche, die die andere importiert, wäre möglich, aber
-schief — `app/` ist der gemeinsame Nenner statt einer Bevorzugung.
+diese beiden Verbotsrichtungen — dass `app/` tatsächlich von beiden Oberflächen benutzt
+wird, ist damit nicht geprüft, nur so gebaut). Eine Oberfläche, die die andere importiert,
+wäre möglich, aber schief — `app/` ist der gemeinsame Nenner statt einer Bevorzugung.
 
 Voraussetzungen
 ---------------

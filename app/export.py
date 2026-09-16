@@ -21,8 +21,8 @@ Voraussetzungen
 `cards` stammt aus **einem** Kapitel (dieselbe Annahme wie in `anki.export_deck` und
 `printout.write_printout` selbst, die beide sichtbar abbrechen, wenn das verletzt ist).
 `con` ist eine bereits geöffnete Profilverbindung (`libreverbum.profile.open_profile`) mit
-bereits angelegter Kapitelzeile (`cli.interaction.ensure_chapter_row`) — dieselbe
-Voraussetzung wie bei `profile.record_card`.
+bereits angelegter Kapitelzeile (Sache des Aufrufers — in `cli/` `interaction.
+ensure_chapter_row`) — dieselbe Voraussetzung wie bei `profile.record_card`.
 
 Liefert
 -------
@@ -32,9 +32,10 @@ Namensstamm an und sucht dazu das erste Namenspaar, das noch frei ist — ein zw
 mit diesen Pfaden auf und liefert sie zurück.
 
 `partial=True` (technik.md §12, „Entschieden 15.09.2026: ein abgebrochener Lauf
-exportiert, was er hat") kennzeichnet einen **Teilexport** — geschrieben, wenn
-`cli.main._run` nach einem Fehlschlag mitten in der Triage die bereits entschiedenen
-Karten sichert. Der Dateiname trägt dafür den Zusatz `_teilexport`, der Deckname
+exportiert, was er hat") kennzeichnet einen **Teilexport** — geschrieben, wenn der
+Aufrufer nach einem Fehlschlag mitten in der Triage die bereits entschiedenen Karten
+sichert (heute `cli.main._run`, künftig ebenso aus `gui/`). Der Dateiname trägt dafür
+den Zusatz `_teilexport`, der Deckname
 (`f"{book_title} - Kapitel {chapter_number}"`) bleibt **unverändert**: `anki.
 new_card_guid` liefert für dieselben Einträge dieselbe GUID, unabhängig von `partial` — ein
 abweichender Deckname schöbe die Notizen eines späteren, vollständigen Laufs über dasselbe
@@ -126,8 +127,9 @@ def write_exports(
     Erwartet `cards` nichtleer — eine leere Triage-Ausbeute ist kein Fehlschlag
     (Regel 13 gilt für Fehler, nicht für eine gültige Nutzerentscheidung „nichts
     lernen"), aber auch keine sinnvolle Exportanfrage; das prüft und meldet der Aufrufer
-    (`cli.main`), bevor diese Funktion aufgerufen wird — `pipeline.export_cards` bräche
-    sonst mit derselben Meldung ab wie bei einem echten Fehler (`anki.export_deck`).
+    (heute `cli.main`, künftig ebenso `gui/`), bevor diese Funktion aufgerufen wird —
+    `pipeline.export_cards` bräche sonst mit derselben Meldung ab wie bei einem echten
+    Fehler (`anki.export_deck`).
 
     `partial=True` (technik.md §12, „Entschieden 15.09.2026 …") ist derselbe Export, nur
     mit weniger Karten und einem anderen Dateinamen (`export_paths`) — der Deckname bleibt
