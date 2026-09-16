@@ -1799,7 +1799,10 @@ probeweise neu ausgecheckt und das volle Tor erneut gefahren wurde: 557 bestande
 ## 7. Modulaufteilung des Kerns und Importregel — entschieden
 
 **Zehn Module entlang der sechs Schritte des Kernablaufs. Jeder Schritt kennt nur
-`entities`; verkettet werden die Schritte allein in `pipeline`.**
+`entities`; verkettet werden die Schritte allein in `pipeline`. Das gilt für den Kern —
+`cli`, `app` und `gui` liegen außerhalb dieser Karte und dürfen mehrere Kernmodule zugleich
+importieren (unten, „Die Oberfläche liegt neben dem Kern"; entschieden 16.09.2026,
+überschreibt die zuvor fehlende Geltungsbereichsangabe).**
 
 ### Warum eine Karte und nicht mehr
 

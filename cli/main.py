@@ -597,7 +597,7 @@ def _export_partial_run(
     danach ausgibt.
 
     `export.write_exports` bekommt `partial=True` — der Dateiname trägt den Teilstand
-    (`_teilexport`), der Deckname bleibt unverändert (`cli/export.py`, „Liefert"). Scheitert
+    (`_teilexport`), der Deckname bleibt unverändert (`app/export.py`, „Liefert"). Scheitert
     der Teilexport seinerseits (etwa ein ungültiger `output_dir`), wirft diese Funktion die
     entstehende Ausnahme unverändert weiter — sie fängt selbst nichts ab. **Der Aufrufer**
     in `_run` fängt diesen zweiten Fehlschlag gesondert ab und meldet ihn zusätzlich, bevor

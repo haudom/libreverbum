@@ -676,8 +676,9 @@ def compare_chapter_vocabulary(
 # technik.md §4, „Jetzt billig, später teuer: die Anki-Kennung".
 def record_card(con: sqlite3.Connection, card: Card) -> int:
     """Schreibt Vorkommen und Karte einer exportierten `Card` fest — aufgerufen **nach**
-    einem erfolgreichen `anki.export_deck` (`cli.export.write_exports`), mit derselben
-    `card.guid`, die im Anki-Deck steht.
+    einem erfolgreichen `anki.export_deck` **und** `printout.write_printout`
+    (`pipeline.export_cards`, entschieden 16.09.2026: das Profil darf nie mehr behaupten,
+    als tatsächlich exportiert wurde), mit derselben `card.guid`, die im Anki-Deck steht.
 
     Legt Vorkommen und Bedeutung an, falls sie noch fehlen (`ensure_occurrence`,
     `ensure_sense`), und trägt darüber die Kartenzeile ein — über die GUID idempotent

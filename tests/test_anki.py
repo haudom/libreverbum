@@ -96,7 +96,7 @@ def _placeholder_card(
     `_card(translation=None, uncertain=True)` behielte `wikdict_sense` und
     `wikdict_lexentry` und wäre damit kein Wort ohne Wörterbucheintrag, sondern eines mit
     Eintrag und ohne Übersetzung — ein Fall, den es so nicht gibt. Dieselbe Form baut
-    `tests/test_cli_export.py`."""
+    `tests/test_app_export.py`."""
     sense = Sense(lemma=occurrence.lemma, uncertain=True)
     return Card(
         sense=sense,

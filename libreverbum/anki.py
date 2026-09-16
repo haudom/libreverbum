@@ -248,7 +248,7 @@ def _translation_text(card: Card) -> str:
 
     Bis zum 01.09.2026 brach der erste Fall ebenso ab wie der zweite. Gemeldet aus einem
     Kapiteldurchlauf: Ein einziges „lernen" auf einem Wort ohne Wörterbucheintrag ließ den
-    gesamten Export scheitern — Deck **und** Druckseite, denn `cli.export.write_exports`
+    gesamten Export scheitern — Deck **und** Druckseite, denn `pipeline.export_cards`
     ruft `export_deck` zuerst. Der Fall ist häufig, nicht selten: Von 25 in der Triage
     gezeigten Einträgen tragen 2 (A1) bis 9 (C1) nur den Platzhalter (technik.md §11,
     „Warum C2 nicht angeboten wird"). Der Tag `unsicher` in `_tags` war unter der alten
@@ -430,7 +430,7 @@ def card_obstacle(
       `heart-broken` und Wortformen unmittelbar vor einem typografischen Apostroph
       (`the girl's mother`), beides Folgen von `_WORD_CONTINUING_EXTRA` und damit gewollt
 
-    Warum diese Frage getrennt vom Abbruch existiert: `cli.export.write_exports` ruft
+    Warum diese Frage getrennt vom Abbruch existiert: `pipeline.export_cards` ruft
     `export_deck` **vor** `printout.write_printout`. Ein Abbruch dort kostet deshalb beide
     Dateien samt aller übrigen Karten eines Durchlaufs — nach vollständig durchlaufener
     Triage, also zum teuersten denkbaren Zeitpunkt. Genau das ist am 01.09.2026 aus der

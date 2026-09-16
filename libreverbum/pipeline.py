@@ -19,12 +19,11 @@ der eingefrorenen Liste, `wordfreq_en_5000.txt`) **und** `profile` (das Sammelsc
 `profile.record_preset`) zugleich.
 
 Dazu, seit AP 2 (bauplan-phase2.md), `export_cards`: verkettet Schritt 6 — Anki-Deck
-schreiben (`anki.export_deck`), Druckseite schreiben (`printout.write_printout`) und je
-Karte die Anki-GUID ins Profil buchen (`profile.record_card`, Regel 6) — zu einem Aufruf.
-Vorher lag diese Verkettung in `cli.export.write_exports`, obwohl nach technik.md §7 nur
-`pipeline` mehrere Schrittmodule kennen darf; `cli.export.write_exports` ruft sie jetzt
-nur noch auf. Auch dafür kennt nur `pipeline` `anki`, `printout` **und** `profile`
-zugleich.
+schreiben (`anki.export_deck`), Druckseite schreiben (`printout.write_printout`) und
+zuletzt je Karte die Anki-GUID ins Profil buchen (`profile.record_card`, Regel 6) — zu
+einem Aufruf, weil nach technik.md §7 nur `pipeline` mehrere Schrittmodule zugleich kennen
+darf. `app.export.write_exports` ruft `export_cards` seinerseits nur noch auf. Auch dafür
+kennt nur `pipeline` `anki`, `printout` **und** `profile` zugleich.
 
 Voraussetzungen
 ---------------
@@ -911,7 +910,7 @@ def resolve_triage_entries(
     if order not in _VALID_TRIAGE_ORDERS:
         # REGEL (dokumentation.md §4 Regel 13): ein unzulässiger Wert bricht sichtbar ab
         # und nennt die zulässigen Werte, statt still auf die Vorgabe zurückzufallen.
-        # `cli.config.load_config` prüft denselben Wert bereits beim Einlesen von
+        # `app.config.load_config` prüft denselben Wert bereits beim Einlesen von
         # config.toml — diese Prüfung greift zusätzlich, weil resolve_triage_entries auch
         # unabhängig von der Kommandozeile aufrufbar bleibt (etwa aus einem Testwerkzeug).
         erlaubt = " oder ".join(f'"{wert}"' for wert in _VALID_TRIAGE_ORDERS)
@@ -1221,9 +1220,9 @@ def export_cards(
 ) -> None:
     """Verkettet Schritt 6 zu **einem** Aufruf (AP 2, bauplan-phase2.md; technik.md §7,
     „Die Importregel": „Wer mehrere Schritte kennt, ist `pipeline` — und sonst niemand"):
-    schreibt `cards` als Anki-Deck (`anki.export_deck`), bucht danach je Karte die
-    Anki-GUID im Profil (`profile.record_card`, Regel 6) und schreibt zuletzt die
-    Druckseite (`printout.write_printout`).
+    schreibt `cards` als Anki-Deck (`anki.export_deck`), schreibt danach die Druckseite
+    (`printout.write_printout`) und bucht zuletzt je Karte die Anki-GUID im Profil
+    (`profile.record_card`, Regel 6).
 
     Die GUID wird gebucht, damit eine spätere Karte wiedergefunden werden kann, nicht um
     eine doppelte Anki-Notiz zu verhindern (technik.md §4, „Jetzt billig, später teuer:
@@ -1232,26 +1231,29 @@ def export_cards(
     aus Phase 3 später nicht anschließen, ohne alle bereits exportierten Decks neu zu
     erzeugen.
 
-    `record_card` läuft erst **nach** einem erfolgreichen `anki.export_deck`: Bricht der
-    Export ab (fehlende Übersetzung ohne die Marke `uncertain`, eine Karte, die in ihrer
-    Kartenrichtung nicht bildbar ist, doppelte GUID im selben Export — siehe
-    `anki.export_deck`), steht im Profil nichts, was im Deck nicht ebenso fehlt.
+    `record_card` läuft erst, nachdem **beide** Exportdateien erfolgreich geschrieben sind
+    (entschieden 16.09.2026): Bricht `anki.export_deck` ab (fehlende Übersetzung ohne die
+    Marke `uncertain`, eine Karte, die in ihrer Kartenrichtung nicht bildbar ist, doppelte
+    GUID im selben Export — siehe `anki.export_deck`) oder erst `printout.write_printout`
+    danach, steht im Profil keine Karte, die nicht in beiden Dateien ebenso steht. Das
+    Profil ist der langfristige Wert des Programms und darf nie mehr behaupten, als
+    tatsächlich exportiert wurde; die beiden Dateien sind dagegen aus denselben `cards`
+    jederzeit reproduzierbar. Ein Fehlschlag hinterlässt damit höchstens verwaiste
+    Exportdateien, nie ein halbes Profil.
 
-    Vorher lag dieser Dreischritt in `cli.export.write_exports`, obwohl nur `pipeline`
-    nach technik.md §7 mehrere Schrittmodule zugleich kennen darf — mit dieser Verkettung
-    hier bekommt eine zweite Oberfläche die GUID-Buchung geschenkt, statt sie nachzubauen
-    (Regel 6, technik.md §7, offener Punkt „Zurückschreiben der Anki-GUID hängt an der
-    Kommandozeile").
+    Weil nur `pipeline` nach technik.md §7 mehrere Schrittmodule zugleich kennen darf,
+    bekommt jede Oberfläche, die `export_cards` aufruft, diese Reihenfolge geschenkt,
+    statt sie selbst nachzubauen (Regel 6).
 
     Voraussetzungen wie bei `anki.export_deck` und `printout.write_printout` selbst:
     `cards` nichtleer und aus **einem** Kapitel — geprüft und gemeldet vom Aufrufer
-    (`cli.export.write_exports`), nicht hier. `con` ist eine bereits geöffnete
+    (`app.export.write_exports`), nicht hier. `con` ist eine bereits geöffnete
     Profilverbindung (`profile.open_profile`) mit bereits angelegter Kapitelzeile
     (dieselbe Voraussetzung wie bei `profile.record_card`). Dateinamen, `_2`/`_3` und
-    `_teilexport` bleiben Sache des Aufrufers (`cli.export.export_paths`) — diese Funktion
+    `_teilexport` bleiben Sache des Aufrufers (`app.export.export_paths`) — diese Funktion
     kennt nur die beiden fertigen Zielpfade.
     """
     anki.export_deck(anki_path, cards, deck_name=deck_name)
+    printout.write_printout(printout_path, [(card.occurrence, card.sense) for card in cards])
     for card in cards:
         profile.record_card(con, card)
-    printout.write_printout(printout_path, [(card.occurrence, card.sense) for card in cards])

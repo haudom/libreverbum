@@ -2420,10 +2420,10 @@ def test_write_vocabulary_preset_against_the_real_dictionary(
 # --------------------------------------------------------------------- export_cards (AP 2)
 #
 # bauplan-phase2.md AP 2: Der Dreischritt Anki-Deck schreiben → Druckseite schreiben →
-# profile.record_card je Karte verlässt cli.export.write_exports und wird
-# pipeline.export_cards (technik.md §7, „Die Importregel"). Geprüft wird hier die
-# Verkettung selbst, nicht nur mittelbar über cli.export.write_exports
-# (tests/test_cli_export.py).
+# profile.record_card je Karte liegt in pipeline.export_cards (technik.md §7, „Die
+# Importregel"), weil nur `pipeline` mehrere Schrittmodule zugleich kennen darf. Geprüft
+# wird hier die Verkettung selbst, nicht nur mittelbar über app.export.write_exports
+# (tests/test_app_export.py).
 
 _EXPORT_BOOK = Book(title="Exportbuch", author="Autorin")
 
@@ -2459,7 +2459,7 @@ def _export_card(occurrence: Occurrence) -> Card:
 def test_export_cards_writes_a_card_row_for_each_card(tmp_path: Path) -> None:
     """AP 2 (bauplan-phase2.md), Prüfung: Nach `export_cards` steht je Karte eine
     `card`-Zeile (Regel 6, dokumentation.md §4) — geprüft an der Verkettung selbst, nicht
-    nur mittelbar über `cli.export.write_exports`.
+    nur mittelbar über `app.export.write_exports`.
 
     Verfälschungsprobe: den `profile.record_card`-Aufruf aus `export_cards` entfernt →
     dieser Test rot (`card_guids` bleibt leer)."""
@@ -2481,7 +2481,7 @@ def test_export_cards_writes_a_card_row_for_each_card(tmp_path: Path) -> None:
 
 def test_export_cards_writes_the_anki_deck_and_the_printout(tmp_path: Path) -> None:
     """`export_cards` schreibt beide Exportdateien, nicht nur die Profilzeilen — dieselbe
-    Verkettung wie vorher in `cli.export.write_exports`, nur am neuen Ort."""
+    Verkettung, die `app.export.write_exports` nur noch aufruft."""
     con = profile.open_profile(tmp_path / "profil.sqlite3")
     interaction.ensure_chapter_row(con, _EXPORT_BOOK, 1, "Testkapitel")
     anki_path = tmp_path / "export.apkg"
@@ -2499,10 +2499,14 @@ def test_export_cards_writes_the_anki_deck_and_the_printout(tmp_path: Path) -> N
     assert "watch" in printout_path.read_text(encoding="utf-8")
 
 
-def test_export_cards_does_not_book_a_card_when_the_anki_export_fails(tmp_path: Path) -> None:
-    """Bricht `anki.export_deck` ab (hier: leere Kartenliste), bucht `export_cards` auch
-    keine Karte im Profil — dieselbe Reihenfolge wie vorher in `write_exports`
-    (`libreverbum/pipeline.py`, „Voraussetzungen")."""
+def test_export_cards_raises_on_an_empty_card_list_without_booking_anything(tmp_path: Path) -> None:
+    """`export_cards` mit einer leeren Kartenliste bricht sichtbar ab (Regel 13, über
+    `anki.export_deck`s eigene Prüfung) und bucht dabei keine Karte im Profil.
+
+    Sichert **keine** Reihenfolge zu (Befund 1, Durchsicht 82441bb): Bei leerer Liste ist
+    ohnehin keine Karte zu buchen, eine vertauschte Reihenfolge in `export_cards` bliebe
+    hier unbemerkt. Das leistet erst
+    `test_export_cards_does_not_book_a_card_when_the_anki_export_fails` unten."""
     con = profile.open_profile(tmp_path / "profil.sqlite3")
     interaction.ensure_chapter_row(con, _EXPORT_BOOK, 1, "Testkapitel")
 
@@ -2512,6 +2516,63 @@ def test_export_cards_does_not_book_a_card_when_the_anki_export_fails(tmp_path: 
             [],
             anki_path=tmp_path / "export.apkg",
             printout_path=tmp_path / "export.html",
+            deck_name="Exportbuch - Kapitel 1",
+        )
+
+    assert con.execute("SELECT count(*) FROM card").fetchone()[0] == 0
+
+
+def test_export_cards_does_not_book_a_card_when_the_anki_export_fails(tmp_path: Path) -> None:
+    """Bricht `anki.export_deck` bei einer **nicht-leeren** Kartenliste ab (hier: zwei
+    Karten mit identischer GUID — siehe `_export_card` —, die `anki.export_deck` als
+    Dublette innerhalb desselben Exports zurückweist), bucht `export_cards` keine der
+    beiden Karten im Profil: Das Deck wird vor jeder Buchung geschrieben.
+
+    Der Leerlisten-Test oben (`test_export_cards_raises_on_an_empty_card_list_...`)
+    sichert diese Reihenfolge nicht zu — bei leerer Liste gibt es nichts zu buchen, eine
+    vertauschte Reihenfolge bliebe dort unbemerkt (Befund 1, Durchsicht 82441bb).
+
+    Verfälschungsprobe: `export_cards` mit `profile.record_card` **vor**
+    `anki.export_deck` umgebaut → dieser Test rot (zwei `card`-Zeilen stehen trotz
+    Fehlschlags), der Leerlisten-Test bleibt grün."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    interaction.ensure_chapter_row(con, _EXPORT_BOOK, 1, "Testkapitel")
+    duplicate_cards = [_export_card(_export_occurrence()), _export_card(_export_occurrence())]
+
+    with pytest.raises(ValueError, match="mehrfach"):
+        pipeline.export_cards(
+            con,
+            duplicate_cards,
+            anki_path=tmp_path / "export.apkg",
+            printout_path=tmp_path / "export.html",
+            deck_name="Exportbuch - Kapitel 1",
+        )
+
+    assert con.execute("SELECT count(*) FROM card").fetchone()[0] == 0
+
+
+def test_export_cards_does_not_book_a_card_when_the_printout_fails(tmp_path: Path) -> None:
+    """Scheitert `printout.write_printout` bei einer **nicht-leeren** Kartenliste (hier:
+    der Zielpfad ist ein Verzeichnis statt einer Datei — ein echter Fehlschlagweg, kein
+    nachgestellter), steht danach ebenfalls keine `card`-Zeile im Profil: Die Buchung
+    kommt nach **beiden** Exportdateien, nicht nur nach dem Deck (entschieden 16.09.2026,
+    `libreverbum/pipeline.py`, `export_cards`) — das Profil darf nie mehr behaupten, als
+    tatsächlich exportiert wurde.
+
+    Verfälschungsprobe: `export_cards` auf die vorherige Reihenfolge zurückgebaut
+    (`profile.record_card` gleich nach `anki.export_deck`, vor `printout.write_printout`)
+    → dieser Test rot (die `card`-Zeile steht trotz gescheiterter Druckseite)."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    interaction.ensure_chapter_row(con, _EXPORT_BOOK, 1, "Testkapitel")
+    printout_path = tmp_path / "export.html"
+    printout_path.mkdir()
+
+    with pytest.raises(OSError):
+        pipeline.export_cards(
+            con,
+            [_export_card(_export_occurrence())],
+            anki_path=tmp_path / "export.apkg",
+            printout_path=printout_path,
             deck_name="Exportbuch - Kapitel 1",
         )
 
