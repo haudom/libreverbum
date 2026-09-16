@@ -693,6 +693,12 @@ def record_card(con: sqlite3.Connection, card: Card) -> int:
     Bedeutung und dieselbe Kartenrichtung stets dieselbe GUID, ein zweiter Export
     derselben Bedeutung legt also keine zweite Zeile an, sondern liefert die bestehende
     id zurück.
+
+    Findet sich die Zeile danach trotzdem nicht (Vorbefund V1, Nachbesserung Durchsicht
+    b86c554): eigener, deutscher Abbruch (Regel 13) statt eines nackten `assert`, das
+    unter `python -O` stillschweigend entfällt und die Zeile darunter mit einem
+    `TypeError` an entfernter Stelle abbrechen ließe — dasselbe Muster wie
+    `get_cefr_level` zwanzig Zeilen weiter unten.
     """
     occurrence_id = ensure_occurrence(con, card.occurrence)
     sense_id = ensure_sense(con, card.sense)
@@ -703,7 +709,13 @@ def record_card(con: sqlite3.Connection, card: Card) -> int:
     )
     con.commit()
     row = con.execute("SELECT id FROM card WHERE guid = ?", (card.guid,)).fetchone()
-    assert row is not None  # INSERT OR IGNORE + UNIQUE(guid) garantieren die Zeile
+    if row is None:
+        raise ValueError(
+            f"Karte mit GUID {card.guid!r} wurde nach dem Schreiben nicht gefunden, "
+            "obwohl INSERT OR IGNORE und UNIQUE(guid) das garantieren sollten — das "
+            "Profil ist vermutlich beschädigt oder wurde außerhalb dieses Moduls "
+            "verändert."
+        )
     return int(row[0])
 
 
