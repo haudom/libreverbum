@@ -248,7 +248,7 @@ def collect_words(chapters: list[tuple[str, str]], nlp: Language) -> list[_Merge
     merged: dict[tuple[str, str], _MergedOccurrence] = {}
     for number, (title, text) in enumerate(chapters, 1):
         chapter = Chapter(book=book, number=number, title=title, text=text)
-        for occurrence in extraction.extract_vocabulary(chapter, nlp):
+        for occurrence in extraction.extract_vocabulary(chapter, nlp).occurrences:
             key = (occurrence.lemma.text, occurrence.lemma.pos)
             existing = merged.get(key)
             if existing is None:

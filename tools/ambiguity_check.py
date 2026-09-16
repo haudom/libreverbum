@@ -189,7 +189,7 @@ def main() -> int:
             print("\n" + "=" * 78)
             for number, title, text in wanted:
                 chapter = Chapter(book=book, number=number, title=title, text=text)
-                occurrences = extraction.extract_vocabulary(chapter, nlp)
+                occurrences = extraction.extract_vocabulary(chapter, nlp).occurrences
                 counts = []
                 for occurrence in occurrences:
                     lemma = occurrence.lemma

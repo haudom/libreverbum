@@ -123,6 +123,11 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | Gestaltungsvorgaben, Token | `theme` (`Theme.qml`) |
 | Bildschirm, Ansicht | `screen` |
 | Abdeckung (Anteil der vom Leser bereits verstandenen Wortformen, Anzeige der Oberfläche) | `coverage` — **nicht** zu verwechseln mit der Wörterbuchabdeckung aus technik.md §2, „Abdeckung — empirisch geprüft" (dort `remaining`/`undetermined_entries`: Anteil der Grundformen mit Wörterbucheintrag) |
+| Rückgabe von `extraction.extract_vocabulary` (Vorkommen und Nenner für die Abdeckung) | `VocabularyExtraction` |
+| Nenner der Abdeckung (jedes alphabetische Token des Kapitels, `token.is_alpha`, bauplan-phase2.md AP 6, E5 Festlegung 1) | `token_count` |
+| Zähler der Abdeckung (`token_count` abzüglich der nicht verstandenen Vorkommen) | `understood_tokens` |
+| Anzahl der Grundformen aus `entries`, die dabei nicht verstanden sind (Grundformenzahl, keine Häufigkeit) | `unknown_lemma_count` |
+| Abdeckung jetzt (`understood_tokens / token_count`) beziehungsweise nach dem Lernen der in diesem Durchgang auf `learning` gebuchten Grundformen | `share` / `share_after_learning` |
 | Schwierigkeit (eines Buchs) | `difficulty` |
 | Lesezeichen (Druckformat) | `bookmark` |
 | Figuren & Orte | `proper_noun_list` |
