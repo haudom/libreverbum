@@ -1164,6 +1164,51 @@ def test_run_chapter_writes_the_proper_noun_ratio_cache_on_a_cold_run(
     assert written  # nicht-leere Tabelle: das Mini-EPUB trägt Vorkommen bei
 
 
+def test_run_chapter_token_count_is_correct_even_with_a_stale_ratio_cache_entry(
+    pipeline_epub: Path, mini_dictionary_db: Path, profile_path: Path, nlp: Language, tmp_path: Path
+) -> None:
+    """bauplan-phase2.md AP 6, „Die Falle": Der Zwischenspeicher unter `cache_dir` enthält
+    ausschließlich `extraction.book_proper_noun_ratios` (Grundform → Anteil, technik.md
+    §5) — nie `ChapterVocabulary.token_count`. Ein Eintrag von **vor** diesem Feld sieht
+    im Dateiformat nicht anders aus als einer von heute (dasselbe `dict[str, float]`,
+    `_write_proper_noun_ratio_cache` und `_read_proper_noun_ratio_cache` sind durch AP 6
+    unverändert) — es gibt also gar keinen alten, token_count-losen Eintrag, vor dem
+    `token_count` sich schützen müsste. `token_count` entsteht bei jedem Aufruf frisch aus
+    `extraction.extract_vocabulary` für das gewählte Kapitel (`pipeline.run_chapter`), ganz
+    unabhängig davon, ob der Ratio-Zwischenspeicher trifft oder nicht.
+
+    Zusicherung: Eine von Hand schon vor dem Lauf angelegte Zwischenspeicherdatei (eine
+    beliebige, nicht aus dem echten Kapitel abgeleitete Ratio-Tabelle — genau das Format,
+    das auch vor AP 6 dort lag) ändert `token_count` gegenüber einer frischen Berechnung
+    ohne Zwischenspeicher nicht. Verfälschungsprobe: Würde `token_count` versehentlich aus
+    dem Zwischenspeicher gelesen statt aus `extraction.extract_vocabulary` neu berechnet,
+    läge hier `0` (das Attrappen-Objekt „book_proper_noun_ratios" trägt keinen
+    Tokenzähler) statt der echten Wortzahl des Mini-Kapitels — dieser Test bestünde dann
+    nicht mehr."""
+    structure = epub.read_structure(pipeline_epub)
+    chapter = epub.read_chapter(pipeline_epub, structure.book, structure.chapters[0])
+    expected_token_count = extraction.extract_vocabulary(chapter, nlp).token_count
+
+    cache_dir = tmp_path / "cache"
+    cache_key = pipeline._proper_noun_ratio_cache_key(pipeline_epub, nlp)
+    cache_path = pipeline._proper_noun_ratio_cache_path(cache_dir, cache_key)
+    # Eine "alte" Zwischenspeicherdatei — von Hand geschrieben, im selben Format wie vor
+    # AP 6: eine Ratio-Tabelle ohne jeden Bezug zu token_count.
+    pipeline._write_proper_noun_ratio_cache(cache_path, {"street": 0.5})
+
+    result = pipeline.run_chapter(
+        epub_path=pipeline_epub,
+        chapter_number=1,
+        dictionary_path=mini_dictionary_db,
+        profile_path=profile_path,
+        nlp=nlp,
+        cache_dir=cache_dir,
+    )
+
+    assert result.token_count == expected_token_count
+    assert result.token_count > 0
+
+
 def test_run_chapter_without_a_cache_dir_behaves_as_before(
     pipeline_epub: Path, mini_dictionary_db: Path, profile_path: Path, nlp: Language
 ) -> None:
@@ -2781,3 +2826,157 @@ def test_export_cards_does_not_book_a_card_when_the_printout_fails(tmp_path: Pat
         )
 
     assert con.execute("SELECT count(*) FROM card").fetchone()[0] == 0
+
+
+# ------------------------------------------------------------- coverage (bauplan-phase2.md AP 6)
+#
+# `coverage` ist eine reine Rechnung über `ChapterVocabulary.token_count` und
+# `VocabularyEntry.status` (E5, bauplan-phase2.md Abschnitt 1) — kein Datenbank- und kein
+# Modellzugriff. Die Vorrichtung unten baut `ChapterVocabulary` deshalb von Hand aus
+# Datenklassen zusammen, ohne `run_chapter`, `dictionary` oder `profile` aufzurufen: Es gibt
+# nichts, worauf `coverage` zugreifen könnte, selbst wenn es wollte — `coverage` nimmt
+# weder ein `sqlite3.Connection` noch eine Modell-URL entgegen (dokumentation.md §5, „Woran
+# geprüft wird": eine bei Zugriff abbrechende Attrappe wäre hier der billigere, nicht
+# nötige Weg).
+
+_COVERAGE_BOOK = Book(title="Abdeckungstestbuch", author="Test Autorin")
+_COVERAGE_CHAPTER = Chapter(book=_COVERAGE_BOOK, number=1, title="Testkapitel", text="")
+
+
+def _coverage_entry(
+    lemma_text: str,
+    *,
+    pos: str = "NOUN",
+    frequency: int,
+    proper_noun_frequency: int = 0,
+    statuses: list[profile.VocabularyStatus],
+) -> pipeline.VocabularyEntry:
+    """Baut einen `VocabularyEntry` mit `len(statuses)` Kandidaten, je einer Bedeutung ein
+    eigener `Sense` derselben Grundform — nur die Kombination der Status zählt für
+    `coverage`, nicht die genauen Bedeutungstexte."""
+    occurrence = Occurrence(
+        book=_COVERAGE_BOOK,
+        chapter_number=1,
+        lemma=Lemma(text=lemma_text, pos=pos),
+        word_form=lemma_text,
+        example_sentence=f"Ein Beispielsatz mit {lemma_text}.",
+        frequency=frequency,
+        proper_noun_frequency=proper_noun_frequency,
+    )
+    candidates = [
+        Sense(lemma=occurrence.lemma, wikdict_sense=f"{lemma_text} Bedeutung {index}")
+        for index in range(len(statuses))
+    ]
+    return pipeline.VocabularyEntry(
+        occurrence=occurrence,
+        candidates=candidates,
+        status=dict(zip(candidates, statuses, strict=True)),
+    )
+
+
+def _mini_chapter_vocabulary() -> pipeline.ChapterVocabulary:
+    """Das handgerechnete Mini-Kapitel aus dem Auftrag zu AP 6: alle drei Fälle aus E5
+    (bekannt, teilweise bekannt, unbekannt), dazu Funktionswörter und ein Eigenname — siehe
+    die Rechnung in `test_coverage_matches_the_hand_calculated_mini_chapter`."""
+    entries = [
+        # bekannt: „cat" — die einzige Bedeutung ist KNOWN.
+        _coverage_entry("cat", frequency=3, statuses=[profile.VocabularyStatus.KNOWN]),
+        # teilweise bekannt: „bank" trägt hier **nur** NEW_MEANING_OF_KNOWN_WORD, kein
+        # einziges KNOWN — E5 Festlegung 2 verlangt trotzdem „verstanden", weil schon eine
+        # andere Bedeutung derselben Grundform bekannt ist.
+        _coverage_entry(
+            "bank", frequency=2, statuses=[profile.VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD]
+        ),
+        # unbekannt: „xylophone" — keine Bedeutung bekannt.
+        _coverage_entry("xylophone", frequency=4, statuses=[profile.VocabularyStatus.UNKNOWN]),
+        # unbekannt, mit Eigennamenanteil: „doctor" kommt einmal gewöhnlich vor (unbekannt)
+        # und zweimal als Teil eines Namens („Doctor Watson") — die beiden eigennamigen
+        # Vorkommen bleiben nach E5 Festlegung 1 verstanden, unabhängig vom Kenntnisstand
+        # der gewöhnlichen Bedeutung.
+        _coverage_entry(
+            "doctor",
+            frequency=1,
+            proper_noun_frequency=2,
+            statuses=[profile.VocabularyStatus.UNKNOWN],
+        ),
+    ]
+    # 10 Funktionswörter (the, a, and, of, in, to, …) — kein eigener Occurrence-Eintrag
+    # (Regel: nur die fünf Inhaltswortarten kommen in `extract_vocabulary`s Wortliste,
+    # technik.md §5), zählen aber zu `token_count` und bleiben nach E5 Festlegung 1
+    # automatisch verstanden.
+    function_word_tokens = 10
+    token_count = sum(e.occurrence.frequency + e.occurrence.proper_noun_frequency for e in entries)
+    token_count += function_word_tokens
+    return pipeline.ChapterVocabulary(
+        chapter=_COVERAGE_CHAPTER,
+        notice=None,
+        entries=entries,
+        expressions=[],
+        token_count=token_count,
+    )
+
+
+def test_coverage_matches_the_hand_calculated_mini_chapter() -> None:
+    """bauplan-phase2.md AP 6, Prüfung „Handgerechnetes Mini-Kapitel".
+
+    Rechnung (siehe `_mini_chapter_vocabulary`):
+        token_count = (3+0) [cat] + (2+0) [bank] + (4+0) [xylophone] + (1+2) [doctor]
+                       + 10 [Funktionswörter]
+                     = 3 + 2 + 4 + 3 + 10 = 22
+        understood_tokens = token_count - frequency(xylophone) - frequency(doctor)
+                           = 22 - 4 - 1 = 17
+            („cat" und „bank" bleiben unangetastet: beide verstanden — „bank" trotz
+            ausschließlich NEW_MEANING_OF_KNOWN_WORD, E5 Festlegung 2. Die zwei
+            eigennamigen „doctor"-Vorkommen zählen mit, nur das eine gewöhnliche nicht,
+            E5 Festlegung 1.)
+        unknown_lemma_count = 2  (xylophone, doctor)
+        share = 17 / 22
+    """
+    vocabulary = _mini_chapter_vocabulary()
+
+    result = pipeline.coverage(vocabulary)
+
+    assert result.token_count == 22
+    assert result.understood_tokens == 17
+    assert result.unknown_lemma_count == 2
+    assert result.share == pytest.approx(17 / 22)
+    # Ohne `learned` (Vorgabe `()`) ändert sich nichts gegenüber `share`.
+    assert result.share_after_learning == pytest.approx(17 / 22)
+
+
+def test_coverage_share_after_learning_adds_back_only_the_learned_lemma() -> None:
+    """E5 Festlegung 3: „Lerne diese N" sind die in diesem Durchgang auf `learning`
+    gebuchten Grundformen — `share_after_learning` zeigt die Abdeckung, als wäre
+    „xylophone" bereits gelernt.
+
+    Rechnung: understood_after_learning = understood_tokens(17) + frequency(xylophone)(4)
+    = 21, share_after_learning = 21 / 22. Eine zweite, im Kapitel gar nicht vorkommende
+    Grundform in `learned` (hier „submarine") bleibt wirkungslos — es gibt keinen Eintrag,
+    dessen Abzug sie rückgängig machen könnte."""
+    vocabulary = _mini_chapter_vocabulary()
+
+    result = pipeline.coverage(
+        vocabulary,
+        learned=[Lemma(text="xylophone", pos="NOUN"), Lemma(text="submarine", pos="NOUN")],
+    )
+
+    assert result.understood_tokens == 17  # unverändert: "jetzt", vor dem Lernen
+    assert result.unknown_lemma_count == 2  # unverändert: zählt den Stand vor dem Lernen
+    assert result.share_after_learning == pytest.approx(21 / 22)
+
+
+def test_coverage_of_a_chapter_without_a_single_alphabetic_token_is_fully_understood() -> None:
+    """Randfall: `token_count == 0` (ein Kapitel ganz ohne alphabetisches Token) teilte
+    sonst durch null. Hier gibt es nichts zu verstehen, also gilt beides als vollständig
+    verstanden (`1.0`) statt undefiniert."""
+    vocabulary = pipeline.ChapterVocabulary(
+        chapter=_COVERAGE_CHAPTER, notice=None, entries=[], expressions=[], token_count=0
+    )
+
+    result = pipeline.coverage(vocabulary)
+
+    assert result.token_count == 0
+    assert result.understood_tokens == 0
+    assert result.unknown_lemma_count == 0
+    assert result.share == 1.0
+    assert result.share_after_learning == 1.0

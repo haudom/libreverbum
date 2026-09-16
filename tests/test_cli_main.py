@@ -1567,8 +1567,11 @@ def test_resolve_progress_announcement_is_never_longer_than_the_shortest_count_l
 
 
 def _stub_vocabulary() -> pipeline.ChapterVocabulary:
+    # token_count=0 (bauplan-phase2.md AP 6): Diese Attrappe prüft nur den
+    # Fortschrittsablauf der Kommandozeile, nicht die Abdeckung — der Wert ist hier
+    # gleichgültig.
     return pipeline.ChapterVocabulary(
-        chapter=_STUB_CHAPTER, notice=None, entries=[], expressions=[]
+        chapter=_STUB_CHAPTER, notice=None, entries=[], expressions=[], token_count=0
     )
 
 

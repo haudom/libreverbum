@@ -72,7 +72,7 @@ def test_rule_2_saw_as_verb_becomes_the_lemma_see_not_the_tool(nlp: Language) ->
     *see*, nicht *saw* — Lemmatisierung vor dem Nachschlagen (technik.md, „Warum die
     Reihenfolge zwingend ist")."""
     chapter = make_chapter("He saw her yesterday.")
-    occurrences = extract_vocabulary(chapter, nlp)
+    occurrences = extract_vocabulary(chapter, nlp).occurrences
 
     see = find(occurrences, "see", "VERB")
     assert see.frequency == 1
@@ -85,7 +85,7 @@ def test_rule_2_saw_as_noun_stays_the_tool(nlp: Language) -> None:
     die Wortart hier NOUN und nicht VERB ist — die Wortart entscheidet, nicht die
     Wortform allein."""
     chapter = make_chapter("He cut the plank in half with a rusty saw.")
-    occurrences = extract_vocabulary(chapter, nlp)
+    occurrences = extract_vocabulary(chapter, nlp).occurrences
 
     saw = find(occurrences, "saw", "NOUN")
     assert saw.frequency == 1
@@ -115,7 +115,7 @@ def test_rule_12_red_stays_a_learning_word_despite_appearing_in_a_proper_name(
     chapter = make_chapter(
         "Mr. Red walked down the street with his dog. She painted the old fence a bright red."
     )
-    occurrences = extract_vocabulary(chapter, nlp)
+    occurrences = extract_vocabulary(chapter, nlp).occurrences
 
     red = find(occurrences, "red")
     # (mittel 1, Abnahme T17, 26.08.2026): frequency zählt nur das eine nicht-eigennamige
@@ -132,7 +132,7 @@ def test_rule_12_a_name_that_never_occurs_as_an_ordinary_word_is_not_extracted(
     vorkommt, wird gar nicht erst als Grundform geliefert — keine Figurennamen als
     Lernvokabeln."""
     chapter = make_chapter("Sherlock arrived at noon.")
-    occurrences = extract_vocabulary(chapter, nlp)
+    occurrences = extract_vocabulary(chapter, nlp).occurrences
 
     # (Befund 4, Review Runde 1): Grundformen werden kleingeschrieben (Regel 12), eine
     # großgeschriebene Grundform ist unerreichbar — das prüft stattdessen word_form, das
@@ -158,7 +158,7 @@ def test_rule_12_proper_noun_ratio_excludes_the_title_character_but_keeps_an_add
 
     reference_16 = next(c for c in structure.chapters if c.number == 16)
     chapter_16 = epub.read_chapter(path, structure.book, reference_16)
-    occurrences_16 = extract_vocabulary(chapter_16, nlp)
+    occurrences_16 = extract_vocabulary(chapter_16, nlp).occurrences
     assert not has_lemma(occurrences_16, "dorian")
 
     # Gegenprobe im selben Buch: „lady" in Kapitel 17 hat einen Anteil von 0,80 (24 von
@@ -166,7 +166,7 @@ def test_rule_12_proper_noun_ratio_excludes_the_title_character_but_keeps_an_add
     # Lernvokabel, weil 0,80 unter der Schwelle von 0,90 liegt.
     reference_17 = next(c for c in structure.chapters if c.number == 17)
     chapter_17 = epub.read_chapter(path, structure.book, reference_17)
-    occurrences_17 = extract_vocabulary(chapter_17, nlp)
+    occurrences_17 = extract_vocabulary(chapter_17, nlp).occurrences
     lady = find(occurrences_17, "lady")
     # (mittel 1, Abnahme T17, 26.08.2026): frequency zählt nur die 6 nicht-eigennamigen
     # Vorkommen, proper_noun_frequency die 24 eigennamigen („Lady Narborough") — vor der
@@ -201,14 +201,14 @@ def test_rule_12_book_wide_ratio_excludes_sibyl_in_chapter_10_but_keeps_an_addre
     ratios = book_proper_noun_ratios(chapters, nlp)
 
     chapter_10 = next(c for c in chapters if c.number == 10)
-    occurrences_10 = extract_vocabulary(chapter_10, nlp, book_proper_noun_ratios=ratios)
+    occurrences_10 = extract_vocabulary(chapter_10, nlp, book_proper_noun_ratios=ratios).occurrences
     assert not has_lemma(occurrences_10, "sibyl")
 
     # Gegenprobe im selben Buch, mit denselben buchweiten Werten angewendet: „lady" in
     # Kapitel 17 bleibt Lernvokabel — ihr buchweiter Anteil (60/74 = 0,81) liegt wie ihr
     # Anteil je Kapitel unter der Schwelle von 0,90.
     chapter_17 = next(c for c in chapters if c.number == 17)
-    occurrences_17 = extract_vocabulary(chapter_17, nlp, book_proper_noun_ratios=ratios)
+    occurrences_17 = extract_vocabulary(chapter_17, nlp, book_proper_noun_ratios=ratios).occurrences
     lady = find(occurrences_17, "lady")
     # Dieselben Kapitel-17-Zählungen wie im ersten Test oben — die buchweite statt der
     # kapitelweiten Ratio entscheidet nur über Aufnahme oder Ausschluss der Grundform,
@@ -245,6 +245,58 @@ def test_book_proper_noun_ratios_reports_progress_once_per_chapter_with_a_fixed_
     assert all(total == len(chapters) for _, total in reports)
 
 
+# ----------------------------------------------------------- token_count (bauplan-phase2.md AP 6)
+
+
+def test_token_count_counts_every_alphabetic_token_not_just_the_extracted_occurrences(
+    nlp: Language,
+) -> None:
+    """bauplan-phase2.md AP 6, E5 Festlegung 1: `token_count` zählt jedes alphabetische
+    Token des Kapitels (`token.is_alpha`), auch Funktionswörter und ganz eigennamige
+    Grundformen, die `occurrences` gar nicht führt.
+
+    Von Hand nachgerechnet an „Sherlock arrived at noon.": vier alphabetische Token
+    (Sherlock, arrived, at, noon — der Punkt zählt nicht, `token.is_alpha` ist dafür
+    `False`), aber nur zwei Occurrence-Einträge: „Sherlock" ist ganz eigennamig und fällt
+    nach Regel 12 komplett weg (siehe
+    `test_rule_12_a_name_that_never_occurs_as_an_ordinary_word_is_not_extracted` oben),
+    „at" ist ADP und damit kein Inhaltswort (`_CONTENT_POS`) — bleiben „arrive" (VERB) und
+    „noon" (NOUN), je Häufigkeit 1."""
+    chapter = make_chapter("Sherlock arrived at noon.")
+
+    result = extract_vocabulary(chapter, nlp)
+
+    assert result.token_count == 4
+    assert len(result.occurrences) == 2
+    assert sum(o.frequency for o in result.occurrences) == 2
+
+
+@pytest.mark.needs_epub
+def test_token_count_is_at_least_the_summed_frequency_of_a_real_chapter(
+    nlp: Language, real_epub_paths: dict[str, Path]
+) -> None:
+    """bauplan-phase2.md AP 6, Prüfung gegen das echte Gegenüber: An `tools/sherlock.epub`
+    Kapitel 2 gilt `sum(frequency) <= token_count` (E5 Festlegung 1) — der Nenner zählt
+    jedes alphabetische Token, `frequency` je Grundform nur deren nicht-eigennamige
+    Vorkommen. Funktionswörter, ganz eigennamige Grundformen und jedes eigennamige
+    Vorkommen bleiben in der Summe der `frequency`-Werte unberücksichtigt, tragen aber zu
+    `token_count` bei — die Ungleichung kann deshalb nie in die andere Richtung kippen.
+    Die konkrete Zahl steht mit Rezept im Bericht (dokumentation.md §5, „Wer eine Zahl …
+    schreibt das Rezept daneben").
+
+    Verfälschungsprobe (bauplan-phase2.md AP 6): Nenner und Zähler vertauscht — assert
+    result.token_count <= total_frequency — wird an diesem echten Kapitel rot, siehe
+    Bericht."""
+    structure = epub.read_structure(real_epub_paths["sherlock"])
+    reference = structure.chapters[1]  # Kapitel 2, "A Scandal in Bohemia"
+    chapter = epub.read_chapter(real_epub_paths["sherlock"], structure.book, reference)
+
+    result = extract_vocabulary(chapter, nlp)
+
+    total_frequency = sum(occurrence.frequency for occurrence in result.occurrences)
+    assert total_frequency <= result.token_count
+
+
 def test_mittel_1_frequency_excludes_proper_noun_occurrences_and_reorders_the_ranking(
     nlp: Language,
 ) -> None:
@@ -263,7 +315,7 @@ def test_mittel_1_frequency_excludes_proper_noun_occurrences_and_reorders_the_ra
         "A long shadow fell across the garden. Another shadow moved past the window. "
         "The shadow vanished into the dusk."
     )
-    occurrences = extract_vocabulary(chapter, nlp)
+    occurrences = extract_vocabulary(chapter, nlp).occurrences
 
     count = find(occurrences, "count", "VERB")
     assert count.frequency == 1
@@ -290,7 +342,7 @@ def test_auxiliary_modal_and_gerund_forms_are_not_extracted(nlp: Language) -> No
     chapter = make_chapter(
         "He could not believe his eyes. Having finished the letter, she sealed the envelope."
     )
-    occurrences = extract_vocabulary(chapter, nlp)
+    occurrences = extract_vocabulary(chapter, nlp).occurrences
 
     assert not has_lemma(occurrences, "could")
     assert not has_lemma(occurrences, "having")
@@ -304,7 +356,7 @@ def test_having_as_a_main_verb_is_still_extracted(nlp: Language) -> None:
     spaCy die Wortart VERB statt AUX und bleibt deshalb erhalten — der Filter trifft
     die Wortart, nicht die Wortform."""
     chapter = make_chapter("She has been having a hard time lately.")
-    occurrences = extract_vocabulary(chapter, nlp)
+    occurrences = extract_vocabulary(chapter, nlp).occurrences
 
     have = find(occurrences, "have", "VERB")
     assert have.word_form == "having"
@@ -316,7 +368,7 @@ def test_only_content_words_are_extracted_function_words_are_filtered_out(nlp: L
     Satz stehen — die Inhaltswörter desselben Satzes stehen dagegen alle drin. Ein Test,
     der nur die Abwesenheit prüfte, wäre auch bei einer leeren Liste grün."""
     chapter = make_chapter("The dog was quickly chased by his loyal friend.")
-    occurrences = extract_vocabulary(chapter, nlp)
+    occurrences = extract_vocabulary(chapter, nlp).occurrences
 
     assert not has_lemma(occurrences, "the")
     assert not has_lemma(occurrences, "be")
@@ -340,7 +392,7 @@ def test_pos_resolution_more_frequent_pos_wins(nlp: Language) -> None:
     chapter = make_chapter(
         "She bought a new watch. He wore his watch every day. They needed to watch the news."
     )
-    occurrences = extract_vocabulary(chapter, nlp)
+    occurrences = extract_vocabulary(chapter, nlp).occurrences
 
     watch = find(occurrences, "watch", "NOUN")
     assert watch.word_form == "watch"
@@ -351,7 +403,7 @@ def test_pos_resolution_tie_is_broken_by_first_seen_pos(nlp: Language) -> None:
     """Moduldocstring, Abschnitt „Regeln", Gleichstand: je ein VERB- und ein
     NOUN-Vorkommen von `watch` — die zuerst gesehene Wortart gewinnt, hier VERB."""
     chapter = make_chapter("They wanted to watch the game. He checked his watch.")
-    occurrences = extract_vocabulary(chapter, nlp)
+    occurrences = extract_vocabulary(chapter, nlp).occurrences
 
     watch = find(occurrences, "watch", "VERB")
     assert watch.word_form == "watch"
@@ -366,7 +418,7 @@ def test_representative_word_form_and_sentence_match_the_chosen_pos(nlp: Languag
     chapter = make_chapter(
         "He checked his watch. Then he watched the door. Later he watched the clock."
     )
-    occurrences = extract_vocabulary(chapter, nlp)
+    occurrences = extract_vocabulary(chapter, nlp).occurrences
 
     watch = find(occurrences, "watch", "VERB")
     assert watch.word_form == "watched"
@@ -385,7 +437,7 @@ def test_expression_free_occurrence_is_preferred_for_the_example_sentence(nlp: L
     chapter = make_chapter(
         "She had taken part in the play. Yesterday she decided to take a long walk."
     )
-    occurrences = extract_vocabulary(chapter, nlp)
+    occurrences = extract_vocabulary(chapter, nlp).occurrences
 
     take = find(occurrences, "take", "VERB")
     assert take.word_form == "take"
@@ -399,7 +451,7 @@ def test_falls_back_to_a_wendung_occurrence_when_none_is_free(nlp: Language) -> 
     chapter = make_chapter(
         "She had taken part in the play. Then she quickly took heart and continued."
     )
-    occurrences = extract_vocabulary(chapter, nlp)
+    occurrences = extract_vocabulary(chapter, nlp).occurrences
 
     take = find(occurrences, "take", "VERB")
     assert take.word_form == "taken"
@@ -412,7 +464,7 @@ def test_running_late_keeps_its_belegsatz(nlp: Language) -> None:
     die advmod-Regel auch hier zu und risse den bislang richtigen Belegsatz aus
     `test_inflected_forms_are_merged_into_one_entry_with_combined_frequency` mit."""
     chapter = make_chapter("She was running late. He runs every morning.")
-    occurrences = extract_vocabulary(chapter, nlp)
+    occurrences = extract_vocabulary(chapter, nlp).occurrences
 
     run = find(occurrences, "run", "VERB")
     assert run.word_form == "running"
@@ -431,7 +483,7 @@ def test_preposition_with_a_bare_pronoun_object_counts_as_an_expression(nlp: Lan
         "A dim sense of the danger came to him once or twice. "
         "Yesterday she decided to come early instead."
     )
-    occurrences = extract_vocabulary(chapter, nlp)
+    occurrences = extract_vocabulary(chapter, nlp).occurrences
 
     come = find(occurrences, "come", "VERB")
     assert come.example_sentence == "Yesterday she decided to come early instead."
@@ -446,7 +498,7 @@ def test_preposition_with_a_real_noun_object_is_not_mistaken_for_an_expression(
     zweites das freie — die Wahl muss also tatsächlich unterscheiden, nicht einfach das
     erste Vorkommen nehmen."""
     chapter = make_chapter("He went into it. He also went into the library.")
-    occurrences = extract_vocabulary(chapter, nlp)
+    occurrences = extract_vocabulary(chapter, nlp).occurrences
 
     go = find(occurrences, "go", "VERB")
     assert go.example_sentence == "He also went into the library."
@@ -459,7 +511,7 @@ def test_looked_at_him_is_an_expression_but_looked_at_the_painting_is_not(nlp: L
     chapter = make_chapter(
         "Dorian looked at him for a moment. Later she looked at the old painting."
     )
-    occurrences = extract_vocabulary(chapter, nlp)
+    occurrences = extract_vocabulary(chapter, nlp).occurrences
 
     look = find(occurrences, "look", "VERB")
     assert look.example_sentence == "Later she looked at the old painting."
@@ -474,7 +526,7 @@ def test_inflected_forms_are_merged_into_one_entry_with_combined_frequency(nlp: 
     chapter = make_chapter(
         "She was running late. He runs every morning. They ran together yesterday."
     )
-    occurrences = extract_vocabulary(chapter, nlp)
+    occurrences = extract_vocabulary(chapter, nlp).occurrences
 
     run = find(occurrences, "run", "VERB")
     assert run.frequency == 3
@@ -486,7 +538,7 @@ def test_frequency_and_example_sentence_are_scoped_to_the_given_chapter(nlp: Lan
     """Häufigkeit und Belegsatz gehören zum übergebenen Kapitel — `book` und
     `chapter_number` auf dem `Occurrence` stammen aus dem `Chapter`-Argument."""
     chapter = make_chapter("The dog barked twice. The dog ran across the street.", number=3)
-    occurrences = extract_vocabulary(chapter, nlp)
+    occurrences = extract_vocabulary(chapter, nlp).occurrences
 
     dog = find(occurrences, "dog", "NOUN")
     assert dog.frequency == 2
@@ -508,7 +560,7 @@ def test_acceptance_2_inflections_merged_and_no_proper_names_as_learning_words(
         "Sherlock walked through London. "
         "He was walking for an hour before he finally stopped walking."
     )
-    occurrences = extract_vocabulary(chapter, nlp)
+    occurrences = extract_vocabulary(chapter, nlp).occurrences
 
     walk = find(occurrences, "walk", "VERB")
     assert walk.frequency == 3
@@ -560,7 +612,7 @@ def test_particle_verb_extraction_finds_the_separated_case_that_the_filtered_wor
     bemerken; deshalb prüft dieser Test beides gemeinsam."""
     chapter = make_chapter("He gave the idea up.")
 
-    vocabulary = extract_vocabulary(chapter, nlp)
+    vocabulary = extract_vocabulary(chapter, nlp).occurrences
     assert not has_word_form(vocabulary, "up"), (
         "Testvoraussetzung verletzt: „up“ dürfte nicht in der gefilterten Wortliste stehen"
     )

@@ -57,6 +57,10 @@ T15) und dem Kenntnisstand jeder einzelnen Bedeutung darin
 `expressions`: dieselbe Bauart für die Mehrwortausdruck-Kandidaten aus T4
 (`extraction.extract_particle_verb_candidates`, `extract_contiguous_candidates`),
 abgeglichen über `dictionary.particle_verb_candidates` und `contiguous_candidates` (T7).
+Dazu, seit bauplan-phase2.md AP 6, `token_count` — jedes alphabetische Token des Kapitels,
+aus `extraction.extract_vocabulary` mitgezählt (`ChapterVocabulary.token_count`) —, dazu
+die reine Rechnung `coverage`, die daraus und aus `entries` die Abdeckung des Kapitels
+bestimmt (E5, bauplan-phase2.md).
 
 Beide Felder stehen **nebeneinander**, nicht zu einer gemeinsamen Liste zusammengeführt
 (Befund 1, Review T15): Wie eine Wendung und die Einzelwörter, aus denen sie besteht, bei
@@ -157,7 +161,7 @@ from libreverbum.profile import VocabularyStatus
 
 if TYPE_CHECKING:
     import sqlite3
-    from collections.abc import Callable, Mapping, Sequence
+    from collections.abc import Callable, Collection, Mapping, Sequence
     from datetime import datetime
 
     from spacy.language import Language
@@ -196,12 +200,20 @@ class ChapterVocabulary:
     n-Gramm-Weg ohne bestandenen Filter erscheint hier nicht, wie `dictionary.
     contiguous_candidates` es für ihn selbst schon vorsieht (`dictionary.py`, „Liefert").
     `entries` und `expressions` stehen **nebeneinander**, nicht zu einer gemeinsamen Liste
-    zusammengeführt — siehe Moduldocstring, Abschnitt „Liefert"."""
+    zusammengeführt — siehe Moduldocstring, Abschnitt „Liefert".
+
+    `token_count` (bauplan-phase2.md AP 6): jedes alphabetische Token des Kapitels, aus
+    `extraction.extract_vocabulary` mitgezählt (`extraction.VocabularyExtraction.
+    token_count`) — Nenner für `coverage`. Größer als jede Summe aus `entries`, weil
+    Funktionswörter und ganz eigennamige Grundformen dort gar nicht erst als eigener
+    Eintrag erscheinen (siehe deren Docstrings), für die Abdeckung nach E5 aber als
+    verstanden zählen."""
 
     chapter: Chapter
     notice: str | None
     entries: list[VocabularyEntry]
     expressions: list[VocabularyEntry]
+    token_count: int
 
 
 def _drop_prefix_dominated_expressions(
@@ -582,9 +594,10 @@ def run_chapter(
 
     if on_progress is not None:
         on_progress(ChapterProgress(stage=ChapterStage.EXTRACTING_VOCABULARY, done=0, total=0))
-    occurrences = extraction.extract_vocabulary(
+    extraction_result = extraction.extract_vocabulary(
         chapter, nlp, book_proper_noun_ratios=book_proper_noun_ratios
     )
+    occurrences = extraction_result.occurrences
 
     if on_progress is not None:
         on_progress(ChapterProgress(stage=ChapterStage.LOOKING_UP_DICTIONARY, done=0, total=0))
@@ -687,7 +700,110 @@ def run_chapter(
     ]
 
     return ChapterVocabulary(
-        chapter=chapter, notice=structure.notice, entries=entries, expressions=expressions
+        chapter=chapter,
+        notice=structure.notice,
+        entries=entries,
+        expressions=expressions,
+        token_count=extraction_result.token_count,
+    )
+
+
+# REGEL (bauplan-phase2.md E5, Festlegung 2): Ein Einzelwort-Vorkommen gilt für die
+# Abdeckung als verstanden, sobald mindestens eine seiner Bedeutungen `known` ODER
+# `new_meaning_of_known_word` ist — die teilweise bekannten Einträge zählen ausdrücklich
+# mit, weil die genaue, im Belegsatz gemeinte Bedeutung aufzulösen einen Modellaufruf je
+# Grundform kostete (technik.md §3, „Bündeln lohnt nicht — eine Anfrage je Wort") und für
+# eine Anzeige nicht vertretbar ist.
+_UNDERSTOOD_VOCABULARY_STATUSES = frozenset(
+    {VocabularyStatus.KNOWN, VocabularyStatus.NEW_MEANING_OF_KNOWN_WORD}
+)
+
+
+@dataclass(frozen=True)
+class Coverage:
+    """Ergebnis von `coverage` (bauplan-phase2.md AP 6, E5) — Form fest laut Auftrag: wie
+    viel von einem Kapitel der Nutzer bereits versteht, jetzt und nach dem Lernen der in
+    diesem Durchgang auf `learning` gebuchten Grundformen („Lerne diese 34 Wörter und du
+    verstehst 97 % von Kapitel 3.").
+
+    `token_count`: alle alphabetischen Wortformen des Kapitels
+    (`ChapterVocabulary.token_count`, E5 Festlegung 1). `understood_tokens`: davon bereits
+    verstanden — Funktionswörter, ganz eigennamige Grundformen und jedes eigennamige
+    Vorkommen zählen automatisch dazu, weil sie in `ChapterVocabulary.entries` gar nicht
+    erst als Kandidat erscheinen oder, bei einem teilweise eigennamigen Vorkommen, nur mit
+    ihrem eigennamigen Anteil (`Occurrence.proper_noun_frequency`) — ein
+    Einzelwort-Vorkommen zusätzlich, sobald es nach `_UNDERSTOOD_VOCABULARY_STATUSES` als
+    verstanden gilt (E5 Festlegung 2). `unknown_lemma_count`: wie viele Grundformen aus
+    `entries` dabei **nicht** verstanden sind — anders als `token_count -
+    understood_tokens`, das eine Häufigkeit zählt, keine Grundformenzahl. `share`:
+    `understood_tokens / token_count`. `share_after_learning`: dieselbe Rechnung, nachdem
+    jede in `learned` enthaltene, bisher nicht verstandene Grundform zusätzlich als
+    verstanden gälte (E5 Festlegung 3)."""
+
+    token_count: int
+    understood_tokens: int
+    unknown_lemma_count: int
+    share: float
+    share_after_learning: float
+
+
+def coverage(vocabulary: ChapterVocabulary, learned: Collection[Lemma] = ()) -> Coverage:
+    """Abdeckung eines Kapitels (bauplan-phase2.md AP 6, E5) — eine reine Rechnung über
+    `ChapterVocabulary.token_count` und `VocabularyEntry.status`: kein Datenbank- und kein
+    Modellzugriff, `vocabulary` und `learned` sind alles, was hereinkommt.
+
+    Die Rechnung geht von „alles verstanden" aus (`understood_tokens = token_count`) und
+    zieht nur ab, was `vocabulary.entries` als nicht verstanden ausweist — Funktionswörter
+    und ganz eigennamige Grundformen erscheinen dort nach `extraction.extract_vocabulary`
+    gar nicht erst (siehe deren Docstrings) und bleiben deshalb automatisch verstanden, wie
+    E5 Festlegung 1 es verlangt („Funktionswörter und Eigennamen zählen als verstanden").
+    Für einen **nicht** verstandenen Eintrag zieht nur `occurrence.frequency` ab — die
+    nicht-eigennamigen Vorkommen dieser Grundform in diesem Kapitel;
+    `occurrence.proper_noun_frequency` bleibt unangetastet und damit immer verstanden,
+    unabhängig vom Kenntnisstand der gewöhnlichen Bedeutung desselben Lemmas (E5
+    Festlegung 1). `vocabulary.expressions` fließt nicht ein: Ihre Tokens stecken bereits
+    in `token_count` und, soweit ein Wendungsbestandteil auch ein eigenes
+    Einzelwort-Vorkommen ist, schon in `entries` — ein zweiter Abzug zählte dieselben
+    Tokens doppelt.
+
+    `learned` (E5 Festlegung 3): die im laufenden Durchgang auf `learning` gebuchten
+    Grundformen. Für `share_after_learning` gilt zusätzlich jeder nicht verstandene
+    Eintrag als verstanden, dessen `occurrence.lemma` in `learned` steht — eine Grundform,
+    die im Kapitel gar nicht vorkommt, bleibt wirkungslos, es gibt keinen Eintrag, dessen
+    Abzug sie rückgängig machen könnte.
+
+    Ein Kapitel ganz ohne alphabetisches Token (`token_count == 0`) lieferte für `share`
+    und `share_after_learning` sonst eine Division durch null; hier gibt es nichts zu
+    verstehen, also gilt beides als vollständig verstanden (`1.0`), statt undefiniert zu
+    bleiben."""
+    token_count = vocabulary.token_count
+    if token_count == 0:
+        return Coverage(
+            token_count=0,
+            understood_tokens=0,
+            unknown_lemma_count=0,
+            share=1.0,
+            share_after_learning=1.0,
+        )
+
+    understood_tokens = token_count
+    understood_after_learning = token_count
+    unknown_lemma_count = 0
+    for entry in vocabulary.entries:
+        if any(status in _UNDERSTOOD_VOCABULARY_STATUSES for status in entry.status.values()):
+            continue
+        understood_tokens -= entry.occurrence.frequency
+        understood_after_learning -= entry.occurrence.frequency
+        unknown_lemma_count += 1
+        if entry.occurrence.lemma in learned:
+            understood_after_learning += entry.occurrence.frequency
+
+    return Coverage(
+        token_count=token_count,
+        understood_tokens=understood_tokens,
+        unknown_lemma_count=unknown_lemma_count,
+        share=understood_tokens / token_count,
+        share_after_learning=understood_after_learning / token_count,
     )
 
 

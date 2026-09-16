@@ -20,8 +20,10 @@ Review T4) statt den `saw`-Fall still zu wiederholen.
 
 Liefert
 -------
-Ein `Occurrence` je Kapitel und Grundform: Beugungsformen sind zusammengefasst
-(Abnahmekriterium 2), Häufigkeit und Anteil Eigenname stehen dabei, dazu ein Belegsatz.
+`extract_vocabulary` liefert `VocabularyExtraction`: ein `Occurrence` je Kapitel und
+Grundform — Beugungsformen sind zusammengefasst (Abnahmekriterium 2), Häufigkeit und
+Anteil Eigenname stehen dabei, dazu ein Belegsatz —, daneben `token_count` (jedes
+alphabetische Token des Kapitels, bauplan-phase2.md AP 6, Nenner für `pipeline.coverage`).
 Im Wörterbuch wird hier **nicht** nachgeschlagen — das tut `dictionary`.
 
 Daneben, für bauplan.md T4, zwei getrennte Funktionen statt einer gemeinsamen — sie
@@ -71,6 +73,7 @@ from __future__ import annotations
 
 import collections
 import re
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, NamedTuple
 
 from libreverbum.entities import Chapter, Lemma, Occurrence
@@ -375,14 +378,32 @@ class _CandidateOccurrence(NamedTuple):
     in_expression: bool = False
 
 
+@dataclass(frozen=True)
+class VocabularyExtraction:
+    """Rückgabe von `extract_vocabulary` (bauplan-phase2.md AP 6): `occurrences` wie vor
+    dieser Erweiterung, dazu `token_count` — jedes alphabetische Token des Kapitels
+    (`token.is_alpha`), nicht nur die in `occurrences` verbliebenen Inhaltswörter. Nenner
+    von `pipeline.coverage` (bauplan-phase2.md, E5, Festlegung 1: „alle Wortformen des
+    Kapitels, jedes alphabetische Token — nicht nur die Inhaltswörter der fünf
+    Wortarten"): Funktionswörter und ganz eigennamige Grundformen fehlen in `occurrences`
+    vollständig (siehe Moduldocstring, „Nur Inhaltswörter werden zu Kandidaten", und die
+    REGEL bei `_PROPER_NOUN_RATIO_THRESHOLD`), zählen für die Abdeckung aber als
+    verstanden — der Nenner braucht deshalb die volle Tokenzahl, nicht `len(occurrences)`
+    oder eine Summe aus deren Häufigkeiten."""
+
+    occurrences: list[Occurrence]
+    token_count: int
+
+
 def extract_vocabulary(
     chapter: Chapter, nlp: Language, *, book_proper_noun_ratios: Mapping[str, float] | None = None
-) -> list[Occurrence]:
-    """Extrahiert die Grundformen eines Kapitels (bauplan.md T3).
+) -> VocabularyExtraction:
+    """Extrahiert die Grundformen eines Kapitels (bauplan.md T3), dazu seit
+    bauplan-phase2.md AP 6 `token_count` (siehe `VocabularyExtraction`).
 
     Reihenfolge je Token: Wortart und Grundform kommen beide von spaCy, bevor dieses
     Modul irgendeine Entscheidung trifft — Nachschlagen findet an keiner Stelle statt
-    (Regel 2). Die Rückgabe ist in der Reihenfolge des ersten Vorkommens im Kapitel,
+    (Regel 2). `occurrences` ist in der Reihenfolge des ersten Vorkommens im Kapitel,
     unsortiert: Häufigkeitssortierung ist Aufgabe von `triage`, nicht von diesem Modul.
 
     `book_proper_noun_ratios` (T17-Nachbesserung, schwer 1, zweiter Anlauf, 26.08.2026):
@@ -400,12 +421,17 @@ def extract_vocabulary(
     doc = nlp(chapter.text)
 
     candidates_by_lemma: dict[str, list[_CandidateOccurrence]] = collections.defaultdict(list)
+    token_count = 0
     for sentence in doc.sents:
         sentence_text = sentence.text.strip()
         for token in sentence:
-            pos = token.pos_
             if not token.is_alpha:
                 continue
+            # (bauplan-phase2.md AP 6): zählt jedes alphabetische Token, auch die
+            # Funktionswörter und ganz eigennamigen Grundformen, die der Inhaltswortfilter
+            # unten aus candidates_by_lemma aussteuert — siehe VocabularyExtraction.
+            token_count += 1
+            pos = token.pos_
             if pos not in _CONTENT_POS and pos != _PROPER_NOUN_POS:
                 continue
             lemma_text = token.lemma_.lower()
@@ -485,7 +511,7 @@ def extract_vocabulary(
             )
         )
 
-    return occurrences
+    return VocabularyExtraction(occurrences=occurrences, token_count=token_count)
 
 
 def extract_particle_verb_candidates(chapter: Chapter, nlp: Language) -> list[Occurrence]:
