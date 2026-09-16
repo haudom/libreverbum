@@ -1244,6 +1244,32 @@ Zwei getrennte Dinge:
   ist. Eine lesbare Textausgabe stellt sicher, dass die Daten den Nutzer überdauern,
   auch wenn das Programm es nicht tut
 
+**Falle: `Connection.backup` verklemmt sich mit der eigenen Verbindung.** Trägt die
+Quellverbindung noch eine offene Transaktion, wartet `con.backup(...)` in einer
+endlosen Folge von `SQLITE_BUSY`-Wiederholungen auf eine Sperre, die nur diese eine
+Verbindung selbst hält und nie freigibt — ohne Zeitschranke, ohne Ausnahme, ohne
+Meldung (gemessen 16.09.2026: 20 s ohne jede Reaktion unter `timeout`, abgebrochen erst
+durch die Shell-Schranke aus Abschnitt 6, nicht durch die Bibliothek selbst). Dasselbe
+geschieht, wenn das Sicherungsziel auf die Quelldatei selbst zeigt — dieselbe
+Verbindung liest und schreibt dann dieselbe Datei zugleich. Eine **fremde** offene
+Transaktion auf einer zweiten Verbindung ist dagegen unkritisch (ebenfalls gemessen
+16.09.2026): Die Sicherung läuft in Millisekunden durch und enthält deren
+ungeschriebene Zeile nicht. Die Einschränkung ist nicht in der Bibliotheksdokumentation
+zu finden — wer sie nicht kennt, sucht den Stillstand als Aufhänger im Testlauf statt in
+den beiden genannten Bedingungen. `profile.backup` schließt beide Fälle seit der
+Nachbesserung von b86c554 vorab aus (`_reject_backup_target_equal_to_source`,
+`_reject_open_transaction`), statt sich auf die Disziplin des Aufrufers zu verlassen —
+`profile.dump` erhält aus demselben Anlass dieselbe Transaktions-Wache, obwohl es selbst
+nirgends committet: Ohne sie läse `dump` die ungeschriebenen Zeilen der eigenen, noch
+offenen Transaktion klaglos mit.
+
+**Die Wahl `sqlite3.Connection.backup` statt roher Dateikopie ist durch Bauart
+gehalten, nicht durch einen Test.** Eine parallele, fremde Schreibverbindung trennt
+die beiden Verfahren im Test nicht zuverlässig: Sie traf im Aufbau ebenso zufällig den
+richtigen Stand wie eine rohe Kopie es getan hätte. Ein Test, der den Unterschied
+tatsächlich erzwingt (eigener Faden, über `sqlite3`s `progress_handler` gezielt
+verlangsamt), stand am 16.09.2026 noch aus.
+
 ### Schemaversion von Anfang an
 
 SQLites `PRAGMA user_version` wird ab der ersten Fassung gesetzt und bei jeder
