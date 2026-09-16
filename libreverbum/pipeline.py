@@ -784,7 +784,14 @@ def coverage(vocabulary: ChapterVocabulary, learned: Collection[Lemma] = ()) -> 
     Ein Kapitel ganz ohne alphabetisches Token (`token_count == 0`) lieferte für `share`
     und `share_after_learning` sonst eine Division durch null; hier gibt es nichts zu
     verstehen, also gilt beides als vollständig verstanden (`1.0`), statt undefiniert zu
-    bleiben."""
+    bleiben. Über `run_chapter` ist dieser Zweig praktisch unerreichbar — `epub.
+    read_chapter` bricht für ein solches Kapitel vorher mit `ChapterWithoutTextError` ab.
+
+    Vorbehalt für bauplan-phase2.md AP 7 (Durchsicht 3e71fb8, Commit 3): Ein künftiges
+    `assess_book`, das `share` je Kapitel zu einem Buchwert aggregiert, muss dieses
+    `share == 1.0` eines leeren Kapitels berücksichtigen — ungewichtet gemittelt zöge es
+    den Buchwert nach oben, mit `token_count` als Gewicht (Gewicht 0) bliebe es
+    wirkungslos."""
     token_count = vocabulary.token_count
     if token_count == 0:
         return Coverage(

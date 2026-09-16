@@ -433,6 +433,18 @@ def extract_vocabulary(
             # (bauplan-phase2.md AP 6): zählt jedes alphabetische Token, auch die
             # Funktionswörter und ganz eigennamigen Grundformen, die der Inhaltswortfilter
             # unten aus candidates_by_lemma aussteuert — siehe VocabularyExtraction.
+            #
+            # (Durchsicht 3e71fb8, Commit 3): token.is_alpha trifft E5s Begründung
+            # ("entspricht dem, was der Leser auf der Seite erlebt") an echtem Text bis
+            # auf rund ein halbes Prozent — selbst nachgemessen an tools/sherlock.epub
+            # Kapitel 2: token_count = 8579 gegen 8542 spaCy-unabhängig gezählte
+            # "Leserwörter" (Buchstabenfolgen mit Bindestrich-/Apostroph-Erweiterung),
+            # +0,43 %, aus zwei sich teilweise aufhebenden Ursachen. Doppelt gezählt:
+            # Bindestrichwörter (`bell-pull`, `Saxe-Meningen`) — spaCy trennt sie in
+            # mehrere Token, ein Leser liest ein Wort. Gar nicht gezählt: Token mit
+            # Buchstaben, aber `is_alpha` falsch — Klitika (`'s`, `n't`, unschädlich, sie
+            # gehören zum Nachbartoken) und echte Ausfälle wie Abkürzungen mit Punkt
+            # (`Mr.`, `St.`) und `o'clock`. Ziffern zählen nie.
             token_count += 1
             pos = token.pos_
             if pos not in _CONTENT_POS and pos != _PROPER_NOUN_POS:
