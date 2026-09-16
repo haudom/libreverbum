@@ -1378,6 +1378,66 @@ def test_dump_aborts_on_a_still_open_transaction_instead_of_reading_it(tmp_path:
     assert not target.exists()
 
 
+def test_backup_aborts_with_a_german_message_if_the_target_directory_is_missing(
+    tmp_path: Path,
+) -> None:
+    """Nachbesserung Durchsicht b86c554, B5 `leicht`: Fehlt das Zielverzeichnis der
+    Sicherung, bricht `backup` mit einer deutschen Meldung ab — statt `sqlite3`s
+    englische Fremdmeldung `unable to open database file` unverändert durchzureichen,
+    dasselbe Muster wie `open_profile` (`test_missing_profile_directory_is_a_visible_
+    failure_with_a_german_message` oben)."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    profile.ensure_book(con, _BOOK)
+
+    with pytest.raises(ValueError, match=r"does_not_exist.*existiert nicht"):
+        profile.backup(con, tmp_path / "does_not_exist" / "sicherung.sqlite3")
+
+
+def test_dump_aborts_with_a_german_message_if_the_target_directory_is_missing(
+    tmp_path: Path,
+) -> None:
+    """Nachbesserung Durchsicht b86c554, B5 `leicht`: Fehlt das Zielverzeichnis des
+    Auszugs, bricht `dump` mit einer deutschen Meldung ab — statt Pythons englische
+    `FileNotFoundError` unverändert durchzureichen."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    profile.ensure_book(con, _BOOK)
+
+    with pytest.raises(ValueError, match=r"does_not_exist.*existiert nicht"):
+        profile.dump(con, tmp_path / "does_not_exist" / "auszug.json")
+
+
+def test_dump_preserves_the_previous_export_if_writing_fails_partway_through(
+    tmp_path: Path,
+) -> None:
+    """Nachbesserung Durchsicht b86c554, B4 `mittel`: Bricht das Schreiben mitten im
+    JSON-Auszug ab — hier ein `BLOB`-Wert, den `json.dump` nicht serialisieren kann
+    (über Roh-SQL eingeschleust, weil die öffentliche Schnittstelle nur `TEXT`/
+    `INTEGER`-Spalten befüllt; jeder andere Schreibfehler, etwa eine volle Platte, träfe
+    denselben Pfad) —, bleibt der zuvor am Zielort liegende, gültige Auszug unverändert.
+    `dump` schreibt seit dieser Nachbesserung zuerst in eine Nachbardatei und zieht sie
+    erst nach vollständigem Schreiben per `Path.replace` an den Zielort; vorher leerte
+    `target.open("w")` die Datei sofort und hinterließ bei einem Abbruch ein
+    abgeschnittenes Bruchstück mit `.json`-Namen statt des alten Auszugs. Welcher Test
+    bei welcher Verfälschung fällt: `Path.replace`-Umweg entfernt, wieder direkt in
+    `target` geschrieben → dieser Test schlägt fehl, weil `target` dann das Bruchstück
+    `{"book": [...` statt des alten, vollständigen Auszugs enthält."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    profile.ensure_book(con, _BOOK)
+
+    target = tmp_path / "auszug.json"
+    profile.dump(con, target)
+    previous_content = target.read_text(encoding="utf-8")
+
+    con.execute("UPDATE book SET title = ? WHERE title = ?", (b"\x00\x01", _BOOK.title))
+    con.commit()
+
+    with pytest.raises(TypeError):
+        profile.dump(con, target)
+
+    assert target.read_text(encoding="utf-8") == previous_content
+    assert not target.with_name(target.name + ".tmp").exists()
+
+
 def test_dump_contains_every_table_and_column_of_the_live_schema(tmp_path: Path) -> None:
     """AP 13, Prüfung: Der Auszug enthält alle acht Tabellen mit allen ihren Spalten.
     Erwartungsmenge aus dem Schema selbst abgeleitet (`sqlite_master`, `PRAGMA
@@ -1451,7 +1511,15 @@ def test_dump_writes_valid_utf8_for_a_typographic_character_in_the_example_sente
     """CLAUDE.md, „Dateien immer mit encoding=»utf-8« öffnen": Unter Windows zerstört die
     Systemkodierung sonst still typografische Zeichen aus dem Buchtext — hier ein
     typografischer Apostroph in `occurrence.example_sentence`, der den Auszug unlesbar
-    machen würde, wenn `dump` die Datei nicht ausdrücklich als UTF-8 schriebe."""
+    machen würde, wenn `dump` die Datei nicht ausdrücklich als UTF-8 schriebe.
+
+    Nachbesserung Durchsicht b86c554, B6 `leicht`: Der Apostroph muss zusätzlich **roh
+    im Dateitext** stehen, nicht nur nach `json.load` zurückkommen — sonst hielte diese
+    Zusicherung auch bei `ensure_ascii=True` (`\\u2019` statt `’`), obwohl der Auszug für
+    einen Menschen dann unlesbar wäre und `dump`s eigene Begründung („lesbar") nicht mehr
+    zuträfe. Welcher Test bei welcher Verfälschung fällt: `ensure_ascii=False` →
+    `ensure_ascii=True` im Rumpf von `dump` lässt genau diese Zeile fehlschlagen, ohne
+    dass `json.load(...)` das noch bemerken würde."""
     con = profile.open_profile(tmp_path / "profil.sqlite3")
     book_id = profile.ensure_book(con, _BOOK)
     _add_chapter(con, book_id)
@@ -1468,6 +1536,9 @@ def test_dump_writes_valid_utf8_for_a_typographic_character_in_the_example_sente
 
     target = tmp_path / "auszug.json"
     profile.dump(con, target)
+
+    raw_text = target.read_text(encoding="utf-8")
+    assert "He’d checked his watch — half past nine." in raw_text
 
     with target.open(encoding="utf-8") as file:
         dumped = json.load(file)

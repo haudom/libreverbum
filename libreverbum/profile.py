@@ -874,6 +874,11 @@ def backup(con: sqlite3.Connection, target: Path) -> None:
     `Connection.backup` verklemmt sich mit der eigenen Verbindung") baulich nicht mehr
     erreichbar.
 
+    Fehlt das Zielverzeichnis, bricht der Aufruf mit einer deutschen Meldung ab (Regel
+    13, Nachbesserung Durchsicht b86c554, B5 `leicht`) — statt `sqlite3`s englische
+    Fremdmeldung „unable to open database file" unverändert durchzureichen, dasselbe
+    Muster wie `open_profile` für die fehlende Profildatei.
+
     **Woran diese Wahl nicht geprüft ist:** Kein Test hier unterscheidet
     `sqlite3.Connection.backup` von einer rohen Dateikopie an einer laufenden, aber
     *fremden* zweiten Schreibverbindung — dieser Fall ist mit vertretbarem Aufwand nicht
@@ -885,6 +890,11 @@ def backup(con: sqlite3.Connection, target: Path) -> None:
     """
     _reject_backup_target_equal_to_source(con, target)
     _reject_open_transaction(con, "die Sicherung")
+    if not target.parent.is_dir():
+        raise ValueError(
+            f"Zielverzeichnis {target.parent} für die Sicherung existiert nicht — "
+            "Verzeichnis anlegen, bevor gesichert wird."
+        )
     target_con = sqlite3.connect(target)
     try:
         con.backup(target_con)
@@ -910,8 +920,31 @@ def dump(con: sqlite3.Connection, target: Path) -> None:
     ein späteres `con.rollback()` des Aufrufers änderte den bereits geschriebenen Auszug
     nicht mehr. Ohne die Wache behandelten `backup` und `dump` denselben Zustand
     gegensätzlich — mit ihr ist die Regel für beide dieselbe.
+
+    Fehlt das Zielverzeichnis, bricht der Aufruf mit einer deutschen Meldung ab (Regel
+    13, B5 `leicht`) — statt Pythons englische `FileNotFoundError` unverändert
+    durchzureichen, dasselbe Muster wie `open_profile` und `backup`.
+
+    **Schreibt atomar** (B4 `mittel`): erst vollständig in eine Nachbardatei, danach per
+    `Path.replace` an den Zielort gezogen — auf demselben Datenträger also ein
+    Verzeichniseintrag-Tausch, keine Kopie. `target.open("w")` allein hätte die Datei
+    sofort geleert; bricht `json.dump` mitten im Schreiben ab (ein `BLOB`-Wert, volle
+    Platte), läge dort sonst ein abgeschnittenes Bruchstück mit `.json`-Namen, und der
+    zuvor dort liegende gültige Auszug wäre bereits überschrieben und verloren. Schlägt
+    das Schreiben fehl, wird die Nachbardatei entfernt und der Fehler weitergereicht
+    (Regel 13) — der alte Auszug am Zielort bleibt in jedem Fall unverändert stehen.
+
+    `allow_nan=False` (B7 `leicht`): `json.dump`s Vorgabe schriebe `Infinity`/`NaN` als
+    nacktes Token, das kein anderer JSON-Leser annimmt — im heutigen Schema nicht
+    auslösbar (alle Spalten `TEXT`/`INTEGER`), aber kein Grund, das Ausleiten selbst
+    einen unlesbaren Auszug erzeugen zu lassen, sollte das künftig doch vorkommen.
     """
     _reject_open_transaction(con, "das Ausleiten")
+    if not target.parent.is_dir():
+        raise ValueError(
+            f"Zielverzeichnis {target.parent} für den Auszug existiert nicht — "
+            "Verzeichnis anlegen, bevor ausgeleitet wird."
+        )
     table_names = [
         row[0]
         for row in con.execute(
@@ -924,5 +957,12 @@ def dump(con: sqlite3.Connection, target: Path) -> None:
         columns = [row[1] for row in con.execute(f"PRAGMA table_info({table})")]
         rows = con.execute(f"SELECT {', '.join(columns)} FROM {table}").fetchall()
         content[table] = [dict(zip(columns, row, strict=True)) for row in rows]
-    with target.open("w", encoding="utf-8") as file:
-        json.dump(content, file, ensure_ascii=False, indent=2)
+
+    tmp_target = target.with_name(target.name + ".tmp")
+    try:
+        with tmp_target.open("w", encoding="utf-8") as file:
+            json.dump(content, file, ensure_ascii=False, indent=2, allow_nan=False)
+        tmp_target.replace(target)
+    except BaseException:
+        tmp_target.unlink(missing_ok=True)
+        raise
