@@ -243,11 +243,16 @@ ein, bevor Phase 2 neue dazulegt.
 
 ### E14 — Wohin mit der Recherche-Datei
 
+**Entschieden 16.09.2026: Die Datei fällt am Tor der Phase 2 weg** — wie `bauplan.md` und
+`nacharbeit.md` in Phase 1. Begründung: technik.md §14.
+
 `recherche_hochwertige_UIs_mit_Claude.md` liegt als datiertes Arbeitsmaterial versioniert
 im Wurzelverzeichnis (seit `5af0e86`) und passt in keine der drei Dokumentrollen. Was
-daraus gilt, steht in Abschnitt 7 dieses Plans und wandert mit E1/E11 nach technik.md §14
-— mit dem Datum und dem Hinweis, dass die Recherche Web-Frontends meinte. Ob die Datei
-dauerhaft ins Repositorium gehört, ist ein offener Punkt (technik.md §14).
+daraus gilt, steht in Abschnitt 7 dieses Plans und ist mit E1/E11 nach technik.md §14
+gewandert — mit dem Datum und dem Hinweis, dass die Recherche Web-Frontends meinte. Bis
+zum Tor bleibt die Datei liegen — nicht löschen; die Löschung selbst steht in Block D. Was
+daraus dauerhaft gilt, bewahrt danach Git (`git show
+5af0e86:recherche_hochwertige_UIs_mit_Claude.md`).
 
 > **Nachtrag, 15.09.2026 (Durchsicht c3584dc, Befund 1):** Die Vorgabe „nicht
 > versionieren" oben war überholt, bevor sie geschrieben wurde — die Datei war zu diesem
@@ -670,10 +675,13 @@ sind Befunde nach dokumentation.md §10, Nachbesserung als eigenes AP.
 
 **Ziel.** README „Stand"; konzept.md, „Phasenplan": Phase 2 abgenommen mit Datum;
 technik.md: erledigte offene Punkte gestrichen (Übersichtstabelle und Abschnitte), neue
-aus den Berichten eingetragen; `beobachtungen/` eingefaltet und geleert; dieses Dokument
-gelöscht — vorher `grep -rn bauplan-phase2` und je Treffer entscheiden (dokumentation.md
-§7, „Vor dem Löschen einer Datei"); `phase-2` per Fast-Forward nach `main`, Zweigregel in
-CLAUDE.md zurückgenommen. **nach** allem.
+aus den Berichten eingetragen; `beobachtungen/` eingefaltet und geleert;
+`recherche_hochwertige_UIs_mit_Claude.md` gelöscht (E14: „Entschieden 16.09.2026", was
+daraus dauerhaft gilt, steht bereits in technik.md §14 und Abschnitt 7 dieses Plans);
+dieses Dokument gelöscht — vorher je `grep -rn bauplan-phase2` und
+`grep -rn recherche_hochwertige_UIs_mit_Claude` und je Treffer entscheiden
+(dokumentation.md §7, „Vor dem Löschen einer Datei"); `phase-2` per Fast-Forward nach
+`main`, Zweigregel in CLAUDE.md zurückgenommen. **nach** allem.
 
 ---
 

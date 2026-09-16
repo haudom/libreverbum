@@ -3417,6 +3417,17 @@ mit AP 2.
 | Writer/Reviewer mit frischem Kontext | ist bereits Hausordnung | dokumentation.md §10 |
 | Web-Stack React + Tailwind + shadcn, Chrome-DevTools-/Playwright-/shadcn-MCP, Storybook, Figma, Lighthouse/axe | **nicht** übernommen — Web-Werkzeuge, siehe E1; Kontrast wird aus den Token gerechnet statt mit axe gemessen | — |
 
+### Entschieden 16.09.2026: Die Recherche-Datei fällt am Tor der Phase 2 weg
+
+Wie `bauplan.md` und `nacharbeit.md` in Phase 1 (CLAUDE.md, Blockquote unter „Die
+Dokumente und ihre Zuständigkeit"): Die Recherche ist datiertes Arbeitsmaterial für die
+laufende Phase, keines der drei Dokumente und kein viertes daneben — CLAUDE.md kennt
+weiterhin nur drei plus README.md als Schaufenster. Was daraus dauerhaft gilt, steht
+bereits oben in diesem Abschnitt (E1, E4) und in bauplan-phase2.md, Abschnitt 7; die Datei
+selbst bewahrt Git (`git show 5af0e86:recherche_hochwertige_UIs_mit_Claude.md`). Bis zum
+Tor der Phase 2 bleibt sie liegen, gelöscht wird sie erst dort (bauplan-phase2.md, E14 und
+Block D).
+
 ### Offene Punkte
 
 - **Die konkrete Gestaltungsrichtung** (Farbtoken, Schriftrollen, Signaturelement) ist mit
@@ -3425,10 +3436,6 @@ mit AP 2.
 - **Ob Qt Quick für Desktop-Anwendungen bei Sonnet tatsächlich mehr Durchsichtsrunden
   braucht** als ein Web-Stack, ist eine Vermutung der Recherche, nicht an diesem Bestand
   gemessen
-- **Ob `recherche_hochwertige_UIs_mit_Claude.md` dauerhaft ins Repositorium gehört**, ist
-  nicht entschieden — sie liegt seit `5af0e86` versioniert, aber CLAUDE.md kennt heute nur
-  drei Dokumente und README.md als Schaufenster, kein viertes. Zu klären am Tor der
-  Phase 2 (Entscheidung Dominiks, 15.09.2026)
 
 ---
 
