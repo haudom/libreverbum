@@ -115,12 +115,18 @@ class ChapterWithoutTextError(ValueError):
     Aufrufer, der genau diesen Fall erwartet (`pipeline.run_chapter`,
     `pipeline.list_chapters`), ihn am **Typ** abfängt statt am Meldungstext: Der Wortlaut
     darf sich jederzeit ändern (dokumentation.md §1, Sprachregel), ohne dass die
-    Unterscheidung dabei leise zerbricht (technik.md §8, offener Punkt „epub.read_chapter
-    wirft ValueError bei Vorspann-Kapiteln"). `skip_reason` trägt denselben Text wie
-    `str(error)` — ein zweiter, unabhängig zu pflegender Wortlaut entsteht dadurch nicht."""
+    Unterscheidung dabei leise zerbricht (technik.md §8, „Entschieden 16.09.2026: der Sweep
+    über alle Kapitel eines Buchs").
 
-    def __init__(self, skip_reason: str) -> None:
-        super().__init__(skip_reason)
+    `str(error)` bleibt die volle Meldung mit Pfad und Kapiteltitel — für ein Protokoll, in
+    dem beides noch fehlt. `skip_reason` ist demgegenüber knapp: weder Pfad noch Titel, nur
+    der Grund selbst. Die Kapitelauswahl der Kommandozeile zeigt `skip_reason` unter einem
+    bereits mit Titel und Nummer versehenen Kapitel — Pfad und Titel darin wiederholten nur,
+    was in derselben Ausgabe schon steht, und ließen die Zeile in jedem üblichen Terminal
+    umbrechen (Befund 2, Durchsicht f1177de)."""
+
+    def __init__(self, message: str, *, skip_reason: str) -> None:
+        super().__init__(message)
         self.skip_reason = skip_reason
 
 
@@ -695,7 +701,8 @@ def read_chapter(path: Path, book: Book, chapter: ChapterReference) -> Chapter:
     if not _WORD.search(raw_text):
         raise ChapterWithoutTextError(
             f"{path}: Kapitel „{chapter.title}“ enthält keinen Fließtext — vermutlich ein "
-            "Bildband ohne Text."
+            "Bildband ohne Text.",
+            skip_reason="enthält keinen Fließtext — vermutlich ein Bildband ohne Text",
         )
 
     # Angesetzt auf raw_text, den bereits zusammengefügten Text — nicht je Dokument. Der
@@ -713,7 +720,8 @@ def read_chapter(path: Path, book: Book, chapter: ChapterReference) -> Chapter:
     if not _WORD.search(text):
         raise ChapterWithoutTextError(
             f"{path}: Kapitel „{chapter.title}“ besteht nur aus Vorspann bzw. Impressum — "
-            "nach dem Aussteuern bleibt kein Fließtext übrig."
+            "nach dem Aussteuern bleibt kein Fließtext übrig.",
+            skip_reason="besteht nur aus Vorspann bzw. Impressum",
         )
 
     return Chapter(book=book, number=chapter.number, title=chapter.title, text=text)

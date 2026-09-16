@@ -118,7 +118,6 @@ offen").
 | §8 | Der Pfad „Ebene > 0" der Einrückung läuft gegen keine Fremdquelle |
 | §8 | Anker innerhalb eines Dokuments als eigenes Kapitel? |
 | §8 | Bindestrich- und Sonderzeichen der Verlagsdateien gegenüber Gutenberg ungeprüft |
-| §8 | `epub.read_chapter` wirft `ValueError` bei Vorspann-Kapiteln — trifft Phase 2 zwingend |
 | §8c | Die Gestaltung der Druckseite (funktional abgenommen, könnte schöner sein) |
 | §9 | Ob Kartenrichtung und Wortobergrenze in `config.toml` gehören oder Aufrufargumente bleiben |
 | §9 | Menüpunkt für eine konsistente Sicherung — noch nicht gebaut |
@@ -2136,12 +2135,19 @@ leeres Ergebnis (Regel 13):
   umfassen
 - **Bindestrich- und Sonderzeichen der Verlagsdateien** gegenüber Gutenberg sind nicht
   gesondert geprüft; die Abweichung von 0,08 % ist an einer Gutenberg-Datei gemessen
-- **`epub.read_chapter` wirft `ValueError` bei Vorspann-Kapiteln** (Gutenberg-Lizenztext,
-  reproduzierbar an `tools/sherlock.epub`). Für einen einzelnen Kapitelaufruf ist das
-  richtig — Regel 13, kein leerer Fließtext still —, aber ein Sweep über **alle** Kapitel
-  eines Buchs bricht daran ab; Phase 2 beginnt mit „Ganzes Buch auf einmal" (konzept.md,
-  „Phasenplan") und trifft die Stelle damit zwingend. Zu entscheiden beim Bau dieser Phase,
-  nicht vorher
+
+### Entschieden 16.09.2026: der Sweep über alle Kapitel eines Buchs
+
+Der bis hierhin offene Punkt — `epub.read_chapter` wirft `ValueError` bei Vorspann-Kapiteln,
+und ein Sweep über **alle** Kapitel eines Buchs (Phase 2, „Ganzes Buch auf einmal",
+konzept.md „Phasenplan") bricht daran ab — ist mit `bauplan-phase2.md AP 4` gebaut. Der
+geworfene Typ ist seither `ChapterWithoutTextError`, ein eigener `ValueError`-Untertyp mit
+`skip_reason`; ein Aufrufer, der den Fall erwartet, fängt ihn am **Typ** ab, nicht am
+Meldungstext, der sich mit der Sprachregel jederzeit ändern darf. `pipeline.list_chapters`
+liefert dazu eine spaCy-freie Vorabauskunft für die Kapitelauswahl, bevor `run_chapter`
+überhaupt läuft. Ein Kapitel mit Wortumfang `0` ist dabei genau eines, für das
+`read_chapter` diesen Typ wirft — gemessen an allen 40 Kapiteln der drei EPUBs in `tools/`,
+0 Abweichungen.
 
 ---
 

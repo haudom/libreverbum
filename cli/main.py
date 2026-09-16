@@ -300,10 +300,10 @@ def _choose_chapter(
 
     `pipeline.list_chapters` (bauplan-phase2.md AP 4) liefert dazu je Kapitel dessen
     `skip_reason`: Ein Kapitel ohne Fließtext (Vorspann, Impressum, Bildband) erscheint mit
-    seinem Grund in einer eigenen Zeile darunter und lässt sich nicht wählen — `run_chapter`
-    lehnte den Lauf sonst ohnehin erst nach dem teuren Einlesen des ganzen Buchs ab
-    (technik.md §8, offener Punkt „epub.read_chapter wirft ValueError bei
-    Vorspann-Kapiteln"). `structure` bleibt trotzdem Parameter: Nur sie trägt `level` für
+    seinem Grund in einer eigenen Zeile darunter und lässt sich nicht wählen — der Nutzer
+    sieht den Grund so schon vor der Wahl, statt nach dem Laden des Sprachmodells eine
+    Fehlermeldung zu bekommen (technik.md §8, „Entschieden 16.09.2026: der Sweep über alle
+    Kapitel eines Buchs"). `structure` bleibt trotzdem Parameter: Nur sie trägt `level` für
     die Einrückung, das `ChapterListing` nicht führt (Ablaufwert ohne diese Angabe,
     `pipeline.py`)."""
     write_line(f"„{structure.book.title}“ von {structure.book.author}")

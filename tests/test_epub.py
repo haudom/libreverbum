@@ -1909,8 +1909,13 @@ def test_read_chapter_raises_chapter_without_text_error_not_a_plain_value_error(
     `pipeline.list_chapters` fangen seither genau diesen Typ statt den Meldungstext zu
     vergleichen; ein Test, der nur `pytest.raises(ValueError, match=...)` prüft (wie die
     beiden Tests oben), würde einen Rückbau auf `ValueError` nicht bemerken, weil ein
-    `ChapterWithoutTextError` auch ein `ValueError` ist. `skip_reason` trägt denselben Text
-    wie `str(error)` — kein zweiter, unabhängig zu pflegender Wortlaut.
+    `ChapterWithoutTextError` auch ein `ValueError` ist.
+
+    `skip_reason` trägt seit Befund 2, Durchsicht f1177de, **nicht** mehr denselben Text wie
+    `str(error)`: `str(error)` bleibt die volle Meldung mit Pfad und Kapiteltitel,
+    `skip_reason` ist die knappe Fassung ohne beides — die Kapitelauswahl der Kommandozeile
+    zeigt sie unter einem bereits mit Titel versehenen Kapitel, wo Pfad und Titel nur
+    wiederholten, was in derselben Ausgabe schon steht.
 
     Verfälschungsprobe: `ChapterWithoutTextError`s beide Vorkommen in `epub.read_chapter`
     durch `ValueError` ersetzt (der Stand vor AP 4) ließ diesen Test rot werden, die beiden
@@ -1926,13 +1931,23 @@ def test_read_chapter_raises_chapter_without_text_error_not_a_plain_value_error(
         epub.read_chapter(
             picture_book, _TEST_BOOK, _chapter_reference("OEBPS/page1.xhtml", title="Bildseite")
         )
-    assert picture_book_error.value.skip_reason == str(picture_book_error.value)
+    picture_book_reason = picture_book_error.value.skip_reason
+    assert picture_book_reason
+    assert str(picture_book) not in picture_book_reason
+    assert "Bildseite" not in picture_book_reason
+    assert str(picture_book) in str(picture_book_error.value)
+    assert "Bildseite" in str(picture_book_error.value)
 
     with pytest.raises(epub.ChapterWithoutTextError) as license_error:
         epub.read_chapter(
             license_only, _TEST_BOOK, _chapter_reference("OEBPS/license.xhtml", title="Lizenz")
         )
-    assert license_error.value.skip_reason == str(license_error.value)
+    license_reason = license_error.value.skip_reason
+    assert license_reason
+    assert str(license_only) not in license_reason
+    assert "Lizenz" not in license_reason
+    assert str(license_only) in str(license_error.value)
+    assert "Lizenz" in str(license_error.value)
 
 
 def test_read_chapter_reports_an_encrypted_picture_book_as_encrypted_not_as_a_picture_book(
@@ -2127,6 +2142,35 @@ def test_count_chapter_words_matches_read_chapter_for_real_books(
         f"{compared} von 35 erwarteten streng verglichenen Kapiteln (13 Sherlock, 22 Dorian "
         "Gray) — die Untergrenze aus Befund 1 (Durchsicht 29715b2) ist verletzt."
     )
+
+
+@pytest.mark.needs_calibre_split_epub
+def test_count_chapter_words_matches_read_chapter_for_dune(real_dune_epub_path: Path) -> None:
+    """Dieselbe Zusicherung wie
+    `test_count_chapter_words_matches_read_chapter_for_real_books`, hier gegen
+    `tools/dune.epub` statt gegen `real_epub_paths` (Vorbefund V-B, Durchsicht f1177de): Die
+    beiden dortigen Bücher nehmen nie den Mehrdokument-Zweig aus technik.md §8, „Ein Kapitel
+    ist nicht ein Dokument" — genau der Fall, in dem `count_chapter_words` und `read_chapter`
+    am ehesten auseinanderfallen könnten, weil beide die zusammengefügte Dokumentliste des
+    Kapitels unabhängig durchlaufen. Dune trägt kein Vorspann-/Impressum-Kapitel wie
+    Sherlocks Gutenberg-Lizenz; alle vier Kapitel bestehen deshalb die strenge
+    Gleichheitsprüfung ohne Ausnahmezweig.
+
+    Verfälschungsprobe: `count_chapter_words` in `libreverbum/epub.py` auf das jeweils erste
+    Dokument eines Kapitels beschränkt (`_read_chapter_documents(...)[:1]`, der stille
+    Verlust aus technik.md §8, „Ohne die vollständige Dokumentliste wäre das ein stiller
+    Verlust") ließ diesen Test rot werden — 20.803 statt 78.774 für Kapitel 2 —, während die
+    Sherlock/Dorian-Gray-Fassung oben unverändert grün blieb, weil keines ihrer Kapitel mehr
+    als ein Dokument umfasst."""
+    structure = epub.read_structure(real_dune_epub_path)
+    counts = epub.count_chapter_words(real_dune_epub_path, structure.chapters)
+
+    assert len(structure.chapters) == 4
+    for chapter in structure.chapters:
+        actual_text = epub.read_chapter(real_dune_epub_path, structure.book, chapter).text
+        assert counts[chapter.number] == len(epub._WORD.findall(actual_text)), (
+            f"Kapitel {chapter.number} „{chapter.title}“"
+        )
 
 
 def test_count_chapter_words_reports_zero_for_a_chapter_that_is_pure_boilerplate(

@@ -406,6 +406,11 @@ class ChapterListing:
     werden."""
 
     number: int
+    # Form (fest) laut bauplan-phase2.md AP 16b (Qt-Kapitelliste). Heute noch ohne Aufrufer
+    # außerhalb von tests/test_pipeline.py — cli.main._choose_chapter nimmt die Titel
+    # weiterhin aus structure.chapters, weil nur die Struktur `level` für die Einrückung
+    # trägt (Befund 3, Durchsicht f1177de). Bleibt trotzdem stehen: Entfernen wäre eine
+    # Abstraktion, die AP 16b dann erneut anlegen müsste.
     title: str
     word_count: int | None
     skip_reason: str | None
@@ -422,7 +427,7 @@ def list_chapters(epub_path: Path) -> list[ChapterListing]:
     zusammengefügten und von Vorspann/Impressum befreiten Text wie die Zählung selbst, sind
     also gleichwertig — ein Kapitel mit Wortumfang `0` ist genau eines, für das
     `read_chapter` `ChapterWithoutTextError` wirft. `read_chapter` läuft deshalb nur für
-    diese wenigen Kapitel noch einmal, um `skip_reason` mit dessen eigenem Meldungstext zu
+    diese wenigen Kapitel noch einmal, um `skip_reason` mit dessen eigenem, knappen Grund zu
     füllen statt mit einer zweiten, unabhängig zu pflegenden Formulierung. Ein Kapitel, das
     aus einem anderen Grund unlesbar ist (kaputtes Archiv, falsche Kodierung — Wortumfang
     `None`), bleibt ohne `skip_reason`: Es ist weiterhin wählbar und schlägt beim

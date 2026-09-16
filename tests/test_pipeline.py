@@ -459,7 +459,8 @@ def test_run_chapter_counts_only_chapters_with_text_when_reporting_the_analysis(
     def _skip_the_second_chapter(path: Path, book: Book, chapter: epub.ChapterReference) -> Chapter:
         if chapter.number == 2:
             raise epub.ChapterWithoutTextError(
-                f"{path}: Kapitel {chapter.number} besteht nur aus Vorspann bzw. Impressum."
+                f"{path}: Kapitel {chapter.number} besteht nur aus Vorspann bzw. Impressum.",
+                skip_reason="besteht nur aus Vorspann bzw. Impressum",
             )
         return real_read_chapter(path, book, chapter)
 
