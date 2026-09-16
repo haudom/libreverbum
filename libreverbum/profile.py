@@ -811,22 +811,80 @@ def record_preset(con: sqlite3.Connection, events: Iterable[Event], cefr_level: 
 # ----------------------------------------------- Ausleiten)
 
 
+def _reject_backup_target_equal_to_source(con: sqlite3.Connection, target: Path) -> None:
+    """Wache 1 von zwei (Nachbesserung Durchsicht b86c554, B1 `schwer`): Zeigt `target`
+    auf dieselbe Datei, aus der `con` liest, verklemmt sich `sqlite3.Connection.backup`
+    mit sich selbst — keine Ausnahme, kein Zeitlimit, eine endlose Folge von
+    `SQLITE_BUSY`-Wiederholungen, gemessen am 16.09.2026: 20 s ohne jede Reaktion, wo
+    jedes andere Ziel binnen Millisekunden antwortet (siehe technik.md §4, „Falle:
+    `Connection.backup` verklemmt sich mit der eigenen Verbindung"). Der Quellpfad kommt
+    aus der Verbindung selbst (`PRAGMA database_list`), nicht vom Aufrufer — über
+    `Path.resolve()` verglichen, damit eine `..`-Schreibweise im Zielpfad nicht an der
+    Wache vorbeikommt."""
+    source_path = Path(con.execute("PRAGMA database_list").fetchone()[2])
+    if source_path.resolve() == target.resolve():
+        raise ValueError(
+            f"Sicherungsziel {target} ist dieselbe Datei wie die geöffnete Profildatei "
+            f"{source_path} — eine Sicherung auf sich selbst verklemmt "
+            "sqlite3.Connection.backup endlos, ohne Ausnahme und ohne Zeitlimit. Ein "
+            "anderes Ziel wählen."
+        )
+
+
+def _reject_open_transaction(con: sqlite3.Connection, caller: str) -> None:
+    """Wache 2 von zwei (Nachbesserung Durchsicht b86c554, B2 `mittel`): `backup` und
+    `dump` sind dem Namen nach ein Lesevorgang und dürfen keine auf `con` noch offene
+    Transaktion des Aufrufers festschreiben oder — bei `dump` — deren ungeschriebene
+    Zeilen mit ausleiten. Ein `con.commit()` an dieser Stelle wäre das Gegenteil von
+    Regel 13 (dokumentation.md §4): Es macht den Fehlschlag des Aufrufers nicht
+    sichtbar, es verdeckt ihn, indem es ihn dauerhaft festschreibt. Erreichbar ist der
+    Fall im heutigen Bestand über `ensure_occurrence`, wenn die Kapitelzeile fehlt: Die
+    Grundform ist dann bereits angelegt, aber die noch offene, durch den fehlgeschlagenen
+    Fremdschlüssel abgebrochene Transaktion bleibt auf `con` stehen (gemessen
+    16.09.2026, `con.in_transaction == True`)."""
+    if con.in_transaction:
+        raise ValueError(
+            f"Auf der Profilverbindung liegt eine offene Transaktion — {caller} würde "
+            "sie ungefragt festschreiben. Erst die begonnene Buchung abschließen "
+            "(con.commit()) oder zurückrollen (con.rollback()), dann erneut versuchen."
+        )
+
+
 def backup(con: sqlite3.Connection, target: Path) -> None:
     """Zieht eine konsistente Kopie der Profildatei nach `target` (technik.md §4,
     „Sichern"): über `sqlite3.Connection.backup`, nicht über eine rohe Dateikopie — eine
     rohe Kopie könnte mitten in einem Schreibvorgang eine unbrauchbare Zwischenstufe
-    treffen, die Sicherung über SQLite selbst dagegen nur als Ganzes oder gar nicht.
-    `target` wird danach vollständig überschrieben und ist ein eigenständiges Profil
-    derselben Schemafassung, mit `open_profile` regulär zu öffnen.
+    treffen, die Sicherung über SQLite selbst dagegen nur als Ganzes oder gar nicht (zu
+    dieser Wahl selbst kein eigener Test — siehe „Woran diese Wahl nicht geprüft ist"
+    unten). `target` wird danach vollständig überschrieben und ist ein eigenständiges
+    Profil derselben Schemafassung, mit `open_profile` regulär zu öffnen.
 
-    Committet zuerst jede auf `con` noch offene Transaktion (Regel 13, kein stiller
-    Verlust ungeschriebener Änderungen): Bleibt eine Transaktion auf derselben Verbindung
-    offen, mit der `con.backup(...)` läuft, wartet `sqlite3.Connection.backup` sonst in
-    einer endlosen Folge von `SQLITE_BUSY`-Wiederholungen auf eine Sperre, die nur diese
-    eine Verbindung selbst hält und nie freigibt — ein beim Bauen dieses Bauschritts
-    entdeckter Stillstand, keine dokumentierte Einschränkung der Bibliothek.
+    **Vorbedingungen des Aufrufers, beide vorab geprüft (Regel 13, lauter Abbruch statt
+    stillem oder endlosem Fehlschlag):**
+
+    - `target` darf nicht auf dieselbe Datei zeigen wie die geöffnete Profildatei
+      (`_reject_backup_target_equal_to_source`) — sonst verklemmt sich
+      `sqlite3.Connection.backup` mit sich selbst, endlos und ohne jede Meldung.
+    - Auf `con` darf keine Transaktion offen sein (`_reject_open_transaction`) — anders
+      als in einer früheren Fassung dieser Funktion wird eine offene Transaktion nicht
+      mehr committet: Das schriebe fest, was der Aufrufer selbst noch nicht
+      abgeschlossen hat, und ein `rollback()` danach käme zu spät.
+
+    Mit beiden Wachen ist der `SQLITE_BUSY`-Stillstand aus technik.md §4 („Falle:
+    `Connection.backup` verklemmt sich mit der eigenen Verbindung") baulich nicht mehr
+    erreichbar.
+
+    **Woran diese Wahl nicht geprüft ist:** Kein Test hier unterscheidet
+    `sqlite3.Connection.backup` von einer rohen Dateikopie an einer laufenden, aber
+    *fremden* zweiten Schreibverbindung — dieser Fall ist mit vertretbarem Aufwand nicht
+    zuverlässig nachzustellen (eine parallele Schreibverbindung traf im Test ebenso
+    zufällig den richtigen Stand wie die rohe Kopie); die Wahl steht deshalb allein durch
+    die Bauart, nicht durch einen Test (dokumentation.md §5, „Ein Test gilt erst als Test,
+    wenn er einmal rot war" — dafür fehlt hier eine Vorrichtung, die den Unterschied
+    überhaupt erzwingt).
     """
-    con.commit()
+    _reject_backup_target_equal_to_source(con, target)
+    _reject_open_transaction(con, "die Sicherung")
     target_con = sqlite3.connect(target)
     try:
         con.backup(target_con)
@@ -844,7 +902,16 @@ def dump(con: sqlite3.Connection, target: Path) -> None:
     genau das, was sie hinzugefügt hat, ohne dass dieses Modul es bemerkte —
     Vollständigkeit vor Bequemlichkeit. Jede Tabelle liefert ihre Zeilen als Liste von
     Objekten, Spaltenname auf Wert, in der Reihenfolge von `PRAGMA table_info`.
+
+    **Dieselbe Vorbedingung wie bei `backup`** (Nachbesserung Durchsicht b86c554, B2
+    `mittel`, Nebenbefund): Auf `con` darf keine Transaktion offen sein
+    (`_reject_open_transaction`). Anders als `backup` committet `dump` nirgends —
+    dieselbe Verbindung liest aber ihre eigenen ungeschriebenen Zeilen klaglos mit, und
+    ein späteres `con.rollback()` des Aufrufers änderte den bereits geschriebenen Auszug
+    nicht mehr. Ohne die Wache behandelten `backup` und `dump` denselben Zustand
+    gegensätzlich — mit ihr ist die Regel für beide dieselbe.
     """
+    _reject_open_transaction(con, "das Ausleiten")
     table_names = [
         row[0]
         for row in con.execute(

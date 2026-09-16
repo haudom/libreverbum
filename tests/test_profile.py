@@ -1223,6 +1223,76 @@ def test_record_preset_writes_nothing_if_one_event_fails_partway_through(tmp_pat
 # ----------------------------------------------- Ausleiten)
 
 
+class _FakeCursor:
+    """Hilfsklasse für `_FakeSourceConnection` unten — liefert eine feste Zeile auf
+    `fetchone()`, genau wie `sqlite3.Cursor` nach `PRAGMA database_list`."""
+
+    def __init__(self, row: tuple[object, ...]) -> None:
+        self._row = row
+
+    def fetchone(self) -> tuple[object, ...]:
+        return self._row
+
+
+class _FakeSourceConnection:
+    """Steh-Ersatz für `sqlite3.Connection`, nur für die beiden Reihenfolge-Proben unten
+    (Nachbesserung Durchsicht b86c554, „Punkt 7 der Durchsicht"): Das echte
+    `sqlite3.Connection.backup` liefe ohne eine der beiden Wachen in die gemessene
+    endlose `SQLITE_BUSY`-Folge (siehe die beiden Tests oben, `timeout`-Probe im
+    Bericht) — eine Verfälschungsprobe an der echten Verbindung würde also nicht rot,
+    sondern **hängen** (dokumentation.md §5, „Ein hängender Test genügt nicht"). Dieser
+    Ersatz wirft in `backup()` stattdessen sofort, damit eine entfernte Wache die Probe
+    in Millisekunden rot macht."""
+
+    def __init__(self, source_path: Path, *, in_transaction: bool) -> None:
+        self.in_transaction = in_transaction
+        self._source_path = source_path
+        self.reached_backup = False
+
+    def execute(self, sql: str, parameters: tuple[object, ...] = ()) -> _FakeCursor:
+        assert sql.strip() == "PRAGMA database_list", f"unerwarteter Aufruf: {sql!r}"
+        return _FakeCursor((0, "main", str(self._source_path)))
+
+    def backup(self, target: sqlite3.Connection) -> None:
+        self.reached_backup = True
+        raise AssertionError(
+            "con.backup wurde erreicht — eine Wache hätte das vorher verhindern müssen"
+        )
+
+
+def test_backup_checks_the_target_guard_before_ever_touching_con_backup(tmp_path: Path) -> None:
+    """Nachbesserung Durchsicht b86c554, „Punkt 7 der Durchsicht": Die Ziel-Wache
+    (B1) feuert, bevor `con.backup` überhaupt erreicht wird — mit dem Steh-Ersatz oben
+    geprüft, damit das Entfernen der Wache diesen Test **rot** macht statt ihn hängen zu
+    lassen. Welcher Test bei welcher Verfälschung fällt: `_reject_backup_target_equal_to_
+    source` im Rumpf von `profile.backup` auskommentiert → dieser Test schlägt fehl, weil
+    `fake.reached_backup` dann `True` wird (`AssertionError` statt der erwarteten
+    `ValueError`), in Millisekunden, nicht nach einem Zeitlimit."""
+    source_path = tmp_path / "profil.sqlite3"
+    fake = _FakeSourceConnection(source_path, in_transaction=False)
+
+    with pytest.raises(ValueError, match="dieselbe Datei"):
+        profile.backup(cast(sqlite3.Connection, fake), source_path)
+
+    assert not fake.reached_backup
+
+
+def test_backup_checks_the_transaction_guard_before_ever_touching_con_backup(
+    tmp_path: Path,
+) -> None:
+    """Nachbesserung Durchsicht b86c554, „Punkt 7 der Durchsicht": Die
+    Transaktions-Wache (B2) feuert ebenso, bevor `con.backup` erreicht wird. Welcher Test
+    bei welcher Verfälschung fällt: `_reject_open_transaction` im Rumpf von
+    `profile.backup` auskommentiert → dieser Test schlägt fehl (`AssertionError` statt
+    `ValueError`), wieder in Millisekunden."""
+    fake = _FakeSourceConnection(tmp_path / "profil.sqlite3", in_transaction=True)
+
+    with pytest.raises(ValueError, match="offene Transaktion"):
+        profile.backup(cast(sqlite3.Connection, fake), tmp_path / "sicherung.sqlite3")
+
+    assert not fake.reached_backup
+
+
 def test_backup_is_a_valid_profile_of_the_same_schema_version(tmp_path: Path) -> None:
     """AP 13, Prüfung: Die Sicherung ist wirklich ein gültiges Profil derselben
     Schemafassung — geöffnet mit `profile.open_profile` und inhaltlich gegen die Quelle
@@ -1249,27 +1319,63 @@ def test_backup_is_a_valid_profile_of_the_same_schema_version(tmp_path: Path) ->
     assert events[0].book == _BOOK
 
 
-def test_backup_includes_a_still_uncommitted_change_in_the_open_source_connection(
-    tmp_path: Path,
-) -> None:
-    """AP 13, Prüfung: eine Sicherung während offener Verbindung mit ungeschriebenen
-    Änderungen in der Quelle — genau der Fall, für den `sqlite3.Connection.backup`
-    überhaupt gewählt wurde. Ohne ein Committen zuerst liefe `con.backup(...)` in eine
-    endlose Folge von `SQLITE_BUSY`-Wiederholungen, weil dieselbe Verbindung, die die
-    Sicherung anstößt, noch selbst die offene Transaktion hält, deren Sperre sie nie
-    freigibt (eigener Befund beim Bauen dieses Bauschritts) — `profile.backup` committet
-    deshalb vor der eigentlichen Sicherung."""
+def test_backup_aborts_on_a_still_open_transaction_instead_of_committing_it(tmp_path: Path) -> None:
+    """Nachbesserung Durchsicht b86c554, B2 `mittel`: Eine Sicherung ist dem Namen nach
+    ein Lesevorgang. Steht auf `con` noch eine offene Transaktion (hier eine
+    ungeschriebene `book`-Zeile), bricht `backup` sichtbar ab (Regel 13), statt sie
+    ungefragt festzuschreiben — ein `con.rollback()` des Aufrufers muss danach noch
+    wirksam sein können. Vorher committete `backup` an dieser Stelle still; das war die
+    Berufung auf Regel 13 auf dem Kopf, denn die Regel verlangt einen sichtbaren
+    Fehlschlag, nicht ein verdecktes Festschreiben."""
     con = profile.open_profile(tmp_path / "profil.sqlite3")
     profile.ensure_book(con, _BOOK)
     con.execute("INSERT INTO book (title, author) VALUES (?, ?)", ("Unbestätigtes Buch", "N. N."))
     # bewusst kein commit an dieser Stelle — die Verbindung bleibt mittendrin offen.
 
     target = tmp_path / "sicherung.sqlite3"
-    profile.backup(con, target)
+    with pytest.raises(ValueError, match="offene Transaktion"):
+        profile.backup(con, target)
 
-    backup_con = profile.open_profile(target)
-    titles = {row[0] for row in backup_con.execute("SELECT title FROM book")}
-    assert "Unbestätigtes Buch" in titles
+    assert not target.exists()
+    con.rollback()
+    titles = {row[0] for row in con.execute("SELECT title FROM book")}
+    assert "Unbestätigtes Buch" not in titles
+
+
+def test_backup_rejects_a_target_that_is_the_source_file_itself(tmp_path: Path) -> None:
+    """Nachbesserung Durchsicht b86c554, B1 `schwer`: Zeigt `target` auf dieselbe Datei,
+    aus der `con` liest, verklemmt sich `sqlite3.Connection.backup` mit sich selbst —
+    endlos, ohne Ausnahme, ohne Zeitlimit (gemessen: 20 s ohne jede Reaktion, siehe
+    Bericht). `backup` prüft das vorab und bricht sichtbar ab (Regel 13), statt den
+    Stillstand überhaupt zu erreichen — die Probe hier muss deshalb in Millisekunden
+    laufen, nicht erst nach einem Zeitlimit."""
+    path = tmp_path / "profil.sqlite3"
+    con = profile.open_profile(path)
+    profile.ensure_book(con, _BOOK)
+
+    with pytest.raises(ValueError, match="dieselbe Datei"):
+        profile.backup(con, path)
+
+    with pytest.raises(ValueError, match="dieselbe Datei"):
+        profile.backup(con, tmp_path / ".." / tmp_path.name / "profil.sqlite3")
+
+
+def test_dump_aborts_on_a_still_open_transaction_instead_of_reading_it(tmp_path: Path) -> None:
+    """Nachbesserung Durchsicht b86c554, B2 `mittel`, Nebenbefund: `dump` committet
+    nirgends, liest aber klaglos die ungeschriebenen Zeilen der eigenen, noch offenen
+    Transaktion mit — der Auszug enthielte dann Zeilen, die nach einem `rollback()` nie
+    im Profil standen. Dieselbe Wache wie bei `backup` macht daraus einen sichtbaren
+    Abbruch."""
+    con = profile.open_profile(tmp_path / "profil.sqlite3")
+    profile.ensure_book(con, _BOOK)
+    con.execute("INSERT INTO book (title, author) VALUES (?, ?)", ("Unbestätigtes Buch", "N. N."))
+    # bewusst kein commit an dieser Stelle — die Verbindung bleibt mittendrin offen.
+
+    target = tmp_path / "auszug.json"
+    with pytest.raises(ValueError, match="offene Transaktion"):
+        profile.dump(con, target)
+
+    assert not target.exists()
 
 
 def test_dump_contains_every_table_and_column_of_the_live_schema(tmp_path: Path) -> None:
