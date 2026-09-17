@@ -307,6 +307,316 @@ Kern, nicht darunter").
 
 ---
 
+## Die sieben Bildschirme der Oberfläche
+
+Aus bauplan-phase2.md AP 14, hierher übernommen, weil AP 18 ausdrücklich dagegen prüft und
+der Bauplan am Tor der Phase 2 wegfällt. Die Wireframes sagen, **was** auf einem Bildschirm
+steht und in welcher Rangfolge — das ist eine Frage des Konzepts. **Wie** es aussieht, sagt
+die Gestaltungsrichtung „Lesetisch" (technik.md §14, E11); die Wireframes überleben
+deshalb jede Gestaltungswahl.
+
+Jede Zeile einer Prüfliste ist an einem Screenshot **nachprüfbar** — sie ist ein
+Abnahmekriterium je Bildschirm, in derselben Rolle wie die „Abnahmekriterien für Phase 1"
+weiter unten. „Wirkt aufgeräumt" ist keine Zeile. Geprüft wird bei 1280×800 **und** bei der
+Mindestgröße (900×600, Vorgabe aus AP 15), hell **und** dunkel; wo eine Zeile nur für eine
+Größe gilt, steht das dabei. Warum die Prüfung damit nicht zu Ende ist — eine Seite kann
+bei null QML-Warnungen kaputt sein: technik.md §14, „Gemessen wird im Bild, nicht aus den
+Token".
+
+Vier der sieben sind gebaut und laufen: `.venv/Scripts/python.exe
+tools/design_mockup/render_all.py` (Einrichtung, Buch und Kapitel, Fortschritt,
+Triage-Eintrag). Die übrigen drei entstehen mit AP 18b und AP 19.
+
+---
+
+### 1. Einrichtung (`setup`, AP 16a/16b)
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│  LibreVerbum                                                              │
+│                                                                           │
+│  Daten liegen in   C:\Users\Domin\Documents\libreverbum\data              │
+│  ────────────────────────────────────────────────────────────────────     │
+│                                                                           │
+│  ✓  1  Einstellungen            config.toml                               │
+│                                                                           │
+│  ▸  2  Wörterbuch               fehlt — 20 MB werden geladen              │
+│        WikDict EN→DE, CC BY-SA 4.0 · <SOURCE_NOTICE, vollständig>         │
+│        [ Herunterladen ]   [ Abbrechen ]                                  │
+│        ▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░  8,4 von 20,1 MB                         │
+│                                                                           │
+│  ·  3  Profil                   profil.sqlite3 wird neu angelegt          │
+│        Sprachniveau   ( ) A1 1200   ( ) A2 2000   (•) B1 3000             │
+│                       ( ) B2 4000   ( ) C1 5000   ( ) keine Angabe        │
+│        Die Vorbelegung ist einmalig und nicht zurücknehmbar.              │
+│                                                                           │
+│                                              [ Weiter ]                   │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+**Verifiziert heißt:**
+
+1. Der vollständige Pfad des Datenverzeichnisses steht sichtbar auf dem Bildschirm, nicht
+   nur auf `stderr` (technik.md §9, „erste Zeile jedes Laufs").
+2. Die drei Schritte stehen als nummerierte Liste untereinander; der offene Schritt ist
+   der einzige mit Schaltflächen.
+3. Beim Wörterbuch steht `dictionary.SOURCE_NOTICE` **im Wortlaut** und die Größe in MB.
+4. Während des Bezugs zeigt der Balken zwei Zahlen (geladen / gesamt), die sich zwischen
+   zwei Screenshots unterscheiden — eine Anzeige, die stehen bleibt, gilt als Fehlschlag.
+5. Scheitert der Bezug, steht die Fehlermeldung **in diesem Fenster**, mit dem Wortlaut
+   der Ausnahme, und die Schaltfläche „Herunterladen" ist wieder bedienbar (Regel 13).
+6. Die sechs Niveaustufen tragen je die Zahl vorbelegter Grundformen aus
+   `pipeline.PRESET_WORD_COUNT`; C2 kommt nicht vor (technik.md §11).
+7. Der Satz „Die Vorbelegung ist einmalig und nicht zurücknehmbar." steht über „Weiter",
+   nicht in einem aufklappbaren Hinweis.
+8. Bei 900×600 ist „Weiter" ohne Scrollen erreichbar.
+
+---
+
+### 2. Buch und Kapitel (`chapter_range`, AP 17/20)
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│  The Adventures of Sherlock Holmes · Arthur Conan Doyle   [ Buch öffnen ] │
+│  ────────────────────────────────────────────────────────────────────     │
+│   Nr  Kapitel                                          Wörter            │
+│    1  THE ADVENTURES OF SHERLOCK HOLMES                 —   kein Fließ-  │
+│                                                             text (Vorspann)│
+│    2  I. A SCANDAL IN BOHEMIA                        9 421               │
+│    3  II. THE RED-HEADED LEAGUE                      9 918               │
+│      ⌐ 4  III. A CASE OF IDENTITY                    6 971               │
+│  …                                                                        │
+│   14  XII. THE COPPER BEECHES                       10 205               │
+│  ────────────────────────────────────────────────────────────────────     │
+│  Gewählt: Kapitel 2                     [ Buch prüfen ] [ Vorbereiten ]  │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+**Verifiziert heißt:**
+
+1. Titel und Autor des Buchs stehen aus den EPUB-Metadaten oben, nicht der Dateiname.
+2. Die Liste zeigt genau so viele Kapitel wie `pipeline.list_chapters` liefert — bei
+   `tools/sherlock.epub` **14**, nicht 18 (technik.md §8).
+3. Jede Zeile trägt eine Wortzahl; ein Kapitel ohne Fließtext trägt statt der Zahl den
+   `skip_reason` im Klartext und ist erkennbar gedimmt.
+4. Ein Klick auf ein übersprungenes Kapitel wählt es **nicht** aus; „Vorbereiten" bleibt
+   dabei unbedienbar.
+5. Untergeordnete Kapitel (`ChapterReference.level` > 0) sind eingerückt.
+6. Fehlt der Datei die Navigation, steht der Hinweis aus `epub.read_structure` sichtbar
+   über der Liste, nicht in der Statuszeile.
+7. „Buch prüfen" ist auch ohne gewähltes Kapitel bedienbar (AP 21).
+8. Bei 900×600 bleiben Kopfzeile und Fußleiste stehen, nur die Liste scrollt.
+
+---
+
+### 3. Fortschritt (`ChapterStage`, AP 17)
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│  Kapitel 2 wird vorbereitet — I. A Scandal in Bohemia                     │
+│                                                                           │
+│    ✓  Sprachmodell laden                                                  │
+│    ✓  Buch lesen                                       14 von 14 Kapiteln │
+│    ▸  Buch analysieren                    9 von 13 Kapiteln mit Text      │
+│    ·  Kapitelwortschatz ermitteln                                         │
+│    ·  Im Wörterbuch nachschlagen                                          │
+│    ·  Bedeutungen auflösen                                                │
+│                                                                           │
+│                                                        [ Abbrechen ]      │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+**Verifiziert heißt:**
+
+1. Die Etappen stehen in der Reihenfolge von `pipeline.ChapterStage`, jede mit deutschem
+   Satz aus `app/texts.py` — kein englischer Bezeichner auf dem Bildschirm.
+2. Die laufende Etappe ist als einzige hervorgehoben; erledigte tragen ein Häkchen.
+3. Wo `ChapterProgress` einen Zähler führt, steht er als „N von M"; wo `done == total ==
+   0`, steht **kein** Zähler (technik.md §13 — ein erfundener Zähler behauptet Fortschritt,
+   den es nicht gibt).
+4. Der Nenner von „Buch analysieren" ist ausdrücklich als „Kapitel mit Text" beschriftet
+   und darf kleiner sein als der von „Buch lesen" (14 → 13 bei `tools/sherlock.epub`).
+5. Zwei Screenshots im Abstand von fünf Sekunden zeigen verschiedene Zählerstände.
+6. Die Oberfläche bleibt bedienbar: „Abbrechen" reagiert während des spaCy-Laufs
+   (prüfbarer Teil von Regel 9 — der Timer-Test aus AP 15 ist der andere).
+7. Scheitert `run_chapter`, ersetzt eine Fehlermeldung mit Wortlaut die Liste; der
+   Bildschirm bleibt nicht auf einer Etappe stehen.
+
+---
+
+### 4. Triage-Liste (`BLOCK_LIST`, AP 18a/18b)
+
+> **In der Richtung „Lesetisch" sind 4 und 5 ein Bildschirm** — die Blockliste steht
+> dauerhaft links, der Eintrag rechts, statt zweier Modi, zwischen denen umgeschaltet
+> wird: Wer dreihundertmal hintereinander entscheidet, muss jederzeit sehen, wo im Block
+> er steht (technik.md §14, E11). Die beiden Prüflisten bleiben getrennt und gelten
+> beide für diesen einen Bildschirm; die Zustände `BLOCK_LIST` und `ENTRY` des
+> Ansichtsmodells bleiben davon unberührt (AP 18a).
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│  Sherlock Holmes · I. A Scandal in Bohemia        Wörter · Block 1        │
+│  ────────────────────────────────────────────────────────────────────     │
+│  Wörter: 25                                                               │
+│    1  NOUN  photograph                                            21×     │
+│    2  NOUN  note                       neue Bedeutung             10×     │
+│    3  VERB  watching                                              10×     │
+│    …                                                                      │
+│    9  NOUN  brougham                   kein Wörterbucheintrag — unsicher  │
+│    …                                                                      │
+│   25  VERB  stirred                                                1×     │
+│  ────────────────────────────────────────────────────────────────────     │
+│  Bis zu welcher Nummer kennst du alles?   [    ] (1–25, leer = keine)    │
+│                                           [ Übernehmen ]  [ Keine ]       │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+**Verifiziert heißt:**
+
+1. Die Liste zeigt **alle** Einträge des Blocks, durchnummeriert ab 1, vor jeder
+   Einzelentscheidung (`cli/interaction.py`, „Wie die Sammelaktion hier funktioniert").
+2. Nummern sind rechtsbündig, die Wortartspalte ist über alle Zeilen gleich breit.
+3. Ab dem zweiten Block trägt die Überschrift die Blocknummer.
+4. Einträge mit `NEW_MEANING_OF_KNOWN_WORD` tragen die Marke „neue Bedeutung"; Einträge
+   ohne Wörterbucheintrag den Wortlaut von `dictionary.UNCERTAIN_LABEL`.
+5. Die Häufigkeitsspalte zeigt `Occurrence.frequency`, nicht die Vorkommen samt
+   Eigennamen (`miss` in Sherlock K9 steht mit 1×, nicht mit 19×).
+6. Eine leere Antwort und „Keine" führen zum selben Ergebnis: keine Sammelaktion.
+7. Eine ungültige Eingabe („1O") erzeugt eine Meldung mit der eingegebenen Zeichenfolge
+   und lässt die Liste stehen — die Liste wird **nicht** zweimal gezeichnet (technik.md §9).
+8. Nach dem Übernehmen steht die Zahl der gebuchten Einträge auf dem Bildschirm.
+9. Bei 900×600 scrollt die Liste, Eingabezeile und Schaltflächen bleiben sichtbar.
+
+---
+
+### 5. Triage-Eintrag (`ENTRY`, AP 18b)
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│  The Adventures of Sherlock Holmes · Arthur Conan Doyle   I. A Scandal …  │
+│                                                                           │
+│  ───  7 / 25  ·  3 ZUM LERNEN  ─────────────────────────────────────      │
+│                                                                           │
+│  drawing                                                                  │
+│  ziehen · blankziehen · herausziehen · zücken                             │
+│  VERB · 5× im Kapitel · to pull out, unsheath                             │
+│  [ neue Bedeutung eines bekannten Wortes ]        ← nur wenn zutreffend   │
+│                                                                           │
+│  │ „They were admirable things for the observer—excellent for drawing     │
+│  │  the veil from men's motives and actions."                             │
+│                                                                           │
+│  ────────────────────────────────────────────────────────────────────     │
+│  K kenne ich    L will ich lernen    S überspringen    Q beenden          │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+**Verifiziert heißt:**
+
+1. Die Wortform steht in der Akzentschrift und ist das größte Element des Bildschirms —
+   größer als Übersetzung, Belegsatz und jede Schaltfläche.
+2. Die Übersetzung steht unmittelbar darunter, in der Akzentfarbe, **ohne** dass ein
+   anderes Element dazwischen steht (technik.md §13: „um welches Wort geht es und was
+   heißt es").
+3. Wortart, Häufigkeit und Bedeutungsangabe stehen in einer Zeile in `inkSoft`,
+   getrennt durch dasselbe Zeichen — genau drei Angaben, nicht mehr.
+4. Die Bedeutungsangabe steht auch dann da, wenn das Wörterbuch keinen Bedeutungstext
+   führt: dann im Wortlaut von `dictionary.NO_SENSE_LABEL` beziehungsweise
+   `UNCERTAIN_LABEL` (Regel 1 — nichts fällt weg).
+5. Der Belegsatz steht vollständig und umgebrochen; bei einem 400 Zeichen langen Satz ist
+   **kein** Wort abgeschnitten und es erscheint kein „…".
+6. Die Wortform ist im Belegsatz hervorgehoben, und zwar in **derselben Beugungsform**
+   wie in der Kopfzeile (`drawing`, nicht `draw`).
+7. Der Zähler trägt drei Angaben: Position, Blockgröße und „N zum Lernen" — der Stand
+   **vor** der anstehenden Entscheidung (technik.md §13).
+8. `[ neue Bedeutung eines bekannten Wortes ]` steht auf einer **eigenen** Zeile, nicht
+   am Ende einer anderen.
+9. Alle vier Tasten K/L/S/Q sind sichtbar beschriftet; die Taste steht vor ihrem Text.
+10. Bei 900×600 bleibt der Belegsatz vollständig sichtbar; notfalls schrumpft der
+    Randabstand, nie der Satz.
+
+---
+
+### 6. Blockende (`BLOCK_END`, AP 18c)
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│  Block 1 ist durch.                                                       │
+│                                                                           │
+│       9   zum Lernen                                                      │
+│      14   als bekannt gebucht                                             │
+│       2   übersprungen                                                    │
+│                                                                           │
+│  Der nächste Block ist vorbereitet.                                       │
+│  ⚠ Der nächste Block ließ sich nicht auflösen:  <Meldung>                 │
+│    [ Teilexport schreiben ]                       ← nur im Fehlerfall     │
+│                                                                           │
+│                       [ Weiter (J) ]    [ Aufhören (N) ]                  │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+**Verifiziert heißt:**
+
+1. Die Bilanz nennt genau drei Zahlen; die Sammelaktion zählt in „als bekannt gebucht"
+   mit, nicht getrennt (technik.md §13).
+2. Die drei Zahlen ergeben zusammen die Blockgröße.
+3. „Weiter" und „Aufhören" tragen ihre Taste in der Beschriftung.
+4. Ist das Vorladen fertig, steht das als Satz da — nicht als Symbol allein.
+5. Scheitert das Vorladen, erscheint die **Meldung des Fehlschlags im Wortlaut** und das
+   Angebot des Teilexports; „Weiter" verschwindet (technik.md §12). Ein leerer nächster
+   Block ohne Meldung gilt als Fehlschlag der Prüfung.
+6. Nach „Aufhören" wird nichts mehr ins Profil geschrieben (konzept.md, „Bewusst offen":
+   entschieden am 01.09.2026 — nichts).
+
+---
+
+### 7. Abschluss (`FINISHED`, AP 19)
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│  Kapitel 2 ist fertig.                                                    │
+│                                                                           │
+│  Kartenrichtung   (•) EN → DE   ( ) DE → EN   ( ) Lückentext             │
+│  Zielordner       …\data\export                        [ Ändern ]        │
+│                                                                           │
+│  Geschrieben:                                                             │
+│    sherlock_kapitel_2.apkg          9 Karten                              │
+│    sherlock_kapitel_2.html          9 Einträge, 1 Blatt                   │
+│                                                                           │
+│  Mit diesen 9 Wörtern verstehst du 94,1 % von Kapitel 2 (jetzt 92,7 %).   │
+│                                                                           │
+│                    [ Ordner öffnen ]   [ Nächstes Kapitel ]               │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+**Verifiziert heißt:**
+
+1. Beide geschriebenen Dateien stehen mit vollständigem Namen und einer Mengenangabe da.
+2. Die Kartenrichtung ist je Export wählbar und die gewählte ist im Screenshot erkennbar
+   (konzept.md §6).
+3. Ein zweiter Export desselben Kapitels zeigt `_2` im Dateinamen.
+4. Die Abdeckungszeile nennt **beide** Werte — jetzt und nach dem Lernen (E5, AP 6).
+5. Wurde keine Karte gewählt, steht ein Hinweis statt einer Dateiliste, und es wird keine
+   Datei geschrieben.
+6. „Ordner öffnen" ist vorhanden; der Pfad ist zusätzlich als Text lesbar (kopierbar,
+   auch wenn der Dateimanager nicht startet).
+
+---
+
+### Was für alle sieben gilt
+
+- Kein englischer Bezeichner im sichtbaren Text (Sprachregel, dokumentation.md §1) —
+  ausgenommen sind die Wortarten aus `token.pos_` und der englische Buchtext selbst.
+- Jeder Fehlschlag steht mit Wortlaut **im Fenster**, nie nur auf `stderr` (Regel 13).
+- Beim Laden des Bildschirms erscheint **keine** QML-Warnung; eine Warnung ist ein
+  Fehlschlag, kein Rauschen.
+- Der Tastaturfokus ist im Screenshot sichtbar (gezeichnet in `accent`, nicht in
+  `hairline`).
+- Jede Farbe und jede Schriftfamilie stammt aus `gui/qml/Theme.qml`; im Screenshot darf
+  keine Farbe vorkommen, die nicht in den Token steht. Die andere Hälfte davon prüft
+  `tests/test_design_tokens.py` am Quelltext.
+
+---
+
 ## Bewusst offen (später separat zu entscheiden)
 
 - ~~Bedienoberfläche, Programmiersprache und Bibliotheken~~ — **entschieden am 11.08.2026**,

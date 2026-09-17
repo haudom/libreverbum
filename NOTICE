@@ -1,17 +1,19 @@
 LibreVerbum — Namensnennungen für mitgelieferte Fremddaten
 ============================================================
 
-Der Code dieses Repositoriums steht unter der MIT-Lizenz (siehe LICENSE). Eine Datei
-ist davon ausgenommen und steht unter einer eigenen Lizenz:
+Der Code dieses Repositoriums steht unter der MIT-Lizenz (siehe LICENSE). Zwei Gruppen
+von Dateien sind davon ausgenommen und stehen unter einer eigenen Lizenz:
 
-    libreverbum/wordfreq_en_5000.txt
+    libreverbum/wordfreq_en_5000.txt          CC BY-SA 4.0   → Abschnitte 1 bis 4
+    gui/fonts/*.ttf                           SIL OFL 1.1    → Abschnitt 5
 
-Diese Datei enthält eine bearbeitete Auswahl aus den Häufigkeitsdaten der Python-
+Die erste Datei enthält eine bearbeitete Auswahl aus den Häufigkeitsdaten der Python-
 Bibliothek `wordfreq` (Fassung 3.1.1, https://github.com/rspeer/wordfreq/) — der
 Rangliste der 5.000 häufigsten englischen Grundformen. Genaueres zur Bearbeitung
-steht am Ende dieser Datei und im Kopf von `wordfreq_en_5000.txt` selbst.
+steht am Ende dieser Datei und im Kopf von `wordfreq_en_5000.txt` selbst. Die zweite
+Gruppe sind die beiden mitgebrachten Schriften der Oberfläche (technik.md §14).
 
-Alle Angaben unten sind wörtlich aus `wordfreq`s eigenen Dateien übernommen
+Alle Angaben in den Abschnitten 1 bis 4 sind wörtlich aus `wordfreq`s eigenen Dateien übernommen
 (NOTICE-Text in dessen `README.md`, Abschnitte „License" und „Citations to work
 that wordfreq is built on", sowie `LICENSE.txt`, geprüft am 31.08.2026 am
 Quellpaket `wordfreq-3.1.1.tar.gz`) — nicht aus dem Gedächtnis nacherzählt
@@ -193,3 +195,56 @@ Einzelheiten, Werkzeug und Erzeugungsdatum stehen im Kopf von
 Diese Datei wird an keiner Stelle mit dem Wörterbuch (`en-de.sqlite3`, WikDict,
 ebenfalls CC BY-SA) oder einer anderen Datenquelle verschmolzen (technik.md §2,
 „Lizenzfalle: nicht verschmelzen") — sie bleibt eine eigene, getrennte Datei.
+
+
+5. Die mitgebrachten Schriften der Oberfläche (gui/fonts/)
+-------------------------------------------------------------
+
+Die Qt-Oberfläche lädt zwei Schriftfamilien aus dem Repositorium statt Systemschriften
+zu benutzen (technik.md §14, „Serif ist Sprachmaterial, Sans ist Programmstimme").
+Beide stehen unter der SIL Open Font License 1.1 und **nicht** unter der MIT-Lizenz
+des übrigen Codes. Die vollständigen Lizenztexte liegen bei den Schriftdateien:
+
+    gui/fonts/Literata[opsz,wght].ttf          Literata, aufrechte Variable
+    gui/fonts/Literata-Italic[opsz,wght].ttf   Literata, kursive Variable
+    gui/fonts/OFL_literata.txt                 Lizenztext dazu
+
+    gui/fonts/Inter[opsz,wght].ttf             Inter, Variable
+    gui/fonts/OFL_inter.txt                    Lizenztext dazu
+
+Die Angaben unten sind wörtlich aus den Lizenzdateien übernommen, die mit den
+Schriftdateien selbst ausgeliefert werden — nicht aus dem Gedächtnis nacherzählt
+(dokumentation.md §4, Regel 15, „die Rohquelle entscheidet"), geprüft am 17.09.2026.
+
+Literata
+    Copyright 2017 The Literata Project Authors
+    (https://github.com/googlefonts/literata)
+
+    This Font Software is licensed under the SIL Open Font License, Version 1.1.
+
+    Entworfen von TypeTogether für Google. Im Programm trägt sie alles, was Sprache
+    *ist*: englische Wortform, Belegsatz aus dem Buch, Listenwörter, deutsche
+    Übersetzung, Buch- und Kapiteltitel.
+
+Inter
+    Copyright 2020 The Inter Project Authors
+    (https://github.com/rsms/inter)
+
+    This Font Software is licensed under the SIL Open Font License, Version 1.1.
+
+    Entworfen von Rasmus Andersson. Im Programm trägt sie alles, was das Programm
+    *sagt*: Beschriftungen, Zähler, Spaltenköpfe, Schaltflächen, Meldungen.
+
+Was die OFL 1.1 verlangt und wie es hier erfüllt ist:
+
+- **Namensnennung und Weitergabe des Lizenztextes.** Beide Copyright-Zeilen stehen
+  oben, beide vollständigen Lizenztexte liegen unverändert in `gui/fonts/`.
+- **Kein Verkauf der Schriften für sich.** LibreVerbum gibt sie nur als Bestandteil
+  des Programms weiter.
+- **Kein Reserved Font Name.** Weder Literata noch Inter führt in seiner
+  Copyright-Zeile den Zusatz „with Reserved Font Name" — die Dateien werden
+  unverändert und unter ihren eigenen Namen weitergegeben, eine Umbenennung ist
+  deshalb weder nötig noch vorgenommen.
+- **Kein starkes Copyleft auf den Code.** Die OFL bindet nur die Schriftdateien; sie
+  greift nicht auf das Programm über, das sie lädt (Regel 15, Prüfung vor der
+  Aufnahme).

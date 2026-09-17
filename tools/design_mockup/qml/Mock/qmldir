@@ -1,0 +1,14 @@
+# Das Modul, aus dem die Entwurfsbildschirme ihre beiden Singletons beziehen.
+#
+# `Theme` kommt **aus dem Bestand**, nicht aus einer Kopie: Der relative Pfad zeigt auf
+# `gui/qml/Theme.qml`, die einzige Quelle für Farbe, Schrift und Maß. Wer dort ein Token
+# ändert, sieht es beim nächsten `render_all.py` im Bild — eine Kopie hier hätte
+# stattdessen still auseinanderlaufen können, und genau das ist der Fehler, den
+# `token_check.py` in seiner alten Fassung vorgemacht hat (technik.md §14, „Der Mockup
+# rendert gegen den Bestand").
+#
+# `Content` dagegen gehört dem Mockup: Vorführdaten aus `tools/sherlock.epub`, erzeugt von
+# `build_content.py`.
+module Mock
+singleton Theme 1.0 ../../../../gui/qml/Theme.qml
+singleton Content 1.0 Content.qml

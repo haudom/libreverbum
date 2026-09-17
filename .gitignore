@@ -39,3 +39,11 @@ agent_status.json
 # Transportkopie der Claude-Erinnerungen — gehört zur Sitzung, nicht zum Projekt,
 # genauso wie agent_status.json. Zurückspielen: claude-erinnerungen/LIESMICH.md.
 /claude-erinnerungen/
+
+# Renderings und Hilfsdatei des Gestaltungs-Mockups (technik.md §14). Sie entstehen
+# reproduzierbar aus einem Befehl — tools/design_mockup/render_all.py —, und ein
+# eingefrorener Satz Bilder veraltet mit dem ersten geänderten Token, ohne dass es
+# jemandem auffällt. Die Zahlen dazu stehen in technik.md §14 und sind nachzurechnen,
+# nicht nachzuschlagen.
+tools/design_mockup/png/
+tools/design_mockup/_live_shell.qml

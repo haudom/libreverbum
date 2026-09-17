@@ -521,9 +521,30 @@ sie meldet ein Agent auch bei kaputter Seite Erfolg). Nach der Wahl: technik.md 
 Richtung samt Begründung und den beiden verworfenen), `gui/qml/Theme.qml` (Token als
 QML-Singleton, **einzige** Quelle für Farben, Schriften, Abstände), Kurzblock in CLAUDE.md
 (höchstens acht Zeilen: Richtung, Token-Datei, „keine Hex-Farbe außerhalb `Theme.qml`",
-Schriftverbot für Systemschriften, Screenshot-Regel). **Prüfung.** Die drei Mockups laden
-ohne QML-Warnung; Kontrast Text/Grund je Token-Paar ≥ 4,5:1, aus den Token gerechnet.
-**nach** AP 1.
+Schriftverbot für Systemschriften, Screenshot-Regel). **Prüfung.** Jeder Mockup lädt ohne
+QML-Warnung; kein Layoutüberlauf und keine Textkürzung im Objektbaum; Kontrast ≥ 4,5:1
+**im gerenderten PNG an jeder Textstelle** (unter 24 px; ab 24 px beziehungsweise ab
+18,66 px halbfett gilt 3,0:1 nach WCAG 2.1). **nach** AP 1.
+
+> **Berichtigt am 17.09.2026.** Die Prüfzeile lautete bis hierher: „Die drei Mockups
+> laden ohne QML-Warnung; Kontrast Text/Grund je Token-Paar ≥ 4,5:1, **aus den Token
+> gerechnet**." Beide Hälften sind widerlegt, und zwar an diesem Arbeitspaket
+> selbst: Die Tokenrechnung meldete „0 Paare unter 4,5:1", während im Bild sieben
+> Textstellen darunter lagen, die schlechteste bei 2,41:1 — `opacity`-Faktoren und
+> getönte Füllungen kommen in keiner Tokenrechnung vor. Und „0 QML-Warnungen" fängt
+> keinen Layoutüberlauf: Qt meldet dabei nichts, während der Belegsatz aus dem Fenster
+> läuft. Begründung und Zahlen: technik.md §14, „Gemessen wird im Bild, nicht aus den
+> Token".
+
+> **Erledigt am 17.09.2026** (Wahl Dominiks: „Lesetisch"). Abweichungen von der
+> Vorgabe oben, begründet in technik.md §14, E11: **zwei** Richtungen statt dreier (die
+> erste wurde verworfen, die zweite entstand aus deren Kritik) und **vier** gebaute
+> Bildschirme statt eines. Gelandet ist es in `gui/qml/Theme.qml` (Token), `gui/fonts/`
+> samt `NOTICE` Abschnitt 5 (Schriften), technik.md §14, E11 (Begründung und
+> Messwerte), konzept.md, „Die sieben Bildschirme der Oberfläche" (Wireframes und
+> „verifiziert heißt"-Listen), CLAUDE.md, „Gestaltung" (Kurzblock),
+> `tools/design_mockup/` (lauffähiger Mockup samt beiden Durchsichten) und
+> `tests/test_design_tokens.py` (der Grep-Test aus AP 15, vorgezogen).
 
 #### AP 15 — Gerüst der Oberfläche · M · `gui/` (neu), `tools/gui_screenshot.py` (neu), `tests/test_gui_*.py`
 
@@ -540,8 +561,18 @@ Vorgabe) über `QQuickWindow.grabWindow()`. **Form (fest)** wie genannt; Aufteil
 **Prüfung.** Regel 9 wird hier zum ersten Mal **prüfbar**: Ein Arbeiter, der 0,5 s schläft,
 lässt einen 50-ms-Timer der Ereignisschleife weiterlaufen (Verfälschung: `fn` im
 Hauptfaden → Timer feuert nicht → rot); eine Ausnahme im Arbeiter kommt bei `on_error` an
-(Verfälschung: `except: pass` → rot). Neuer Grep-Test: keine Hex-Farbe und kein
-`font.family` außerhalb `Theme.qml`. **nach** AP 14.
+(Verfälschung: `except: pass` → rot). Der Grep-Test — keine Hex-Farbe und keine
+Schriftfamilie außerhalb `Theme.qml` — steht seit AP 14 als `tests/test_design_tokens.py`
+und ist hier nicht noch einmal zu bauen, sondern nur dann anzupassen, wenn `gui/qml/`
+neue QML-Dateien bekommt. **nach** AP 14.
+
+> **Ergänzt am 17.09.2026 zur Prüfschleife.** `tools/gui_screenshot.py` rendert nicht
+> nur: Es zählt QML-Warnungen, prüft den Objektbaum auf Layoutüberlauf und gekürzten
+> Text und misst den Kontrast **im PNG an jeder Textstelle** — vier Schritte, nicht
+> einer. Die ersten drei fangen je einen Fehlschlag, den die anderen nicht sehen
+> (technik.md §14, „Gemessen wird im Bild, nicht aus den Token"). Vorbild und
+> Vorlage sind `shot.py`, `layout_check.py` und `contrast_check.py` in
+> `tools/design_mockup/`; sie bleiben dort, bis `gui_screenshot.py` ihre Arbeit tut.
 
 #### AP 16a — Einstellungen und Wörterbuch · M · `gui/`, `libreverbum/dictionary.py`, Tests
 

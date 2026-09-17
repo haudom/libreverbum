@@ -133,7 +133,6 @@ offen").
 | §12 | Ob ein Folgelauf die Triage-Ereignisse des Kapitels wiederverwendet |
 | §13 | Ob die Zählung nach Kapiteln bei einem ungleich verteilten Buch noch etwas aussagt |
 | §13 | Bei nur einem Kapitel: Fortschritt oder Ruckeln — nicht an echten Nutzern geprüft |
-| §14 | Die konkrete Gestaltungsrichtung (Farbtoken, Schriftrollen, Signaturelement) ist noch nicht gewählt |
 | §14 | Ob Qt Quick bei Sonnet tatsächlich mehr Durchsichtsrunden braucht als ein Web-Stack — Vermutung der Recherche, nicht gemessen |
 | §14 | Ob `recherche_hochwertige_UIs_mit_Claude.md` dauerhaft ins Repositorium gehört (liegt seit `5af0e86` versioniert, passt aber in keine der drei Dokumentrollen) |
 
@@ -3441,13 +3440,13 @@ mit AP 2.
 
 | Empfehlung der Recherche | Hier | Wo |
 |---|---|---|
-| Auf **eine** Ästhetik festlegen statt „modern"; Token-System (4–6 Farben, 2 Schriftrollen, Abstände, Signaturelement) | übernommen | `gui/qml/Theme.qml` als einzige Quelle |
-| Keine Standardschriften (Inter, Roboto, Systemschrift) | übernommen — mitgebrachte OFL-Schriften, Lizenz je Schrift belegt (Regel 15) | `NOTICE` |
+| Auf **eine** Ästhetik festlegen statt „modern"; Token-System (4–6 Farben, 2 Schriftrollen, Abstände, Signaturelement) | übernommen — die Richtung heißt „Lesetisch" (E11) | `gui/qml/Theme.qml` als einzige Quelle |
+| Keine Standardschriften (Roboto, Systemschrift) | übernommen — mitgebrachte OFL-Schriften Literata und Inter, Lizenz je Schrift belegt (Regel 15); Inter kommt als **mitgebrachte Datei**, nicht als Systemschrift (E11) | `NOTICE` Abschnitt 5, `gui/fonts/` |
 | Kompakter Design-Block in CLAUDE.md | übernommen, acht Zeilen, verweist hierher | AP 14 |
 | Screenshot-Verifikationsschleife (zwei Größen, Konsole/QML-Warnungen prüfen, gegen Akzeptanzkriterien) | übernommen: `tools/gui_screenshot.py`, 1280×800 und Mindestgröße, QML-Warnungen als Fehlschlag, „verifiziert heißt"-Listen je Bildschirm | CLAUDE.md, „Prüfen vor »fertig«" |
 | Zwei-Pass mit Selbstkritik („remove one accessory") | übernommen als eigenes AP nach dem ersten und nach dem letzten Oberflächen-Block | Gestaltungsdurchsicht (Opus) |
 | Writer/Reviewer mit frischem Kontext | ist bereits Hausordnung | dokumentation.md §10 |
-| Web-Stack React + Tailwind + shadcn, Chrome-DevTools-/Playwright-/shadcn-MCP, Storybook, Figma, Lighthouse/axe | **nicht** übernommen — Web-Werkzeuge, siehe E1; Kontrast wird aus den Token gerechnet statt mit axe gemessen | — |
+| Web-Stack React + Tailwind + shadcn, Chrome-DevTools-/Playwright-/shadcn-MCP, Storybook, Figma, Lighthouse/axe | **nicht** übernommen — Web-Werkzeuge, siehe E1; Kontrast wird im gerenderten Bild gemessen statt mit axe — der Zusatz „aus den Token gerechnet" stand bis zum 17.09.2026 hier und ist widerlegt (E11, „Gemessen wird im Bild, nicht aus den Token") | — |
 
 ### Entschieden 16.09.2026: Die Recherche-Datei fällt am Tor der Phase 2 weg
 
@@ -3460,11 +3459,199 @@ selbst bewahrt Git (`git show 5af0e86:recherche_hochwertige_UIs_mit_Claude.md`).
 Tor der Phase 2 bleibt sie liegen, gelöscht wird sie erst dort (bauplan-phase2.md, E14 und
 Block D).
 
-### Offene Punkte
+### E11 — Gestaltungsrichtung: „Lesetisch" — entschieden 17.09.2026
 
-- **Die konkrete Gestaltungsrichtung** (Farbtoken, Schriftrollen, Signaturelement) ist mit
-  E1 bis E4 noch nicht gewählt — das ist ein eigener Schritt mit drei vorgelegten
-  Richtungen, aus denen Dominik wählt, bevor Code entsteht
+**Entschieden von Dominik am 17.09.2026: die Richtung heißt „Lesetisch".** Token, Schrift
+und Maß stehen in `gui/qml/Theme.qml` — der einzigen Quelle; der lauffähige Beleg steht in
+`tools/design_mockup/`.
+
+Zwei Abweichungen von der Vorgabe des Bauplans, beide absichtlich und beide hier
+festgehalten, weil eine geschönte Vorgangsbeschreibung den nächsten Bearbeiter irreführt:
+
+- **Vorgelegt wurden zwei Richtungen, nicht drei.** Zuerst entstand „Glashaus"; eine
+  Durchsicht hat sie verworfen, und aus deren Befunden entstand „Lesetisch", das eine
+  zweite Durchsicht bestanden hat. Drei Richtungen nebeneinander hätten dreimal denselben
+  Fehler gemacht — der Wert lag in der Kritik, nicht in der Auswahl. Was aus den beiden
+  Durchsichten stammt, tragen die Regelkommentare als Herkunftsangabe `B…` / `C…`
+  (`tools/design_mockup/review_round1.md`, `review_round3.md`).
+- **Gebaut ist nicht ein Bildschirm, sondern vier** — Einrichtung, Buch und Kapitel,
+  Fortschritt, Triage-Eintrag — samt fünfzehn Bauteilen. Ein einzelner Bildschirm beweist
+  nicht, dass eine Richtung gleichzeitig ein Formular, eine lange Tabelle mit Bildlauf und
+  eine Wartezeit trägt; genau daran ist die erste Richtung gescheitert.
+
+#### Warum „Glashaus" gescheitert ist
+
+Die verworfene Richtung war eine **Materialstudie** — Glas, Glanz, Schlagschatten,
+Spiegelung — und kein Gestaltungssystem. Vier Befunde, von denen zwei keine
+Geschmacksfragen sind, sondern Messfehler:
+
+1. **Die Flächenhierarchie war invertiert.** Die wichtigste Fläche des Bildes, die Karte
+   mit dem Wort, stand zu ihrem Grund bei **1,01:1** — sie war nicht heller als der Tisch,
+   sondern eine Spur dunkler, und getragen hat sie allein ihr Schlagschatten. Die hellste
+   Fläche des Bildes war eine Zierblase.
+2. **`opacity` auf Text als Ersatz für einen fehlenden dritten Textrang.** Es gab zwei
+   Textfarben und drei nötige Ränge, also griff jeder Bildschirm zur Deckung. Ergebnis:
+   sieben Textstellen unter 4,5:1, die schlechteste bei **2,41:1**.
+3. **Die Akzentfarbe trug sechs Bedeutungen gleichzeitig** — laufende Zeile, Auswahl,
+   Fokus, Marke, Schaltfläche, Hervorhebung. Für „Achtung" blieb keine Farbe übrig, und
+   ein Bildschirm, auf dem alles Wichtige dieselbe Farbe hat, hat nichts Wichtiges.
+4. **Layoutüberlauf bei 900×600.** Der Belegsatz lief unter die Tastenleiste und aus dem
+   Fenster, dem Fortschrittsbildschirm verschwand seine einzige Schaltfläche — **ohne eine
+   einzige QML-Warnung**.
+
+Die Befunde 2 und 4 stehen hier nicht als Anekdote: Beide sind bei **grünem Werkzeug**
+entstanden. Sie sind der Grund für die beiden Prüfregeln weiter unten.
+
+#### Was „Lesetisch" ist
+
+Das Programm wird **vor** dem Lesen benutzt, regelmäßig, über Jahre, und sein
+Hauptbildschirm verlangt dreihundert Entscheidungen hintereinander. Es soll deshalb
+aussehen wie eine gut gesetzte Seite auf einem Tisch, nicht wie eine Oberfläche, die sich
+vorstellt: nichts glänzt, nichts spiegelt, nichts schwebt, nichts ist durchsichtig. Rang
+entsteht aus Flächenhelligkeit, Weißraum, Schriftgröße und **einer** Akzentfarbe mit
+**einer** Bedeutung. Dekoration gibt es an genau einem Ort — dem Fortschrittsbildschirm,
+der Wartezeit ist.
+
+**Drei Ebenen, alle deckend.** Eine Fläche sieht überall gleich aus, unabhängig davon,
+worüber sie liegt — genau das konnte das Glas nicht.
+
+| Ebene | Token | was | hell | dunkel |
+|---|---|---|---|---|
+| L0 Grund | `ground` | der Tisch: Fensterhintergrund | `#E3DFD6` | `#0E0C08` |
+| L1 Fläche | `surface` | das Blatt: Karte, Liste, Formular | `#FDFCFA` | `#2B261C` |
+| L2 Hervorhebung | `marked` | **nur** die laufende/gewählte Zeile | `#F6E9D2` | `#372B19` |
+
+Zugesichert und im Bild nachgemessen: **L1 zu L0 ≥ 1,25:1, gemessen 1,30:1 in beiden
+Themen.** Hell ist das Blatt heller als der Tisch, dunkel dunkler — dieselbe Aussage,
+zweimal richtig herum. Getrennt wird sonst durch eine Haarlinie (`hairline`), sonst
+nichts: keine Verläufe, keine Schatten, keine Transparenz.
+
+**Drei Textränge statt zwei** (`ink`, `inkSoft`, `inkFaint`) sind die Lehre aus Befund 2
+oben, und daraus die harte Regel: **`opacity` kommt nie auf Text.** Wer einen schwächeren
+Rang braucht, nimmt das dritte Token.
+
+**Je Farbe genau eine Aufgabe.** `accent`/`accentFill` heißt ausschließlich *hier bist du
+gerade / das ist die Antwort*; `chosen` ist „zum Lernen gewählt"; `warn`/`warnFill` gehört
+dem Fehlschlag im Wortlaut (Regel 13); `robotShell`/`robotVisor` gehören der Figur. Auch
+die Figur bekommt ihre beiden Flächen als Token, weil sonst genau die Ausnahme entsteht,
+die die Prüfung verhindern soll — eine Zeichnung, die sich ihre Töne selbst mischt.
+
+#### Serif ist Sprachmaterial, Sans ist Programmstimme
+
+Zwei mitgebrachte Familien, beide SIL OFL 1.1, Lizenz je Schrift in `NOTICE` belegt
+(Regel 15), Dateien in `gui/fonts/`: **Literata** trägt alles, was Sprache *ist* — die
+englische Wortform, den Belegsatz aus dem Buch, die Wörter der Liste, die deutsche
+Übersetzung, Buch- und Kapiteltitel. **Inter** trägt alles, was das Programm *sagt* —
+Beschriftungen, Zähler, Spaltenköpfe, Schaltflächen, Meldungen. Damit ist die
+Schriftmischung eine Regel und keine Laune; die erste Richtung mischte Cabin und
+Quicksand, deren Unterschied bei 12 bis 15 px nicht lesbar war — die Mischung sagte
+deshalb nichts.
+
+Systemschriften sind ausgeschlossen (Empfehlung der Recherche, Tabelle oben): Sie sehen
+auf jeder Maschine anders aus, und ein Screenshot, den zwei Bearbeiter verschieden
+gerendert bekommen, prüft nichts.
+
+**Maß.** Rastereinheit 8, Abstände 4/8/16/24/32/48 (`xs: 4` ist die halbe Einheit und die
+einzige ausgewiesene Ausnahme). **Sechs Schriftstufen mit je einer benannten Aufgabe** —
+12 Marke, 14 klein, 18 Belegsatz, 16 normal, 24 Titel, 60 Kopfwort — und zwei Gewichte.
+Wer eine siebte Stufe braucht, hat eine Aufgabe übersehen, nicht eine Größe.
+
+#### Die Layoutregel: das dehnbare Element bekommt die Resthöhe
+
+Auf jedem Bildschirm bekommt **genau ein** Element die Resthöhe, alles Feste eine feste
+Höhe — nie umgekehrt. Dehnbar ist je Bildschirm eines: der Belegsatz (Triage), die
+Kapitelliste, die Schrittliste (Einrichtung). Jede Fläche setzt `clip`, damit ein Überlauf
+**sichtbar** abschneidet statt lautlos über den Fensterrand zu laufen. Unter 1000 px
+Breite schrumpft der **Rand**, nie der Satz; die einzige ausgewiesene Ausnahme ist das
+Kopfwort (60 → 48 px).
+
+#### Gemessen wird im Bild, nicht aus den Token
+
+> **Nachtrag, 17.09.2026.** Die Tabelle oben („Was aus der Recherche in die Oberfläche
+> wandert") hielt fest: „Kontrast wird aus den Token gerechnet statt mit axe gemessen",
+> und die Prüfzeile von AP 14 verlangte „Kontrast Text/Grund je Token-Paar ≥ 4,5:1, **aus
+> den Token gerechnet**". Das war plausibel und ist **widerlegt**. Genau diese Rechnung
+> hat in der ersten Richtung „0 Paare unter 4,5:1" gemeldet, während im Bild sieben
+> Textstellen darunter lagen, die schlechteste bei 2,41:1 — weil `opacity`-Faktoren,
+> getönte Füllungen und ein Glanzstreifen in keiner Tokenrechnung vorkommen. Gültig ist:
+> **Gemessen wird im gerenderten PNG an den echten Textstellen des Objektbaums**
+> (`tools/design_mockup/contrast_check.py`). Eine Tokenrechnung
+> (`tools/design_mockup/token_check.py`) bleibt als Vorprobe erlaubt; wer ihr allein
+> glaubt, wiederholt den Fehler.
+
+Dazu der zweite Befund derselben Art, aus demselben Anlass: **„0 QML-Warnungen" fängt
+keinen Layoutüberlauf.** Qt meldet dabei nichts — der Satz läuft aus dem Fenster und der
+Lauf ist grün. Geprüft wird deshalb der Objektbaum auf Überlauf, tatsächliches
+Abschneiden und gekürzten Text (`tools/design_mockup/layout_check.py`).
+
+Beides zusammen ist die Screenshot-Prüfschleife, die AP 15 in `tools/gui_screenshot.py`
+übernimmt: **rendern, Warnungen zählen, Layout prüfen, Kontrast im Bild messen** — vier
+Schritte, nicht einer. Ohne die letzten beiden meldet ein Agent auch bei kaputter Seite
+Erfolg.
+
+#### Der Mockup rendert gegen den Bestand
+
+`tools/design_mockup/` hält vier Bildschirme, fünfzehn Bauteile, die Vorführdaten und die
+Prüfskripte. Der eine Befehl:
+
+```
+.venv/Scripts/python.exe tools/design_mockup/render_all.py
+```
+
+**Gerendert wird gegen `gui/qml/Theme.qml` und `gui/fonts/`, nicht gegen eine Kopie** —
+`tools/design_mockup/qml/Mock/qmldir` zeigt mit einem relativen Pfad dorthin. Das ist
+keine Bequemlichkeit, sondern die Bedingung dafür, dass die Zahlen unten reproduzierbar
+bleiben: Wer ein Token ändert, bekommt beim nächsten Lauf ein anderes Bild und im Zweifel
+Rot, statt dass Entwurf und Bestand still auseinanderlaufen. Dass dieser Fehler real ist,
+hat der Mockup selbst vorgeführt — `token_check.py` trug bis zum Einsortieren eine Kopie
+der Tokenwerte im Quelltext und rechnete nach der letzten Farbänderung mit den alten.
+
+Die Bauteile sind die Saat für AP 15 bis AP 19 und ziehen dort nach `gui/qml/` um; das
+Verzeichnis unter `tools/` ist vorübergehend, `gui/qml/Theme.qml` ist es nicht. Die 30
+Renderings sind **nicht versioniert**: Sie entstehen aus einem Befehl, und ein
+eingefrorener Satz Bilder veraltet mit dem ersten geänderten Token.
+
+#### Gemessene Zahlen, 17.09.2026
+
+Aus `render_all.py` gegen den eingecheckten Stand: vier Bildschirme, hell und dunkel, bei
+1280×800 und 900×600, dazu sechs Nebenfälle — **30 Bilder, 0 Befunde** (keine QML-Warnung,
+kein Überlauf, keine Kürzung, keine Textstelle unter ihrer Schwelle). Jeder Bildschirm
+steht dabei im **ungünstigsten** Datenfall: längster Belegsatz des Kapitels (473 Zeichen),
+alle Etappen offen, Fehlschlag im Wortlaut, 22 Kapitel mit Bildlauf.
+
+| | hell | dunkel |
+|---|---|---|
+| schlechtestes Textpaar über alle 30 Bilder | **4,73:1** („beenden", 14 px) | **5,02:1** („8", 14 px) |
+| L1 Blatt zu L0 Grund | 1,30:1 | 1,30:1 |
+| L2 laufende Zeile zu L1 Blatt | 1,17:1 | 1,09:1 |
+
+Schwelle für Text unter 24 px ist 4,5:1 (WCAG 2.1). Die zweite Zeile ist die Zusicherung
+des Ebenenmodells. Die dritte ist **schwach**, besonders dunkel: Die laufende Zeile trägt
+sich nicht über die Fläche allein und hat deshalb zusätzlich einen 3 px breiten
+Akzentbalken und halbfetten Text.
+
+Zum Vergleich die verworfene Richtung: sieben Textstellen unter 4,5:1, die schlechteste
+bei 2,41:1 — bei gleichzeitiger Meldung „0 Paare unter 4,5:1" durch das damalige Werkzeug.
+
+#### Offene Punkte der Gestaltung
+
+- **Schwebe- und Druckzustand** der Bedienelemente sind nicht gebaut: In einem Standbild
+  sind sie nicht nachweisbar, und ungeprüft abgeliefert wird hier nichts. Sie gehören in
+  AP 15 oder 18b, mit einem Beleg, der Bewegung zeigt
+- **Drei der sieben Bildschirme** (Blockliste als eigener Modus, Blockende, Abschluss) sind
+  nicht gebaut. Dass der Bauteilsatz sie trägt, ist behauptet und nicht bewiesen
+- **Zwei Etappennamen des Fortschritts** („Kapitelwortschatz ermitteln", „Bedeutungen
+  auflösen") haben heute keine Entsprechung in `pipeline.ChapterStage`. Das ist eine Frage
+  an den Kern, keine Gestaltungsfrage
+- **Die Bildlaufleiste ist Anzeige, kein Bedienelement** (4 px). Für ein Werkzeug, das über
+  die Tastatur bedient wird, ist das eine Entscheidung und kein Naturgesetz
+- **Eine Falle, die niemanden mehr kosten soll:** Eine Eigenschaft namens `top` auf einem
+  `Item` bringt die QML-Erzeugung zum **Hängen** — kein Fehler, keine Warnung, das Fenster
+  erscheint nie, und der Renderer kann nichts melden, weil er nie bis zum Rendern kommt.
+  Sie steht als Kommentar an der Stelle in `tools/design_mockup/qml/Robot.qml`, an der sie
+  zugeschlagen hat
+
+### Offene Punkte
 - **Ob Qt Quick für Desktop-Anwendungen bei Sonnet tatsächlich mehr Durchsichtsrunden
   braucht** als ein Web-Stack, ist eine Vermutung der Recherche, nicht an diesem Bestand
   gemessen

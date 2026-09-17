@@ -119,7 +119,22 @@ Systemkodierung sonst still typografische Zeichen im Buchtext.
   entsteht, überspringt sich dieser zweite Teil sichtbar mit Begründung statt
   stillschweigend nichts zu prüfen. Die Ausnahme `app/pdf.py` aus E7 (b) ist dabei noch
   nicht eingebaut, weil E7 noch nicht entschieden ist (Regel 14). Begründung: technik.md §14
+- **`gui/` gibt es seit AP 14**, aber nur als `gui/qml/Theme.qml` und `gui/fonts/` — Python
+  bekommt das Paket erst mit AP 15. `test_gui_does_not_import_cli` prüft deshalb auf das
+  erste Python-Modul, nicht auf das Verzeichnis: Sonst wäre das Anlegen eines Ordners rot
+  geworden, obwohl nichts falsch ist
 - **Lizenz jeder neuen Bibliothek vor der Aufnahme prüfen** (Regel 15, starkes Copyleft)
+
+## Gestaltung (technik.md §14, E11 — seit 17.09.2026 entschieden)
+
+- Richtung **„Lesetisch"**: deckende Flächen, drei Textränge, **eine** Akzentfarbe mit einer
+  Bedeutung; nichts glänzt, nichts ist durchsichtig, `opacity` nie auf Text
+- **`gui/qml/Theme.qml`** ist die einzige Quelle für Farbe, Schrift und Maß — keine Hex-Farbe,
+  kein Farbname, keine gemischte Tönung, keine Systemschrift außerhalb; Schriften aus
+  `gui/fonts/`, Familie aus `Theme.fonts`, Lizenz in `NOTICE` (`tests/test_design_tokens.py`)
+- **Screenshot-Regel:** rendern, Warnungen zählen, Layout prüfen, Kontrast **im Bild** messen —
+  hell/dunkel bei 1280×800 und 900×600 gegen die „verifiziert heißt"-Liste (konzept.md, „Die
+  sieben Bildschirme der Oberfläche"). Ansehen: `tools/design_mockup/render_all.py`
 
 ## Prüfen vor „fertig" (technik.md §6)
 
@@ -152,16 +167,20 @@ Zwei Prüfregeln sind abgeschaltet, weil sie gegen die Sprachregel arbeiten (`RU
 melden Gedankenstrich und typografische Anführungszeichen). Wer sie wieder anschaltet,
 liest erst technik.md §6, „Zwei Prüfregeln arbeiten gegen die Hausordnung".
 
-**Ergänzung für die Oberfläche (seit Phase 2, technik.md §14, ab AP 1).** Tests, die
-`PySide6` brauchen, sollen die Marke `needs_gui` tragen und mit
-`QT_QPA_PLATFORM=offscreen` laufen (`conftest.py` soll das setzen, eine
-`QGuiApplication` je Testlauf) — heute, vor AP 1, kennt `conftest.py` weder die Marke
-noch die Umgebungsvariable. Das Tor allein wird bei einem GUI-AP nicht reichen: Dazu
-kommt die Screenshot-Prüfschleife — `tools/gui_screenshot.py <screen> <png>` soll bei
-1280×800 und bei der Mindestgröße rendern, QML-Warnungen sollen als Fehlschlag gelten,
-geprüft werden soll gegen eine vorab notierte „verifiziert heißt"-Liste des Bildschirms;
-das Skript entsteht erst in AP 15. Ohne sie meldet ein Agent auch bei kaputter Seite
-Erfolg.
+**Ergänzung für die Oberfläche (seit Phase 2, technik.md §14).** Tests, die `PySide6`
+brauchen, tragen die Marke `needs_gui` und laufen mit `QT_QPA_PLATFORM=offscreen`
+(`conftest.py` setzt beides seit AP 1, eine `QGuiApplication` je Testlauf). Das Tor allein
+reicht bei einem GUI-AP nicht: Dazu kommt die **Screenshot-Prüfschleife**, und die hat
+seit AP 14 **vier** Schritte, nicht einen — rendern, QML-Warnungen zählen, den Objektbaum
+auf Layoutüberlauf und gekürzten Text prüfen, den Kontrast **im gerenderten PNG** an jeder
+Textstelle messen. Die beiden mittleren und der letzte fangen je einen Fehlschlag, den die
+anderen nicht sehen: „0 QML-Warnungen" fängt keinen Überlauf, und aus den Token gerechneter
+Kontrast liefert falsches Grün (technik.md §14, „Gemessen wird im Bild, nicht aus den
+Token"). Geprüft wird bei 1280×800 und bei der Mindestgröße, hell und dunkel, gegen die
+vorab notierte „verifiziert heißt"-Liste des Bildschirms (konzept.md, „Die sieben
+Bildschirme der Oberfläche"). `tools/gui_screenshot.py` entsteht in AP 15; bis dahin
+machen die drei Skripte in `tools/design_mockup/` dieselbe Arbeit. Ohne die Schleife meldet
+ein Agent auch bei kaputter Seite Erfolg.
 
 **Nach den vier Befehlen folgt die Durchsicht.** Sie ist kein fünfter Befehl, sondern die
 Antwort auf eine andere Frage: Das Tor prüft **Form** — ob das Gebaute das Richtige tut,
@@ -182,16 +201,19 @@ Runden.
 einem Wegwerfordner — `tools/en-de.sqlite3` und `tools/*.epub` gehören mit hinein. Die
 Gegenprobe: Die Schlusszeile von `pytest` muss **drei** Übersprungene nennen, wenn PySide6
 installiert ist — `needs_model`, `needs_wordfreq` und der `gui`-Skip aus
-`test_gui_does_not_import_cli` (`tests/test_architecture.py`, solange `gui/` noch nicht
-existiert) —, und **vier**, wenn PySide6 fehlt: `needs_gui` kommt dann als weitere Marke
-dazu. Meldet der Lauf stattdessen rund fünfunddreißig, ist die Kopie missraten; meldet er
+`test_gui_does_not_import_cli` (`tests/test_architecture.py`, solange `gui/` noch **kein
+Python-Modul** enthält) —, und **vier**, wenn PySide6 fehlt: `needs_gui` kommt dann als
+weitere Marke dazu. Gemessen am Stand von AP 14: `596 passed, 3 skipped` (rund 127 s).
+Meldet der Lauf stattdessen rund fünfunddreißig, ist die Kopie missraten; meldet er
 einen weniger als hier genannt, steht `LIBREVERBUM_MODEL_URL` oder
 `LIBREVERBUM_WORDFREQ_PYTHON` noch in der Umgebung (falscher Alarm, kein falsches Grün).
 Begründung: dokumentation.md §10, „Woran sie prüft: gegen den Commit, nicht gegen den
 Arbeitsbaum". (Zwischen AP 1 und AP 3 zählte ein anderer, von PySide6 unabhängiger
 Übersprungener dazu, solange das Paket `app/` noch nicht existierte — seit AP 3 (`421cb95`)
-ist `app/` angelegt, und dieser Skip ist weg; der `gui`-Skip hier ist sein Nachfolger und
-fällt entsprechend weg, sobald `gui/` angelegt wird.)
+ist `app/` angelegt, und dieser Skip ist weg; der `gui`-Skip hier ist sein Nachfolger. Er
+fällt **nicht** schon mit dem Verzeichnis weg: AP 14 hat `gui/qml/Theme.qml` und
+`gui/fonts/` angelegt, Python bekommt `gui/` erst mit AP 15, und die Bedingung des Tests
+ist deshalb das erste Modul, nicht der Ordner.)
 
 ## Daten
 
@@ -233,9 +255,17 @@ python tools/epub_check.py buch.epub                  # EPUB-Struktur und Fließ
 python tools/epub_check.py --summary *.epub           # eine Zeile je Buch
 python tools/print_fit_check.py                       # Blattkapazität, echt gedruckt
 python tools/build_wordfreq_preset.py …               # erzeugt statt zu messen (s. u.)
+python tools/design_mockup/render_all.py              # Gestaltungsrichtung, gerendert (s. u.)
 ```
 
-Alle bis auf fünf kommen mit der Standardbibliothek aus, brauchen also keine
+**`tools/design_mockup/` ist kein Skript, sondern ein Verzeichnis** — der lauffähige
+Mockup der Gestaltungsrichtung „Lesetisch" mit vier Bildschirmen, fünfzehn Bauteilen und
+drei Prüfskripten. Es braucht PySide6 (Gruppe `gui`) und rendert **gegen den Bestand**:
+`gui/qml/Theme.qml` und `gui/fonts/`, nicht gegen eine Kopie. `render_all.py` ist der eine
+Befehl; Einzelheiten in dessen Modulkopf, Begründung in technik.md §14, E11. Die 30 Bilder
+unter `png/` sind nicht versioniert, sie entstehen aus dem Befehl.
+
+Von den Skripten oben kommen alle bis auf fünf mit der Standardbibliothek aus, brauchen also keine
 Projektumgebung. **`nlp_check.py` verlangt spaCy oder Stanza samt Modellen**: Ein Vergleich
 der beiden lässt sich nur an den echten Modellen führen, nicht nachbilden; das Skript nennt
 die Installationsbefehle in seinem Kopf. **`ambiguity_check.py` und `bundle_check.py`

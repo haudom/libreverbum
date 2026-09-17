@@ -1,0 +1,309 @@
+{
+ "dune": {
+  "book": {
+   "title": "Dune",
+   "author": "Frank Herbert"
+  },
+  "notice": null,
+  "chapters": [
+   {
+    "n": 1,
+    "t": "Dune",
+    "lvl": 0,
+    "w": 5,
+    "skip": null
+   },
+   {
+    "n": 2,
+    "t": "Book 1 DUNE",
+    "lvl": 0,
+    "w": 78774,
+    "skip": null
+   },
+   {
+    "n": 3,
+    "t": "Book Two MUAD’DIB",
+    "lvl": 0,
+    "w": 63513,
+    "skip": null
+   },
+   {
+    "n": 4,
+    "t": "Book Three THE PROPHET",
+    "lvl": 0,
+    "w": 64637,
+    "skip": null
+   }
+  ]
+ },
+ "sherlock": {
+  "book": {
+   "title": "The Adventures of Sherlock Holmes",
+   "author": "Arthur Conan Doyle"
+  },
+  "notice": null,
+  "chapters": [
+   {
+    "n": 1,
+    "t": "The Adventures of Sherlock Holmes",
+    "lvl": 0,
+    "w": 97,
+    "skip": null
+   },
+   {
+    "n": 2,
+    "t": "I. A SCANDAL IN BOHEMIA",
+    "lvl": 0,
+    "w": 8580,
+    "skip": null
+   },
+   {
+    "n": 3,
+    "t": "II. THE RED-HEADED LEAGUE",
+    "lvl": 0,
+    "w": 9176,
+    "skip": null
+   },
+   {
+    "n": 4,
+    "t": "III. A CASE OF IDENTITY",
+    "lvl": 0,
+    "w": 7035,
+    "skip": null
+   },
+   {
+    "n": 5,
+    "t": "IV. THE BOSCOMBE VALLEY MYSTERY",
+    "lvl": 0,
+    "w": 9662,
+    "skip": null
+   },
+   {
+    "n": 6,
+    "t": "V. THE FIVE ORANGE PIPS",
+    "lvl": 0,
+    "w": 7338,
+    "skip": null
+   },
+   {
+    "n": 7,
+    "t": "VI. THE MAN WITH THE TWISTED LIP",
+    "lvl": 0,
+    "w": 9258,
+    "skip": null
+   },
+   {
+    "n": 8,
+    "t": "VII. THE ADVENTURE OF THE BLUE CARBUNCLE",
+    "lvl": 0,
+    "w": 7892,
+    "skip": null
+   },
+   {
+    "n": 9,
+    "t": "VIII. THE ADVENTURE OF THE SPECKLED BAND",
+    "lvl": 0,
+    "w": 9865,
+    "skip": null
+   },
+   {
+    "n": 10,
+    "t": "IX. THE ADVENTURE OF THE ENGINEER’S THUMB",
+    "lvl": 0,
+    "w": 8327,
+    "skip": null
+   },
+   {
+    "n": 11,
+    "t": "X. THE ADVENTURE OF THE NOBLE BACHELOR",
+    "lvl": 0,
+    "w": 8178,
+    "skip": null
+   },
+   {
+    "n": 12,
+    "t": "XI. THE ADVENTURE OF THE BERYL CORONET",
+    "lvl": 0,
+    "w": 9711,
+    "skip": null
+   },
+   {
+    "n": 13,
+    "t": "XII. THE ADVENTURE OF THE COPPER BEECHES",
+    "lvl": 0,
+    "w": 10005,
+    "skip": null
+   },
+   {
+    "n": 14,
+    "t": "THE FULL PROJECT GUTENBERG™ LICENSE",
+    "lvl": 0,
+    "w": 0,
+    "skip": "besteht nur aus Vorspann bzw. Impressum"
+   }
+  ]
+ },
+ "dorian_gray": {
+  "book": {
+   "title": "The Picture of Dorian Gray",
+   "author": "Oscar Wilde"
+  },
+  "notice": null,
+  "chapters": [
+   {
+    "n": 1,
+    "t": "The Picture of Dorian Gray",
+    "lvl": 0,
+    "w": 51,
+    "skip": null
+   },
+   {
+    "n": 2,
+    "t": "THE PREFACE",
+    "lvl": 0,
+    "w": 385,
+    "skip": null
+   },
+   {
+    "n": 3,
+    "t": "CHAPTER I.",
+    "lvl": 0,
+    "w": 5003,
+    "skip": null
+   },
+   {
+    "n": 4,
+    "t": "CHAPTER II.",
+    "lvl": 0,
+    "w": 5681,
+    "skip": null
+   },
+   {
+    "n": 5,
+    "t": "CHAPTER III.",
+    "lvl": 0,
+    "w": 4466,
+    "skip": null
+   },
+   {
+    "n": 6,
+    "t": "CHAPTER IV.",
+    "lvl": 0,
+    "w": 5636,
+    "skip": null
+   },
+   {
+    "n": 7,
+    "t": "CHAPTER V.",
+    "lvl": 0,
+    "w": 4425,
+    "skip": null
+   },
+   {
+    "n": 8,
+    "t": "CHAPTER VI.",
+    "lvl": 0,
+    "w": 2863,
+    "skip": null
+   },
+   {
+    "n": 9,
+    "t": "CHAPTER VII.",
+    "lvl": 0,
+    "w": 4466,
+    "skip": null
+   },
+   {
+    "n": 10,
+    "t": "CHAPTER VIII.",
+    "lvl": 0,
+    "w": 5343,
+    "skip": null
+   },
+   {
+    "n": 11,
+    "t": "CHAPTER IX.",
+    "lvl": 0,
+    "w": 3960,
+    "skip": null
+   },
+   {
+    "n": 12,
+    "t": "CHAPTER X.",
+    "lvl": 0,
+    "w": 3263,
+    "skip": null
+   },
+   {
+    "n": 13,
+    "t": "CHAPTER XI.",
+    "lvl": 0,
+    "w": 7387,
+    "skip": null
+   },
+   {
+    "n": 14,
+    "t": "CHAPTER XII.",
+    "lvl": 0,
+    "w": 2812,
+    "skip": null
+   },
+   {
+    "n": 15,
+    "t": "CHAPTER XIII.",
+    "lvl": 0,
+    "w": 2518,
+    "skip": null
+   },
+   {
+    "n": 16,
+    "t": "CHAPTER XIV.",
+    "lvl": 0,
+    "w": 4587,
+    "skip": null
+   },
+   {
+    "n": 17,
+    "t": "CHAPTER XV.",
+    "lvl": 0,
+    "w": 3174,
+    "skip": null
+   },
+   {
+    "n": 18,
+    "t": "CHAPTER XVI.",
+    "lvl": 0,
+    "w": 3142,
+    "skip": null
+   },
+   {
+    "n": 19,
+    "t": "CHAPTER XVII.",
+    "lvl": 0,
+    "w": 1807,
+    "skip": null
+   },
+   {
+    "n": 20,
+    "t": "CHAPTER XVIII.",
+    "lvl": 0,
+    "w": 3353,
+    "skip": null
+   },
+   {
+    "n": 21,
+    "t": "CHAPTER XIX.",
+    "lvl": 0,
+    "w": 3631,
+    "skip": null
+   },
+   {
+    "n": 22,
+    "t": "CHAPTER XX.",
+    "lvl": 0,
+    "w": 1936,
+    "skip": null
+   }
+  ]
+ }
+}

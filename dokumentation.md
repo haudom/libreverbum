@@ -121,6 +121,17 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | Ansichtsmodell (Zustand und Übergänge eines Bildschirms, ohne QML) | `view_model` |
 | Arbeiter, Hintergrundfaden der Oberfläche | `worker` |
 | Gestaltungsvorgaben, Token | `theme` (`Theme.qml`) |
+| Gestaltungsrichtung (die **eine** Ästhetik der Oberfläche) | „Lesetisch" — ein Name, kein Bezeichner, und deshalb nicht übersetzt (technik.md §14, E11); das Verzeichnis, das sie vorführt, heißt `tools/design_mockup/` |
+| Ebene L0, der Tisch (Fensterhintergrund) | `ground` |
+| Ebene L1, das Blatt (Karte, Liste, Formular) | `surface` |
+| Ebene L2, die laufende oder gewählte Zeile | `marked` — **nicht** `highlight`, das ist die farbige Hervorhebung der Konsolen- und Druckausgabe (`display`) |
+| Trennlinie, ein Pixel | `hairline` — **nicht** `border`, das wäre die Kontur eines Bedienelements, und die gibt es in dieser Richtung nicht |
+| Schriftfarbe in drei Rängen (voll / gedämpft / ruhend) | `ink` / `inkSoft` / `inkFaint` — drei Ränge, damit kein Bildschirm zu `opacity` greift (technik.md §14, E11) |
+| Akzent (hier bist du gerade / das ist die Antwort) | `accent` (Schrift und Linie), `accentFill` (Fläche), `inkOnAccent` (Schrift darauf) |
+| Farbe für „zum Lernen gewählt" | `chosen` — dasselbe Wort wie der Lernzähler oben und dieselbe Sache, einmal als Zahl, einmal als Farbe |
+| Farbe des Fehlschlags im Wortlaut | `warn` (Schrift), `warnFill` (Fläche) |
+| Schriftrolle: Sprachmaterial gegen Programmstimme | `Theme.fonts.book` (Literata: Wortform, Belegsatz, Titel) / `Theme.fonts.ui` (Inter: Beschriftung, Zähler, Schaltfläche) |
+| Rastereinheit und Abstandsskala | `unit` (8) und `space.xs…xxl` |
 | Bildschirm, Ansicht | `screen` |
 | Abdeckung (Anteil der vom Leser bereits verstandenen Wortformen, Anzeige der Oberfläche) | `coverage` — **nicht** zu verwechseln mit der Wörterbuchabdeckung aus technik.md §2, „Abdeckung — empirisch geprüft" (dort `remaining`/`undetermined_entries`: Anteil der Grundformen mit Wörterbucheintrag) |
 | Rückgabe von `extraction.extract_vocabulary` (Vorkommen und Nenner für die Abdeckung) | `VocabularyExtraction` |

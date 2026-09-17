@@ -2,3 +2,8 @@
 # unter Windows CRLF, `git show` dagegen LF, und ein Verfälschungsanker aus dem Quelltext
 # findet sich in der einen Kopie und in der anderen nicht.
 * text=auto eol=lf
+
+# Die mitgebrachten Schriften (gui/fonts/, technik.md §14) sind Binärdateien. `text=auto`
+# oben erkennt das zwar selbst, aber eine falsch geratene Textdatei wäre hier eine
+# zerstörte Schrift — das ist die Zeile wert.
+*.ttf binary

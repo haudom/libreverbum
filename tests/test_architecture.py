@@ -169,16 +169,22 @@ def test_cli_does_not_import_gui() -> None:
 
 def test_gui_does_not_import_cli() -> None:
     """CLAUDE.md, „Architektur": „cli/ und gui/ importieren sich nicht gegenseitig" — hier
-    die gui-Hälfte. gui/ entsteht erst mit den kommenden Arbeitspaketen; bis dahin
-    überspringt sich dieser Test **sichtbar** mit Begründung, genau wie zuvor
-    `test_rule_9_app_package_does_not_import_the_interfaces` vor AP 3 oben."""
-    if not GUI.is_dir():
-        pytest.skip(
-            "gui/ existiert noch nicht (entsteht mit den kommenden Arbeitspaketen) — "
-            "dieser Test greift, sobald das Paket da ist"
-        )
+    die gui-Hälfte. Python bekommt `gui/` erst mit AP 15; bis dahin überspringt sich dieser
+    Test **sichtbar** mit Begründung, genau wie zuvor
+    `test_rule_9_app_package_does_not_import_the_interfaces` vor AP 3 oben.
+
+    Seit AP 14 (`gui/qml/Theme.qml`, `gui/fonts/`) **gibt es das Verzeichnis**, aber kein
+    Modul darin. `GUI.is_dir()` allein reicht deshalb nicht mehr als Bedingung: Der
+    anschließende `assert modules` wäre rot geworden, obwohl nichts falsch ist — ein
+    Fehlschlag, der auf das Anlegen eines Ordners zeigt statt auf einen verbotenen Import
+    (dieselbe Verwechslung wie bei `app/` zwischen AP 1 und AP 3). Geprüft wird deshalb
+    auf das erste Python-Modul, nicht auf das Verzeichnis."""
     modules = sorted(GUI.rglob("*.py"))
-    assert modules, f"Kein Modul unter {GUI} gefunden — dieser Test prüfte nichts."
+    if not modules:
+        pytest.skip(
+            "gui/ enthält noch kein Python-Modul (kommt mit AP 15, bauplan-phase2.md) — "
+            "dieser Test greift, sobald das erste da ist"
+        )
 
     offenders = {
         module.relative_to(GUI.parent).as_posix(): sorted(found)
