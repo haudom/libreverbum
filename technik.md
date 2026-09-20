@@ -3448,16 +3448,16 @@ mit AP 2.
 | Writer/Reviewer mit frischem Kontext | ist bereits Hausordnung | dokumentation.md §10 |
 | Web-Stack React + Tailwind + shadcn, Chrome-DevTools-/Playwright-/shadcn-MCP, Storybook, Figma, Lighthouse/axe | **nicht** übernommen — Web-Werkzeuge, siehe E1; Kontrast wird im gerenderten Bild gemessen statt mit axe — der Zusatz „aus den Token gerechnet" stand bis zum 17.09.2026 hier und ist widerlegt (E11, „Gemessen wird im Bild, nicht aus den Token") | — |
 
-### Entschieden 16.09.2026: Die Recherche-Datei fällt am Tor der Phase 2 weg
+### Entschieden 16.09.2026, vorgezogen am 20.09.2026: Die Recherche-Datei fällt weg
 
 Wie `bauplan.md` und `nacharbeit.md` in Phase 1 (CLAUDE.md, Blockquote unter „Die
 Dokumente und ihre Zuständigkeit"): Die Recherche ist datiertes Arbeitsmaterial für die
 laufende Phase, keines der drei Dokumente und kein viertes daneben — CLAUDE.md kennt
 weiterhin nur drei plus README.md als Schaufenster. Was daraus dauerhaft gilt, steht
 bereits oben in diesem Abschnitt (E1, E4) und in bauplan-phase2.md, Abschnitt 7; die Datei
-selbst bewahrt Git (`git show 5af0e86:recherche_hochwertige_UIs_mit_Claude.md`). Bis zum
-Tor der Phase 2 bleibt sie liegen, gelöscht wird sie erst dort (bauplan-phase2.md, E14 und
-Block D).
+selbst bewahrt Git (`git show 5af0e86:recherche_hochwertige_UIs_mit_Claude.md`). Auf Wunsch
+von Dominik ist sie vor dem nächsten Push aus dem Projektstand entfernt und für eine lokale
+Kopie ignoriert worden; sie wird nicht bis zum Tor der Phase 2 aufgehoben.
 
 ### E11 — Gestaltungsrichtung: „Lesetisch" — entschieden 17.09.2026
 

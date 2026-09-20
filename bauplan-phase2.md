@@ -707,8 +707,9 @@ sind Befunde nach dokumentation.md §10, Nachbesserung als eigenes AP.
 **Ziel.** README „Stand"; konzept.md, „Phasenplan": Phase 2 abgenommen mit Datum;
 technik.md: erledigte offene Punkte gestrichen (Übersichtstabelle und Abschnitte), neue
 aus den Berichten eingetragen; `beobachtungen/` eingefaltet und geleert;
-`recherche_hochwertige_UIs_mit_Claude.md` gelöscht (E14: „Entschieden 16.09.2026", was
-daraus dauerhaft gilt, steht bereits in technik.md §14 und Abschnitt 7 dieses Plans);
+`recherche_hochwertige_UIs_mit_Claude.md` ist bereits am 20.09.2026 vor dem nächsten Push
+entfernt worden (E14: „Entschieden 16.09.2026", was daraus dauerhaft gilt, steht bereits
+in technik.md §14 und Abschnitt 7 dieses Plans);
 dieses Dokument gelöscht — vorher je `grep -rn bauplan-phase2` und
 `grep -rn recherche_hochwertige_UIs_mit_Claude` und je Treffer entscheiden
 (dokumentation.md §7, „Vor dem Löschen einer Datei"); `phase-2` per Fast-Forward nach

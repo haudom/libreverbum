@@ -27,6 +27,9 @@ venv/
 # Eigenes Werkzeug des Bearbeiters, kein Projektbestandteil.
 claude-auto-resume.ps1
 
+# Datierte Oberflächen-Recherche: Arbeitsmaterial, kein Projektbestandteil.
+recherche_hochwertige_UIs_mit_Claude.md
+
 # Zwischenstand eines Subagenten — gehört zur Sitzung, nicht zum Projekt.
 agent_status.json
 
