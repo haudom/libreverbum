@@ -16,6 +16,14 @@ Scheitert die Triage mitten im Lauf (etwa ein wegbrechender Modellserver), expor
 unverändert weiter (technik.md §12, „Entschieden 15.09.2026: ein abgebrochener Lauf
 exportiert, was er hat").
 
+`--chapters 3-7`/`--chapters all` (bauplan-phase2.md AP 5, E6 (a), E3-Ausnahme): dasselbe
+Kapitel-für-Kapitel wie `--chapter N`, nur mehrfach — Sprachmodell und Profilverbindung
+werden dafür **einmal** geöffnet und über alle gewählten Kapitel hinweg benutzt (nicht je
+Kapitel neu), damit die „kenne ich"-Buchungen eines Kapitels die Auswahlliste der
+folgenden verkleinern; jedes Kapitel behält seinen eigenen Export. Kapitel ohne
+Fließtext werden gemeldet und übersprungen, kein Abbruch (`pipeline.list_chapters`, AP 4).
+Am Ende steht eine Bilanz über alle verarbeiteten und übersprungenen Kapitel.
+
 Regel 9 (dokumentation.md §4), strukturelle Hälfte: Dieses Kommandozeilenprogramm hat
 keine Ereignisschleife und keinen Oberflächen-Thread, den ein NLP- oder Modellaufruf
 blockieren könnte — die prüfbare Hälfte der Regel ist hier **trivial erfüllt**, nicht
@@ -35,8 +43,10 @@ Liefert
 from __future__ import annotations
 
 import argparse
+import re
 import threading
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, assert_never
@@ -76,6 +86,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("epub_path", type=Path, help="Pfad zur EPUB-Datei")
     parser.add_argument(
         "--chapter", type=int, default=None, help="Kapitelnummer (fehlt sie, wird gefragt)"
+    )
+    parser.add_argument(
+        "--chapters",
+        type=str,
+        default=None,
+        help=(
+            "Kapitelbereich statt einer einzelnen Nummer, z. B. 3-7 oder all für alle "
+            "Kapitel (bauplan-phase2.md AP 5); schließt sich mit --chapter aus"
+        ),
     )
     parser.add_argument(
         "--card-direction",
@@ -350,6 +369,103 @@ def _choose_chapter(
         if any(chapter.number == number for chapter in structure.chapters):
             return number
         write_line("Diese Kapitelnummer gibt es nicht.")
+
+
+_CHAPTER_RANGE_PATTERN = re.compile(r"(\d+)-(\d+)")
+
+
+def _resolve_chapter_range(text: str, listings: Sequence[pipeline.ChapterListing]) -> list[int]:
+    """Zerlegt `--chapters` (bauplan-phase2.md AP 5, E6 (a)) in die Liste der darin
+    liegenden, im Buch tatsächlich vorhandenen Kapitelnummern, in Buchreihenfolge:
+    `all` nimmt jede Nummer aus `listings`, `N-M` nur die darin liegenden — ein Kapitel
+    ohne Fließtext bleibt in der zurückgegebenen Liste, dessen Ausschluss aus der
+    Verarbeitung und Meldung ist Sache von `_split_skipped_chapters`.
+
+    Ungültige Eingaben (falsches Format, erste Zahl größer als zweite, kein einziges
+    vorhandenes Kapitel im Bereich) brechen mit `ValueError` sichtbar ab (Regel 13,
+    dokumentation.md §4) statt eine geratene Auswahl zu treffen."""
+    if text == "all":
+        return [listing.number for listing in listings]
+    match = _CHAPTER_RANGE_PATTERN.fullmatch(text.strip())
+    if match is None:
+        raise ValueError(f"Ungültiger Kapitelbereich „{text}“ — erwartet wird z. B. 3-7 oder all.")
+    start, end = int(match.group(1)), int(match.group(2))
+    if start > end:
+        raise ValueError(
+            f"Ungültiger Kapitelbereich „{text}“ — die erste Zahl darf nicht größer als "
+            "die zweite sein."
+        )
+    numbers = [listing.number for listing in listings if start <= listing.number <= end]
+    if not numbers:
+        raise ValueError(f"Kapitelbereich „{text}“ enthält kein vorhandenes Kapitel dieses Buchs.")
+    return numbers
+
+
+@dataclass(frozen=True)
+class _SkippedChapter:
+    """Ein bei `--chapters` übersprungenes Kapitel ohne Fließtext — für die Bilanz am
+    Ende (`_write_chapter_range_summary`), Ablaufwert wie `pipeline.ChapterListing`,
+    deshalb hier und nicht in `entities`."""
+
+    number: int
+    skip_reason: str
+
+
+def _split_skipped_chapters(
+    numbers: Sequence[int], listings: Sequence[pipeline.ChapterListing], *, write_line: WriteLine
+) -> tuple[list[int], list[_SkippedChapter]]:
+    """Trennt die Nummern aus `_resolve_chapter_range` in verarbeitbare Kapitel und
+    übersprungene (`pipeline.ChapterListing.skip_reason` gesetzt) — meldet jedes
+    übersprungene sofort, nicht erst in der Bilanz (Regel 13, dokumentation.md §4): Bei
+    einem Sweep über viele Kapitel soll nicht erst am Ende sichtbar werden, welche
+    fehlten."""
+    skip_reasons = {listing.number: listing.skip_reason for listing in listings}
+    to_process: list[int] = []
+    skipped: list[_SkippedChapter] = []
+    for number in numbers:
+        skip_reason = skip_reasons.get(number)
+        if skip_reason is not None:
+            write_line(f"Kapitel {number}: übersprungen, kein Fließtext — {skip_reason}.")
+            skipped.append(_SkippedChapter(number=number, skip_reason=skip_reason))
+        else:
+            to_process.append(number)
+    return to_process, skipped
+
+
+@dataclass(frozen=True)
+class _ChapterRunOutcome:
+    """Das Ergebnis eines einzelnen Kapiteldurchlaufs innerhalb von `--chapters` — für
+    die Bilanz am Ende (`_write_chapter_range_summary`), Ablaufwert wie `ChapterListing`,
+    deshalb hier und nicht in `entities`."""
+
+    chapter_number: int
+    word_count: int
+    expression_count: int
+    card_count: int
+
+
+def _write_chapter_range_summary(
+    outcomes: Sequence[_ChapterRunOutcome],
+    skipped: Sequence[_SkippedChapter],
+    write_line: WriteLine,
+) -> None:
+    """Bilanz am Ende eines `--chapters`-Laufs (bauplan-phase2.md AP 5): je verarbeitetem
+    Kapitel eine Zeile mit Wort-, Wendungs- und Kartenzahl, je übersprungenem eine mit
+    seinem Grund, zuletzt eine Gesamtzeile."""
+    write_line("Bilanz über den Kapitelbereich:")
+    for outcome in outcomes:
+        write_line(
+            f"  Kapitel {outcome.chapter_number}: {_format_count(outcome.word_count)} Wörter, "
+            f"{_format_count(outcome.expression_count)} Wendungen, "
+            f"{_format_count(outcome.card_count)} Karten gelernt."
+        )
+    for skip in skipped:
+        write_line(f"  Kapitel {skip.number}: übersprungen — {skip.skip_reason}.")
+    total_cards = sum(outcome.card_count for outcome in outcomes)
+    write_line(
+        f"Insgesamt {_format_count(len(outcomes))} Kapitel verarbeitet, "
+        f"{_format_count(len(skipped))} übersprungen, {_format_count(total_cards)} Karten gelernt."
+    )
 
 
 def _run_chapter_with_progress(
@@ -643,9 +759,216 @@ def _export_partial_run(
     write_line(f"Druckseite (Teilexport): {paths.printout_path}")
 
 
+def _run_one_chapter(
+    *,
+    con: sqlite3.Connection,
+    epub_path: Path,
+    chapter_number: int,
+    dictionary_path: Path,
+    profile_path: Path,
+    nlp: Language,
+    cache_dir: Path,
+    card_direction: CardDirection,
+    get_model_name: Callable[[], str],
+    model_url: str,
+    triage_order: str,
+    output_dir: Path,
+    style: display.Style,
+    read_line: ReadLine,
+    write_line: WriteLine,
+) -> _ChapterRunOutcome:
+    """Ein vollständiger Kapiteldurchlauf ab dem bereits geladenen Sprachmodell und der
+    bereits offenen Profilverbindung: Wortschatz ermitteln, Triage über die Tastatur
+    (Wörter, dann Wendungen), Export nach Anki und als Druckseite.
+
+    Herausgelöst aus `_run` (bauplan-phase2.md AP 5), damit `--chapters` diesen Rumpf
+    mehrfach durchläuft, ohne das Sprachmodell erneut zu laden oder je Kapitel eine neue
+    Profilverbindung zu öffnen — `con` und `nlp` gehören dem Aufrufer und werden hier nur
+    benutzt, nie geschlossen. Genau daran hängt Abnahmekriterium 2 (konzept.md,
+    bauplan-phase2.md, Abschnitt 9): Nur eine **fortbestehende** Profilverbindung auf
+    derselben Datei sieht die „kenne ich"-Buchungen eines früheren Kapitels, bevor sie das
+    nächste nach ihnen filtert.
+
+    Scheitert die Triage mitten im Lauf, exportiert diese Funktion die bis dahin
+    entschiedenen Karten als Teilexport dieses einen Kapitels und reicht die Ausnahme
+    danach unverändert weiter (technik.md §12, „Entschieden 15.09.2026: ein abgebrochener
+    Lauf exportiert, was er hat") — `_run` fängt sie nicht ab, der ganze `--chapters`-Lauf
+    bricht sichtbar ab (Regel 13, dokumentation.md §4: kein Fehlschlag in einem Kapitel
+    verschwindet still in einer Bilanz, die ihn nie erwähnt)."""
+    result = _run_chapter_with_progress(
+        epub_path=epub_path,
+        chapter_number=chapter_number,
+        dictionary_path=dictionary_path,
+        profile_path=profile_path,
+        nlp=nlp,
+        cache_dir=cache_dir,
+        write_line=write_line,
+    )
+    write_line(
+        f"Kapitel {result.chapter.number}: {_format_count(len(result.entries))} Wörter, "
+        f"{_format_count(len(result.expressions))} Wendungen."
+    )
+    if result.notice:
+        write_line(result.notice)
+
+    interaction.ensure_chapter_row(
+        con, result.chapter.book, result.chapter.number, result.chapter.title
+    )
+
+    # (Befund schwer 1, zweite T16-Durchsicht): Die Bedeutung wird vor der Triage
+    # aufgelöst (`pipeline.resolve_triage_entries`, je Block einmal) — Wörter und
+    # Wendungen bleiben dabei getrennte Blockschleifen mit eigener Blockgröße (`cli.
+    # interaction`, „Festlegung: getrennte Decksel"). `run_triage_blocks` (Bauschritt
+    # 2/4, blockweise Triage) macht aus jedem `resolve_triage_entries`-Aufruf über
+    # `resolution.remaining` so lange den nächsten Block, bis der Nutzer aufhört —
+    # jeden Folgeblock dabei bereits im Hintergrund vorgeladen (Bauschritt 3/4,
+    # technik.md §12, „Vorladen …"): `resolve_visible_block` (mit Fortschrittsanzeige)
+    # nur für den ersten Block, `resolve_silent_block` (eigene Profilverbindung, keine
+    # Ausgabe) für jeden vorgeladenen — siehe `_resolve_with_progress`/`_resolve_silently`
+    # oben.
+    # (Befund mittel, Durchsicht T16): profile.record_card schreibt die Anki-GUID
+    # jeder Karte ins Profil (Regel 6) und braucht dafür dieselbe, noch offene
+    # Profilverbindung wie die Triage.
+
+    # technik.md §12, „Entschieden 15.09.2026: ein abgebrochener Lauf exportiert, was
+    # er hat": `partial_cards` sammelt die Karten jedes abgeschlossenen Blocks aus
+    # beiden Deckeln — Wörter und Wendungen tragen bewusst in dieselbe Liste ein, damit
+    # ein Fehlschlag im Wendungsteil die Wörterkarten mitnimmt. Scheitert einer der
+    # beiden Aufrufe, exportiert der `except`-Zweig, was bis dahin entschieden ist, und
+    # wirft die Ausnahme danach **unverändert** weiter (`raise` ohne Argument) — kein
+    # `except`, das protokolliert und weiterläuft (Regel 13, dokumentation.md §4).
+    # Gefangen wird `Exception`, nicht `BaseException`: Ein `KeyboardInterrupt` ist der
+    # Nutzer, der sofort heraus will, kein Fehlschlag, der einen Teilexport verdient.
+    partial_cards: list[Card] = []
+    try:
+        for line in display.cover("Wörter", style):
+            write_line(line)
+        word_cards = interaction.run_triage_blocks(
+            con=con,
+            book=result.chapter.book,
+            chapter_number=result.chapter.number,
+            entries=result.entries,
+            resolve_visible_block=lambda block: _resolve_with_progress(
+                con=con,
+                entries=block,
+                limit=interaction.WORD_BLOCK_SIZE,
+                url=model_url,
+                get_model_name=get_model_name,
+                order=triage_order,
+            ),
+            resolve_silent_block=lambda block, cancelled: _resolve_silently(
+                profile_path=profile_path,
+                entries=block,
+                limit=interaction.WORD_BLOCK_SIZE,
+                url=model_url,
+                get_model_name=get_model_name,
+                order=triage_order,
+                cancelled=cancelled,
+            ),
+            label="Wörter",
+            card_direction=card_direction,
+            style=style,
+            read_line=read_line,
+            write_line=write_line,
+            partial_cards=partial_cards,
+        )
+        for line in display.cover("Wendungen", style):
+            write_line(line)
+        expression_cards = interaction.run_triage_blocks(
+            con=con,
+            book=result.chapter.book,
+            chapter_number=result.chapter.number,
+            entries=result.expressions,
+            resolve_visible_block=lambda block: _resolve_with_progress(
+                con=con,
+                entries=block,
+                limit=interaction.EXPRESSION_BLOCK_SIZE,
+                url=model_url,
+                get_model_name=get_model_name,
+                order=triage_order,
+            ),
+            resolve_silent_block=lambda block, cancelled: _resolve_silently(
+                profile_path=profile_path,
+                entries=block,
+                limit=interaction.EXPRESSION_BLOCK_SIZE,
+                url=model_url,
+                get_model_name=get_model_name,
+                order=triage_order,
+                cancelled=cancelled,
+            ),
+            label="Wendungen",
+            card_direction=card_direction,
+            # (Zweite Nutzermeldung vom 02.09.2026): Der Wendungs-Deckel zählt dort
+            # weiter, wo der Wörter-Deckel aufgehört hat — die Zahl in der Trennlinie
+            # ist damit das, was am Ende tatsächlich ins Anki-Deck und auf die
+            # Druckseite geht, nicht der Stand eines einzelnen Deckels.
+            chosen_before=len(word_cards),
+            style=style,
+            read_line=read_line,
+            write_line=write_line,
+            partial_cards=partial_cards,
+        )
+    except Exception:
+        # REGEL (dokumentation.md §4 Regel 13, „Kein except, das nur protokolliert und
+        # weiterläuft"): Dieser Fang schreibt den Teilexport und läuft danach mit
+        # `raise` unverändert zur ursprünglichen Ausnahme weiter — er verschluckt sie
+        # nicht, sondern hängt ihr eine Nebenwirkung voran. Scheitert `_export_partial_run`
+        # selbst (etwa ein ungültiger `output_dir`), ersetzte diese zweite Ausnahme ohne
+        # den inneren Fang unten die erste vollständig: `main` finge nur noch die zweite,
+        # und die eigentliche Ursache erschiene in der Meldung nirgends (Befund 1,
+        # Durchsicht b91a56e). Der innere Fang meldet den zweiten Fehlschlag deshalb
+        # zusätzlich, statt ihn durchzureichen — das äußere `raise` bricht den Lauf davon
+        # unabhängig weiterhin ab, nie mit Exit-Code 0.
+        try:
+            _export_partial_run(
+                con=con,
+                partial_cards=partial_cards,
+                output_dir=output_dir,
+                book_title=result.chapter.book.title,
+                chapter_number=result.chapter.number,
+                write_line=write_line,
+            )
+        except Exception as export_error:
+            write_line(f"Teilexport zusätzlich fehlgeschlagen: {export_error}")
+        raise
+
+    cards = word_cards + expression_cards
+    if not cards:
+        write_line("Keine Wörter zum Lernen ausgewählt — kein Export.")
+        return _ChapterRunOutcome(
+            chapter_number=result.chapter.number,
+            word_count=len(result.entries),
+            expression_count=len(result.expressions),
+            card_count=0,
+        )
+
+    paths = export.write_exports(
+        con,
+        output_dir,
+        cards,
+        book_title=result.chapter.book.title,
+        chapter_number=result.chapter.number,
+    )
+    write_line(f"Anki-Deck: {paths.anki_path}")
+    write_line(f"Druckseite: {paths.printout_path}")
+    return _ChapterRunOutcome(
+        chapter_number=result.chapter.number,
+        word_count=len(result.entries),
+        expression_count=len(result.expressions),
+        card_count=len(cards),
+    )
+
+
 def _run(
     args: argparse.Namespace, *, read_line: ReadLine, write_line: WriteLine, style: display.Style
 ) -> int:
+    if args.chapter is not None and args.chapters is not None:
+        # Regel 13 (dokumentation.md §4): Eine der beiden Optionen still zu bevorzugen
+        # wäre ein stiller Fehlschlag anderer Art — der Nutzer bekäme ein Kapitel oder
+        # einen Bereich verarbeitet, ohne zu wissen, welche der beiden Angaben galt.
+        raise ValueError(
+            "--chapter und --chapters schließen sich aus — nur eine der beiden Optionen angeben."
+        )
     data_dir = args.data_dir or config.default_data_dir()
     # Jeder Lauf nennt sein Datenverzeichnis: Wo Profil, Wörterbuch und config.toml
     # liegen, soll niemand suchen müssen (technik.md §9, „Wohin die Dateien gehören").
@@ -700,177 +1023,69 @@ def _run(
     structure = epub.read_structure(args.epub_path)
     if structure.notice:
         write_line(structure.notice)
-    chapter_number = (
-        args.chapter
-        if args.chapter is not None
-        else _choose_chapter(args.epub_path, structure, read_line, write_line)
-    )
+
+    # bauplan-phase2.md AP 5: `--chapters` löst hier eine **Liste** von Kapitelnummern
+    # auf (Bereich oder `all`, Kapitel ohne Fließtext gesondert gemeldet und
+    # ausgeschlossen); `--chapter`/die interaktive Auswahl bleiben unverändert eine Liste
+    # mit einem einzigen Eintrag, keine Bilanz am Ende (E3: „`--chapter N` bleibt").
+    skipped: list[_SkippedChapter] = []
+    show_summary = args.chapters is not None
+    if args.chapters is not None:
+        listings = pipeline.list_chapters(args.epub_path)
+        candidate_numbers = _resolve_chapter_range(args.chapters, listings)
+        chapter_numbers, skipped = _split_skipped_chapters(
+            candidate_numbers, listings, write_line=write_line
+        )
+        if not chapter_numbers:
+            write_line("Kein Kapitel mit Fließtext im gewählten Bereich — nichts zu tun.")
+            return 0
+    else:
+        chapter_numbers = [
+            args.chapter
+            if args.chapter is not None
+            else _choose_chapter(args.epub_path, structure, read_line, write_line)
+        ]
 
     write_line("Sprachmodell wird geladen …")
     nlp = extraction.load_nlp()
     write_line("Sprachmodell geladen.")
 
-    result = _run_chapter_with_progress(
-        epub_path=args.epub_path,
-        chapter_number=chapter_number,
-        dictionary_path=cfg.dictionary_path,
-        profile_path=cfg.profile_path,
-        nlp=nlp,
-        cache_dir=data_dir / "cache",
-        write_line=write_line,
-    )
-    write_line(
-        f"Kapitel {result.chapter.number}: {_format_count(len(result.entries))} Wörter, "
-        f"{_format_count(len(result.expressions))} Wendungen."
-    )
-    if result.notice:
-        write_line(result.notice)
-
     card_direction = CardDirection(args.card_direction)
     get_model_name = model.cached_resolver(cfg.model_url, cfg.model_name)
+    output_dir = args.output_dir or Path.cwd()
 
+    # Eine Profilverbindung für den gesamten Kapitelbereich (bauplan-phase2.md AP 5,
+    # Abnahmekriterium 2): Nur so sieht ein späteres Kapitel die „kenne ich"-Buchungen
+    # eines früheren, bevor `_run_one_chapter` seine Auswahlliste bildet.
     con = profile.open_profile(cfg.profile_path)
+    outcomes: list[_ChapterRunOutcome] = []
     try:
-        interaction.ensure_chapter_row(
-            con, result.chapter.book, result.chapter.number, result.chapter.title
-        )
-
-        # (Befund schwer 1, zweite T16-Durchsicht): Die Bedeutung wird vor der Triage
-        # aufgelöst (`pipeline.resolve_triage_entries`, je Block einmal) — Wörter und
-        # Wendungen bleiben dabei getrennte Blockschleifen mit eigener Blockgröße (`cli.
-        # interaction`, „Festlegung: getrennte Decksel"). `run_triage_blocks` (Bauschritt
-        # 2/4, blockweise Triage) macht aus jedem `resolve_triage_entries`-Aufruf über
-        # `resolution.remaining` so lange den nächsten Block, bis der Nutzer aufhört —
-        # jeden Folgeblock dabei bereits im Hintergrund vorgeladen (Bauschritt 3/4,
-        # technik.md §12, „Vorladen …"): `resolve_visible_block` (mit Fortschrittsanzeige)
-        # nur für den ersten Block, `resolve_silent_block` (eigene Profilverbindung, keine
-        # Ausgabe) für jeden vorgeladenen — siehe `_resolve_with_progress`/`_resolve_silently`
-        # oben.
-        # (Befund mittel, Durchsicht T16): profile.record_card schreibt die Anki-GUID
-        # jeder Karte ins Profil (Regel 6) und braucht dafür dieselbe, noch offene
-        # Profilverbindung wie die Triage — der Export bleibt deshalb innerhalb dieses
-        # try-Blocks, statt `con` vorher zu schließen.
-        output_dir = args.output_dir or Path.cwd()
-
-        # technik.md §12, „Entschieden 15.09.2026: ein abgebrochener Lauf exportiert, was
-        # er hat": `partial_cards` sammelt die Karten jedes abgeschlossenen Blocks aus
-        # beiden Deckeln — Wörter und Wendungen tragen bewusst in dieselbe Liste ein, damit
-        # ein Fehlschlag im Wendungsteil die Wörterkarten mitnimmt. Scheitert einer der
-        # beiden Aufrufe, exportiert der `except`-Zweig, was bis dahin entschieden ist, und
-        # wirft die Ausnahme danach **unverändert** weiter (`raise` ohne Argument) — kein
-        # `except`, das protokolliert und weiterläuft (Regel 13, dokumentation.md §4).
-        # Gefangen wird `Exception`, nicht `BaseException`: Ein `KeyboardInterrupt` ist der
-        # Nutzer, der sofort heraus will, kein Fehlschlag, der einen Teilexport verdient.
-        partial_cards: list[Card] = []
-        try:
-            for line in display.cover("Wörter", style):
-                write_line(line)
-            word_cards = interaction.run_triage_blocks(
-                con=con,
-                book=result.chapter.book,
-                chapter_number=result.chapter.number,
-                entries=result.entries,
-                resolve_visible_block=lambda block: _resolve_with_progress(
+        for chapter_number in chapter_numbers:
+            outcomes.append(
+                _run_one_chapter(
                     con=con,
-                    entries=block,
-                    limit=interaction.WORD_BLOCK_SIZE,
-                    url=cfg.model_url,
-                    get_model_name=get_model_name,
-                    order=cfg.triage_order,
-                ),
-                resolve_silent_block=lambda block, cancelled: _resolve_silently(
+                    epub_path=args.epub_path,
+                    chapter_number=chapter_number,
+                    dictionary_path=cfg.dictionary_path,
                     profile_path=cfg.profile_path,
-                    entries=block,
-                    limit=interaction.WORD_BLOCK_SIZE,
-                    url=cfg.model_url,
+                    nlp=nlp,
+                    cache_dir=data_dir / "cache",
+                    card_direction=card_direction,
                     get_model_name=get_model_name,
-                    order=cfg.triage_order,
-                    cancelled=cancelled,
-                ),
-                label="Wörter",
-                card_direction=card_direction,
-                style=style,
-                read_line=read_line,
-                write_line=write_line,
-                partial_cards=partial_cards,
-            )
-            for line in display.cover("Wendungen", style):
-                write_line(line)
-            expression_cards = interaction.run_triage_blocks(
-                con=con,
-                book=result.chapter.book,
-                chapter_number=result.chapter.number,
-                entries=result.expressions,
-                resolve_visible_block=lambda block: _resolve_with_progress(
-                    con=con,
-                    entries=block,
-                    limit=interaction.EXPRESSION_BLOCK_SIZE,
-                    url=cfg.model_url,
-                    get_model_name=get_model_name,
-                    order=cfg.triage_order,
-                ),
-                resolve_silent_block=lambda block, cancelled: _resolve_silently(
-                    profile_path=cfg.profile_path,
-                    entries=block,
-                    limit=interaction.EXPRESSION_BLOCK_SIZE,
-                    url=cfg.model_url,
-                    get_model_name=get_model_name,
-                    order=cfg.triage_order,
-                    cancelled=cancelled,
-                ),
-                label="Wendungen",
-                card_direction=card_direction,
-                # (Zweite Nutzermeldung vom 02.09.2026): Der Wendungs-Deckel zählt dort
-                # weiter, wo der Wörter-Deckel aufgehört hat — die Zahl in der Trennlinie
-                # ist damit das, was am Ende tatsächlich ins Anki-Deck und auf die
-                # Druckseite geht, nicht der Stand eines einzelnen Deckels.
-                chosen_before=len(word_cards),
-                style=style,
-                read_line=read_line,
-                write_line=write_line,
-                partial_cards=partial_cards,
-            )
-        except Exception:
-            # REGEL (dokumentation.md §4 Regel 13, „Kein except, das nur protokolliert und
-            # weiterläuft"): Dieser Fang schreibt den Teilexport und läuft danach mit
-            # `raise` unverändert zur ursprünglichen Ausnahme weiter — er verschluckt sie
-            # nicht, sondern hängt ihr eine Nebenwirkung voran. Scheitert `_export_partial_run`
-            # selbst (etwa ein ungültiger `output_dir`), ersetzte diese zweite Ausnahme ohne
-            # den inneren Fang unten die erste vollständig: `main` finge nur noch die zweite,
-            # und die eigentliche Ursache erschiene in der Meldung nirgends (Befund 1,
-            # Durchsicht b91a56e). Der innere Fang meldet den zweiten Fehlschlag deshalb
-            # zusätzlich, statt ihn durchzureichen — das äußere `raise` bricht den Lauf davon
-            # unabhängig weiterhin ab, nie mit Exit-Code 0.
-            try:
-                _export_partial_run(
-                    con=con,
-                    partial_cards=partial_cards,
+                    model_url=cfg.model_url,
+                    triage_order=cfg.triage_order,
                     output_dir=output_dir,
-                    book_title=result.chapter.book.title,
-                    chapter_number=result.chapter.number,
+                    style=style,
+                    read_line=read_line,
                     write_line=write_line,
                 )
-            except Exception as export_error:
-                write_line(f"Teilexport zusätzlich fehlgeschlagen: {export_error}")
-            raise
-
-        cards = word_cards + expression_cards
-        if not cards:
-            write_line("Keine Wörter zum Lernen ausgewählt — kein Export.")
-            return 0
-
-        paths = export.write_exports(
-            con,
-            output_dir,
-            cards,
-            book_title=result.chapter.book.title,
-            chapter_number=result.chapter.number,
-        )
-        write_line(f"Anki-Deck: {paths.anki_path}")
-        write_line(f"Druckseite: {paths.printout_path}")
-        return 0
+            )
     finally:
         con.close()
+
+    if show_summary:
+        _write_chapter_range_summary(outcomes, skipped, write_line)
+    return 0
 
 
 def main(

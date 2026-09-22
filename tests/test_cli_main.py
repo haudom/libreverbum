@@ -121,6 +121,128 @@ def book_epub(tmp_path: Path) -> Path:
     return path
 
 
+# --------------------------------------------------------------------- Mehrkapitel-EPUBs
+#
+# Für bauplan-phase2.md AP 5 (--chapters): `two_chapter_book_epub` trägt in **beiden**
+# Kapiteln denselben Wortschatz (`_CHAPTER_TEXT` doppelt) — Abnahmekriterium 2 verlangt,
+# dass die „kenne ich"-Buchung aus Kapitel 1 die Auswahlliste von Kapitel 2 verkleinert,
+# und das lässt sich nur an einem gemeinsamen Wort zeigen.
+# `three_chapter_book_epub_with_a_skipped_first_chapter` prüft daneben, dass ein Kapitel
+# ohne Fließtext (Vorspann/Impressum, epub.ChapterWithoutTextError) gemeldet und
+# übersprungen statt verarbeitet wird.
+
+_TWO_CHAPTER_NAV_XHTML = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>Navigation</title></head>
+<body>
+  <nav epub:type="toc">
+    <ol>
+      <li><a href="chapter1.xhtml">Erstes Kapitel</a></li>
+      <li><a href="chapter2.xhtml">Zweites Kapitel</a></li>
+    </ol>
+  </nav>
+</body>
+</html>
+"""
+
+_TWO_CHAPTER_PACKAGE_OPF = """<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="bookid">urn:uuid:cli-test-two</dc:identifier>
+    <dc:title>CLI-Testbuch Zwei</dc:title>
+    <dc:creator>Testautorin</dc:creator>
+  </metadata>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="chap1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chap2" href="chapter2.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="chap1"/>
+    <itemref idref="chap2"/>
+  </spine>
+</package>
+"""
+
+
+@pytest.fixture
+def two_chapter_book_epub(tmp_path: Path) -> Path:
+    path = tmp_path / "two_chapter_book.epub"
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        archive.writestr("META-INF/container.xml", _CONTAINER_XML)
+        archive.writestr("OEBPS/content.opf", _TWO_CHAPTER_PACKAGE_OPF)
+        archive.writestr("OEBPS/chapter1.xhtml", _chapter_xhtml("Erstes Kapitel", _CHAPTER_TEXT))
+        archive.writestr("OEBPS/chapter2.xhtml", _chapter_xhtml("Zweites Kapitel", _CHAPTER_TEXT))
+        archive.writestr("OEBPS/nav.xhtml", _TWO_CHAPTER_NAV_XHTML)
+    return path
+
+
+# Reiner Vorspann/Impressum (technik.md §8) nach demselben Muster wie
+# tests/test_pipeline.py, `_LICENSE_ONLY_CHAPTER_XHTML`: Die Endmarke steht vor jedem
+# echten Wort, der ganze Text fällt beim Aussteuern weg — bewusst **ohne**
+# `_chapter_xhtml`, dessen `<h1>{title}</h1>` ein Wort **vor** die Endmarke setzte.
+_LICENSE_ONLY_CHAPTER_XHTML = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>Lizenz</title></head>
+<body>
+<p>*** END OF THE PROJECT GUTENBERG EBOOK TESTBUCH ***</p>
+<p>Lizenztext, der komplett aussteuern muss.</p>
+</body>
+</html>
+"""
+
+_THREE_CHAPTER_NAV_XHTML = """<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>Navigation</title></head>
+<body>
+  <nav epub:type="toc">
+    <ol>
+      <li><a href="chapter1.xhtml">Lizenz</a></li>
+      <li><a href="chapter2.xhtml">Zweites Kapitel</a></li>
+      <li><a href="chapter3.xhtml">Drittes Kapitel</a></li>
+    </ol>
+  </nav>
+</body>
+</html>
+"""
+
+_THREE_CHAPTER_PACKAGE_OPF = """<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="bookid">urn:uuid:cli-test-three</dc:identifier>
+    <dc:title>CLI-Testbuch Drei</dc:title>
+    <dc:creator>Testautorin</dc:creator>
+  </metadata>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="chap1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chap2" href="chapter2.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chap3" href="chapter3.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="chap1"/>
+    <itemref idref="chap2"/>
+    <itemref idref="chap3"/>
+  </spine>
+</package>
+"""
+
+
+@pytest.fixture
+def three_chapter_book_epub_with_a_skipped_first_chapter(tmp_path: Path) -> Path:
+    path = tmp_path / "three_chapter_book.epub"
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        archive.writestr("META-INF/container.xml", _CONTAINER_XML)
+        archive.writestr("OEBPS/content.opf", _THREE_CHAPTER_PACKAGE_OPF)
+        archive.writestr("OEBPS/chapter1.xhtml", _LICENSE_ONLY_CHAPTER_XHTML)
+        archive.writestr("OEBPS/chapter2.xhtml", _chapter_xhtml("Zweites Kapitel", _CHAPTER_TEXT))
+        archive.writestr("OEBPS/chapter3.xhtml", _chapter_xhtml("Drittes Kapitel", _CHAPTER_TEXT))
+        archive.writestr("OEBPS/nav.xhtml", _THREE_CHAPTER_NAV_XHTML)
+    return path
+
+
 def _entry_word(pending: list[str]) -> str:
     """Extrahiert die Wortform aus der Kopfzeile eines Triage-Eintrags (Bauschritt 2/2 der
     Konsolenausgabe, 02.09.2026: `cli.interaction._entry_lines`, Format „kompakte
@@ -278,6 +400,42 @@ class _RejectWordConsole:
         return _read_common_or_triage(prompt, self._pending, on_triage=_on_triage)
 
 
+class _MarkThenRejectRepeatConsole:
+    """Für Abnahmekriterium 2 (bauplan-phase2.md AP 5, Abschnitt 9 „Abnahmekriterien
+    Phase 2"): markiert `word` beim ersten Erscheinen als bekannt ([k]), alles andere als
+    „skip" ([s]) — und bricht ab, falls `word` danach noch einmal in der Triage-Liste
+    auftaucht. Anders als `_RejectWordConsole` prüft diese Konsole das **innerhalb eines
+    einzigen `main()`-Aufrufs** über mehrere Kapitel eines `--chapters`-Laufs, nicht über
+    zwei getrennte Läufe wie Abnahmekriterium 6."""
+
+    def __init__(self, word: str) -> None:
+        self._word = word
+        self.marked = False
+        self._pending: list[str] = []
+        self.log: list[str] = []
+
+    def write(self, text: str) -> None:
+        self.log.append(text)
+        if self.marked and text.strip().startswith(f"{self._word}  ->"):
+            raise AssertionError(
+                f"{self._word!r} wurde nach der Buchung in einem späteren Kapitel desselben "
+                "--chapters-Laufs erneut angezeigt — das Profil greift nicht über "
+                "Kapitelgrenzen hinweg (Abnahmekriterium 2)."
+            )
+        self._pending.append(text)
+
+    def read(self, prompt: str) -> str:
+        def _on_triage(pending: list[str]) -> str:
+            word = _entry_word(pending)
+            pending.clear()
+            if word == self._word:
+                self.marked = True
+                return "k"
+            return "s"
+
+        return _read_common_or_triage(prompt, self._pending, on_triage=_on_triage)
+
+
 def test_a_console_without_a_branch_for_an_unknown_prompt_raises_instead_of_hanging() -> None:
     """Befund mittel 2 (Durchsicht ee34796): Eine Frage, die keine der drei Konsolen
     kennt, wirft `AssertionError` mit dem Wortlaut der Frage, statt eine geratene Antwort
@@ -396,6 +554,208 @@ def test_acceptance_6_a_second_run_does_not_ask_about_an_ambiguous_word_marked_k
         style=display.PLAIN_STYLE,
     )
     assert second_exit == 0, "\n".join(second_console.log)
+
+
+def _listing(number: int, *, skip_reason: str | None = None) -> pipeline.ChapterListing:
+    return pipeline.ChapterListing(
+        number=number, title=f"Kapitel {number}", word_count=10, skip_reason=skip_reason
+    )
+
+
+def test_resolve_chapter_range_all_returns_every_listed_number_in_book_order() -> None:
+    """bauplan-phase2.md AP 5, E6 (a): 'all' nimmt jede Nummer aus `pipeline.list_chapters`,
+    in Buchreihenfolge — nicht sortiert, nicht gefiltert."""
+    listings = [_listing(3), _listing(1), _listing(2)]
+    assert cli_main._resolve_chapter_range("all", listings) == [3, 1, 2]
+
+
+def test_resolve_chapter_range_parses_a_hyphenated_span() -> None:
+    listings = [_listing(number) for number in range(1, 8)]
+    assert cli_main._resolve_chapter_range("3-5", listings) == [3, 4, 5]
+
+
+def test_resolve_chapter_range_rejects_an_invalid_format() -> None:
+    """Verfälschungsprobe: `_CHAPTER_RANGE_PATTERN.fullmatch` durch `.search` ersetzt
+    ließ diesen Test grün bleiben, obwohl „3-5 und Anhang“ dann noch träfe — `fullmatch`
+    verlangt, dass der **ganze** Text passt, nicht nur ein Teil davon."""
+    with pytest.raises(ValueError, match="Ungültiger Kapitelbereich"):
+        cli_main._resolve_chapter_range("drei bis fünf", [_listing(1)])
+
+
+def test_resolve_chapter_range_rejects_a_start_greater_than_the_end() -> None:
+    """Verfälschungsprobe: die Prüfung `if start > end: raise ...` entfernt liefert für
+    `7-3` statt der Ausnahme eine leere Nummernliste (kein Kapitel liegt in [7, 3]) — der
+    nachfolgende Leer-Fang meldet dann „kein vorhandenes Kapitel“ statt „größer“, und
+    dieser Test (der auf „größer“ prüft) wird rot."""
+    with pytest.raises(ValueError, match="größer"):
+        cli_main._resolve_chapter_range("7-3", [_listing(number) for number in range(1, 8)])
+
+
+def test_resolve_chapter_range_rejects_a_span_without_any_existing_chapter() -> None:
+    with pytest.raises(ValueError, match="kein vorhandenes Kapitel"):
+        cli_main._resolve_chapter_range("9-12", [_listing(1), _listing(2)])
+
+
+def test_split_skipped_chapters_separates_and_reports_chapters_without_text() -> None:
+    """bauplan-phase2.md AP 4/5: Ein Kapitel mit `skip_reason` wird gemeldet und aus der
+    Verarbeitungsliste ausgeschlossen, eines ohne bleibt unverändert darin.
+
+    Verfälschungsprobe: `if skip_reason is not None` durch `if False` ersetzt (kein
+    Kapitel gilt mehr als übersprungen) ließ `to_process == [1, 2]` statt `[1]` werden —
+    dieser Test war daran rot."""
+    listings = [_listing(1), _listing(2, skip_reason="besteht nur aus Vorspann bzw. Impressum")]
+    written: list[str] = []
+
+    to_process, skipped = cli_main._split_skipped_chapters(
+        [1, 2], listings, write_line=written.append
+    )
+
+    assert to_process == [1]
+    assert [skip.number for skip in skipped] == [2]
+    assert any("2" in line and "übersprungen" in line for line in written)
+
+
+def test_run_rejects_chapter_and_chapters_given_together(tmp_path: Path) -> None:
+    """bauplan-phase2.md AP 5: `--chapter` und `--chapters` schließen sich aus — beide
+    zugleich angegeben bricht sichtbar ab (Regel 13, dokumentation.md §4), statt eine der
+    beiden Angaben still zu bevorzugen."""
+    written: list[str] = []
+
+    exit_code = main(
+        ["irrelevant.epub", "--chapter", "1", "--chapters", "1-2", "--data-dir", str(tmp_path)],
+        read_line=_no_read,
+        write_line=written.append,
+    )
+
+    assert exit_code == 1
+    assert any("--chapter" in line and "--chapters" in line for line in written)
+
+
+def test_acceptance_2_a_later_chapter_does_not_ask_about_a_word_marked_known_earlier(
+    tmp_path: Path,
+    two_chapter_book_epub: Path,
+    mini_dictionary_db: Path,
+    model_server_double: ModelServerDouble,
+) -> None:
+    """Abnahmekriterium 2 (bauplan-phase2.md, Abschnitt 9 „Abnahmekriterien Phase 2"):
+    Bei `--chapters` werden Sprachmodell und Profilverbindung einmal geöffnet und über
+    alle gewählten Kapitel benutzt (AP 5) — die „kenne ich"-Buchung aus Kapitel 1
+    verkleinert die Auswahlliste von Kapitel 2 **innerhalb desselben Laufs**, ohne einen
+    zweiten `main()`-Aufruf wie bei Abnahmekriterium 6.
+
+    `two_chapter_book_epub` trägt in beiden Kapiteln denselben Text — „watch" kommt damit
+    in beiden vor. Verfälschungsprobe im Bericht: eine neue Profilverbindung je Kapitel
+    aus einer **Kopie** der Profildatei (statt derselben, während des Laufs
+    fortbestehenden Verbindung) lässt Kapitel 2 die Buchung aus Kapitel 1 nicht mehr
+    sehen — dieser Test wurde daran rot, siehe Bericht."""
+    data_dir = tmp_path / "data"
+    _write_config(
+        data_dir,
+        model_url=model_server_double.url,
+        model_name=model_server_double.model_name,
+        dictionary_path=mini_dictionary_db,
+    )
+    model_server_double.choice = 1
+    console = _MarkThenRejectRepeatConsole(word="watch")
+
+    exit_code = main(
+        [str(two_chapter_book_epub), "--chapters", "1-2", "--data-dir", str(data_dir)],
+        read_line=console.read,
+        write_line=console.write,
+        style=display.PLAIN_STYLE,
+    )
+
+    assert exit_code == 0, "\n".join(console.log)
+    assert console.marked, "Testvoraussetzung verletzt: 'watch' wurde nie gefragt."
+    shown = [line for line in console.log if line.strip().startswith("watch  ->")]
+    assert len(shown) == 1, (
+        "'watch' wurde nicht genau einmal gezeigt (erwartet: nur in Kapitel 1):\n"
+        + "\n".join(console.log)
+    )
+    assert any(line.startswith("Kapitel 1:") for line in console.log)
+    assert any(line.startswith("Kapitel 2:") for line in console.log)
+
+
+def test_chapters_all_skips_a_chapter_without_text_and_reports_a_balance(
+    tmp_path: Path,
+    three_chapter_book_epub_with_a_skipped_first_chapter: Path,
+    mini_dictionary_db: Path,
+    model_server_double: ModelServerDouble,
+) -> None:
+    """bauplan-phase2.md AP 5: `--chapters all` verarbeitet jedes Kapitel des Buchs;
+    Kapitel 1 (reiner Vorspann/Impressum, kein Fließtext) wird gemeldet und
+    übersprungen, kein Abbruch (`pipeline.list_chapters`, AP 4). Am Ende steht eine
+    Bilanz über verarbeitete und übersprungene Kapitel."""
+    data_dir = tmp_path / "data"
+    _write_config(
+        data_dir,
+        model_url=model_server_double.url,
+        model_name=model_server_double.model_name,
+        dictionary_path=mini_dictionary_db,
+    )
+    model_server_double.choice = 1
+    console = _ScriptedConsole(learn_words=set())
+
+    exit_code = main(
+        [
+            str(three_chapter_book_epub_with_a_skipped_first_chapter),
+            "--chapters",
+            "all",
+            "--data-dir",
+            str(data_dir),
+        ],
+        read_line=console.read,
+        write_line=console.write,
+        style=display.PLAIN_STYLE,
+    )
+
+    assert exit_code == 0, "\n".join(console.log)
+    assert any(line.startswith("Kapitel 1:") and "übersprungen" in line for line in console.log), (
+        "\n".join(console.log)
+    )
+    assert any(line.startswith("Kapitel 2:") for line in console.log)
+    assert any(line.startswith("Kapitel 3:") for line in console.log)
+
+    balance_start = next(
+        index for index, line in enumerate(console.log) if line == "Bilanz über den Kapitelbereich:"
+    )
+    balance = console.log[balance_start:]
+    assert any("Kapitel 2:" in line for line in balance)
+    assert any("Kapitel 3:" in line for line in balance)
+    assert any("Kapitel 1:" in line and "übersprungen" in line for line in balance)
+    assert any(
+        "2" in line and "verarbeitet" in line and "1" in line and "übersprungen" in line
+        for line in balance
+    ), "\n".join(balance)
+
+
+def test_a_single_chapter_run_does_not_print_a_balance(
+    tmp_path: Path,
+    book_epub: Path,
+    mini_dictionary_db: Path,
+    model_server_double: ModelServerDouble,
+) -> None:
+    """E3 (technik.md §14): `--chapter N` bleibt unverändert — kein Bilanzblock, den es
+    vor AP 5 nicht gab."""
+    data_dir = tmp_path / "data"
+    _write_config(
+        data_dir,
+        model_url=model_server_double.url,
+        model_name=model_server_double.model_name,
+        dictionary_path=mini_dictionary_db,
+    )
+    model_server_double.choice = 1
+    console = _ScriptedConsole(learn_words=set())
+
+    exit_code = main(
+        [str(book_epub), "--chapter", "1", "--data-dir", str(data_dir)],
+        read_line=console.read,
+        write_line=console.write,
+        style=display.PLAIN_STYLE,
+    )
+
+    assert exit_code == 0, "\n".join(console.log)
+    assert not any("Bilanz über den Kapitelbereich" in line for line in console.log)
 
 
 def test_main_names_its_data_directory_on_every_run(tmp_path: Path) -> None:
