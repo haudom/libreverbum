@@ -83,8 +83,10 @@ strict = true
 # "cli" seit T16: die Kommandozeile liegt bewusst neben dem Kern, nicht darunter
 # (technik.md §7, „Die Oberfläche liegt neben dem Kern, nicht darunter"), wird aber im
 # selben Tor geprüft wie libreverbum und tests. "app" seit bauplan-phase2.md AP 3
-# (technik.md §14, E4): dieselbe Begründung gilt für die Anwendungsschicht.
-files = ["libreverbum", "tests", "cli", "app"]
+# (technik.md §14, E4): dieselbe Begründung gilt für die Anwendungsschicht. "gui" seit
+# bauplan-phase2.md AP 15: das erste Python-Modul unter gui/ entsteht dort, dieselbe
+# Begründung gilt für die dritte Oberflächenschicht.
+files = ["libreverbum", "tests", "cli", "app", "gui"]
 
 # REGEL (technik.md §6, Tor „Prüfen vor »fertig«"): genanki bringt weder Typangaben noch
 # einen py.typed-Marker mit (geprüft am installierten Paket, 21.08.2026) — eng auf dieses

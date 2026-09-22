@@ -1,0 +1,9 @@
+# Registriert `Theme.qml` als Singleton für dieses Verzeichnis (bauplan-phase2.md AP 15).
+#
+# Ohne diese Datei liest jede Datei, die `Theme.xyz` schreibt, eine **eigene** Instanz von
+# `Theme.qml` statt der einen geteilten — `pragma Singleton` allein reicht dafür nicht, das
+# Teilen regelt erst die `singleton`-Zeile einer `qmldir` (am Bestand geprüft: ohne sie
+# blieb jede Eigenschaft `undefined`). Vorbild: `tools/design_mockup/qml/Mock/qmldir`, das
+# denselben Weg über den Verzeichnisgrenzen hinweg geht.
+module Gui
+singleton Theme 1.0 Theme.qml

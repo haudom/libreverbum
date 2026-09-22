@@ -119,10 +119,12 @@ Systemkodierung sonst still typografische Zeichen im Buchtext.
   entsteht, überspringt sich dieser zweite Teil sichtbar mit Begründung statt
   stillschweigend nichts zu prüfen. Die Ausnahme `app/pdf.py` aus E7 (b) ist dabei noch
   nicht eingebaut, weil E7 noch nicht entschieden ist (Regel 14). Begründung: technik.md §14
-- **`gui/` gibt es seit AP 14**, aber nur als `gui/qml/Theme.qml` und `gui/fonts/` — Python
-  bekommt das Paket erst mit AP 15. `test_gui_does_not_import_cli` prüft deshalb auf das
-  erste Python-Modul, nicht auf das Verzeichnis: Sonst wäre das Anlegen eines Ordners rot
-  geworden, obwohl nichts falsch ist
+- **`gui/` gibt es seit AP 14** (`gui/qml/Theme.qml`, `gui/fonts/`), **das erste
+  Python-Modul seit AP 15**: `gui/app.py` (`build_engine`/`main`, Einstiegspunkt
+  `python -m gui`), `gui/workers.py` (`run_in_worker`, Regel 9) und `gui/qml/Main.qml` mit
+  dem Platzhalter-Bildschirm. `test_gui_does_not_import_cli` prüft seitdem echt, nicht mehr
+  übersprungen — die Bedingung war von Anfang an das erste Modul, nicht der Ordner, damit
+  das bloße Anlegen von `gui/qml/` bei AP 14 nicht rot wurde, obwohl nichts falsch war
 - **Lizenz jeder neuen Bibliothek vor der Aufnahme prüfen** (Regel 15, starkes Copyleft)
 
 ## Gestaltung (technik.md §14, E11 — seit 17.09.2026 entschieden)
@@ -200,21 +202,19 @@ Runden.
 
 **Die Durchsicht prüft gar nicht im Arbeitsbaum**, sondern gegen `git archive <commit>` in
 einem Wegwerfordner — `tools/en-de.sqlite3` und `tools/*.epub` gehören mit hinein. Die
-Gegenprobe: Die Schlusszeile von `pytest` muss **drei** Übersprungene nennen, wenn PySide6
-installiert ist — `needs_model`, `needs_wordfreq` und der `gui`-Skip aus
-`test_gui_does_not_import_cli` (`tests/test_architecture.py`, solange `gui/` noch **kein
-Python-Modul** enthält) —, und **vier**, wenn PySide6 fehlt: `needs_gui` kommt dann als
-weitere Marke dazu. Gemessen am Stand von AP 14: `596 passed, 3 skipped` (rund 127 s).
-Meldet der Lauf stattdessen rund fünfunddreißig, ist die Kopie missraten; meldet er
-einen weniger als hier genannt, steht `LIBREVERBUM_MODEL_URL` oder
-`LIBREVERBUM_WORDFREQ_PYTHON` noch in der Umgebung (falscher Alarm, kein falsches Grün).
+Gegenprobe: Die Schlusszeile von `pytest` muss **zwei** Übersprungene nennen, wenn PySide6
+installiert ist — `needs_model` und `needs_wordfreq`. Gemessen am Stand von AP 15:
+`613 passed, 2 skipped` (rund 177 s). Meldet der Lauf stattdessen rund fünfunddreißig, ist
+die Kopie missraten; meldet er einen weniger als hier genannt, steht `LIBREVERBUM_MODEL_URL`
+oder `LIBREVERBUM_WORDFREQ_PYTHON` noch in der Umgebung (falscher Alarm, kein falsches
+Grün). Fehlt PySide6, kommen zusätzlich alle `needs_gui`-Tests als Übersprungene dazu — ihre
+Zahl wächst mit jedem GUI-Arbeitspaket und ist deshalb keine feste Gegenprobe mehr.
 Begründung: dokumentation.md §10, „Woran sie prüft: gegen den Commit, nicht gegen den
-Arbeitsbaum". (Zwischen AP 1 und AP 3 zählte ein anderer, von PySide6 unabhängiger
-Übersprungener dazu, solange das Paket `app/` noch nicht existierte — seit AP 3 (`421cb95`)
-ist `app/` angelegt, und dieser Skip ist weg; der `gui`-Skip hier ist sein Nachfolger. Er
-fällt **nicht** schon mit dem Verzeichnis weg: AP 14 hat `gui/qml/Theme.qml` und
-`gui/fonts/` angelegt, Python bekommt `gui/` erst mit AP 15, und die Bedingung des Tests
-ist deshalb das erste Modul, nicht der Ordner.)
+Arbeitsbaum". (Zwei Übersprungene, die es einmal gab und die mit dem jeweils anlegenden
+Arbeitspaket wegfielen, sobald das dortige **erste Modul** stand, nicht schon mit dem
+Verzeichnis: ein von PySide6 unabhängiger `app`-Skip zwischen AP 1 und AP 3 [`421cb95`],
+und der `gui`-Skip aus `test_gui_does_not_import_cli` zwischen AP 1 und AP 15 — beide
+Skip-Bedingungen sind jetzt Geschichte, nicht mehr in der Schlusszeile.)
 
 ## Daten
 
