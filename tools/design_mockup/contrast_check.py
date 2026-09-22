@@ -1,10 +1,10 @@
 """Misst den Kontrast **im gerenderten Bild** an jeder echten Textstelle.
 
-Warum nicht aus den Token gerechnet wird: `kontrast.py` aus Runde 1 hat die Tokenwerte
-übereinandergelegt und „0 Paare unter 4,5:1" gemeldet, während im Bild 2,41:1 stand — es
-kannte die `opacity:`-Faktoren, die getönten Füllungen und den Glanzstreifen nicht
-(review_round1.md B3). Ein Prüfwerkzeug, das falsches Grün liefert, ist schlimmer als
-keines.
+Warum nicht aus den Token gerechnet wird: Das Kontrastwerkzeug der Runde 1 — nicht im
+Repositorium, es hat den Entwurf nicht überlebt — hat die Tokenwerte übereinandergelegt
+und „0 Paare unter 4,5:1" gemeldet, während im Bild 2,41:1 stand; es kannte die
+`opacity:`-Faktoren, die getönten Füllungen und den Glanzstreifen nicht (review_round1.md
+B3). Ein Prüfwerkzeug, das falsches Grün liefert, ist schlimmer als keines.
 
 Deshalb hier der umgekehrte Weg, und zwar ohne Handarbeit: Der Bildschirm wird geladen,
 gerendert, und dann wird **der Objektbaum nach jedem sichtbaren `Text` abgesucht**. Für
@@ -104,8 +104,8 @@ def main() -> int:
     QTest.qWait(300)
     image = view.grabWindow()
 
-    # (Textelement, sichtbares Rechteck in Bildkoordinaten)
-    texte: list[tuple[object, float, float, float, float]] = []
+    # (Textelement, sichtbares Rechteck in Bildkoordinaten, steht es ganz im Ausschnitt)
+    texte: list[tuple[object, float, float, float, float, bool]] = []
     verblasst: list[str] = []
     verdeckt = 0
 
@@ -247,6 +247,14 @@ def main() -> int:
             f"   schlechtestes Paar: {schlechtester[0]:.2f}:1  {schlechtester[2]}px  "
             f"{schlechtester[1]!r}"
         )
+    # Untergrenze (Befund B4, Durchsicht b2d5cab): „0 Textstellen gemessen, 0 unter der
+    # Schwelle" ist genau die Ausgabe, die der Modulkopf oben als den vorangegangenen
+    # Fehlschlag beschreibt — behoben wurde damals die Ursache (`metaObject()`), nicht das
+    # Symptom. Ein Bildschirm ohne eine einzige gemessene Textstelle ist deshalb selbst ein
+    # Fehlschlag und kein sauberes Ergebnis.
+    if not zeilen:
+        print("keine einzige Textstelle gemessen — hier wurde nichts geprüft", file=sys.stderr)
+        return 2
     return 1 if (befunde or verblasst) else 0
 
 

@@ -12,6 +12,8 @@ Genau dieser Fall wird hier gesucht, und zwar am geladenen Objektbaum, nicht am 
    Text fehlt.
 3. **Beschnittener Text** — ein `Text`, dessen `implicitHeight` größer ist als seine Höhe
    oder dessen `truncated` gesetzt ist (Kürzung durch `elide`). Regel 1: nichts fällt weg.
+4. **Untergrenze** — wurde überhaupt ein `Text` angesehen? Ohne sie bestand ein Bildschirm
+   ohne eine einzige Textstelle diese Prüfung (Befund B4, Durchsicht b2d5cab).
 
 Aufruf:  python layout_check.py <qml> [--size 1280x800] [--dark] [--fall NAME]
 """
@@ -79,12 +81,18 @@ def main() -> int:
     QTest.qWait(300)
 
     findings: list[str] = []
+    # Untergrenze (Befund B4, Durchsicht b2d5cab): Ein Bildschirm ohne eine einzige
+    # Textstelle meldete hier „kein Überlauf, keine Kürzung" — die beiden Textprüfungen
+    # unten liefen dann über nichts. Gezählt wird deshalb mit, wie viele `Text` überhaupt
+    # angesehen wurden; null ist ein Fehlschlag und keine saubere Seite.
+    texte = 0
 
     def describe(item: QQuickItem) -> str:
         name = item.objectName() or type(item).__name__
         return f"{name} ({item.width():.0f}×{item.height():.0f} bei {item.x():.0f},{item.y():.0f})"
 
     def walk(item: QQuickItem, path: str) -> None:
+        nonlocal texte
         for child in item.childItems():
             if not child.isVisible() or (child.width() == 0 and child.height() == 0):
                 continue
@@ -123,6 +131,7 @@ def main() -> int:
             # `QQuickItem`, der Metaobjektname ist die Wahrheit. Mit dem alten
             # Vergleich waren die beiden Textprüfungen unten tot.
             if child.metaObject().className() == "QQuickText":
+                texte += 1
                 name = child.objectName()
                 implicit = child.property("implicitHeight")
                 if implicit is not None and implicit - child.height() > 1:
@@ -146,7 +155,10 @@ def main() -> int:
         for finding in findings:
             print("  " + finding)
         return 1
-    print(f"{label}: kein Überlauf, keine Kürzung")
+    if not texte:
+        print(f"{label}: kein einziger `Text` im Objektbaum — hier wurde nichts geprüft")
+        return 2
+    print(f"{label}: kein Überlauf, keine Kürzung ({texte} Textstellen angesehen)")
     return 0
 
 

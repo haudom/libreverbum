@@ -48,7 +48,7 @@ def main() -> int:
         os.environ["QT_QPA_FONTDIR"] = args.font_dir
 
     from PySide6.QtCore import QtMsgType, QUrl, qInstallMessageHandler
-    from PySide6.QtGui import QFontDatabase, QGuiApplication
+    from PySide6.QtGui import QFontDatabase, QGuiApplication, QImage
     from PySide6.QtQuick import QQuickView
     from PySide6.QtTest import QTest
 
@@ -103,6 +103,17 @@ def main() -> int:
     image = view.grabWindow()
     if image.isNull() or image.width() != width:
         print(f"grabWindow() lieferte {image.width()}x{image.height()}", file=sys.stderr)
+        return 2
+    # Untergrenze (Befund B4, Durchsicht b2d5cab): Ein Bildschirm, der gar nichts zeichnet,
+    # bestand bis hierher alle drei Prüfungen — „0 Warnungen", „kein Überlauf", „0
+    # Textstellen gemessen". Ein einfarbiges Bild ist deshalb selbst ein Fehlschlag; es ist
+    # zugleich genau die Form, in der `MultiEffect` im Software-Szenengraph still ausfällt
+    # (siehe Modulkopf). Format_RGB32 hat bei jeder hier gerenderten Breite keine
+    # Zeilenauffüllung, die Rohbytes sind also vergleichbar.
+    flach = image.convertToFormat(QImage.Format.Format_RGB32)
+    roh = bytes(flach.constBits())
+    if not roh or roh == roh[:4] * (len(roh) // 4):
+        print("Bild ist einfarbig — es wurde nichts gezeichnet", file=sys.stderr)
         return 2
     out = Path(args.png)
     out.parent.mkdir(parents=True, exist_ok=True)

@@ -31,6 +31,12 @@ Drei Prüfungen je Bild, weil keine davon die anderen ersetzt:
 3. `contrast_check.py` — misst den Kontrast im PNG an jeder echten Textstelle. Aus den Token
    gerechnet käme falsches Grün heraus (B3).
 
+Jedes der drei meldet außerdem, wenn es **nichts** angesehen hat: ein einfarbiges Bild,
+kein `Text` im Objektbaum, keine gemessene Textstelle. Ohne diese Untergrenze bestand ein
+Bildschirm, der gar nichts rendert, alle drei Prüfungen (Befund B4, Durchsicht b2d5cab).
+Gezählt wird hier der **Rückgabewert** jedes der drei Läufe, nie eine erkannte Befundzeile
+— siehe `melde` (Befund B1).
+
 Aufruf:  python render_all.py [--nur triage]
 """
 
@@ -82,6 +88,23 @@ def lauf(skript: str, qml: Path, extra: list[str]) -> tuple[int, str]:
     return ergebnis.returncode, (ergebnis.stdout or "") + (ergebnis.stderr or "")
 
 
+def melde(titel: str, code: int, ausgabe: str, zeilen: list[str]) -> int:
+    """Zählt einen Fehlschlag und zeigt ihn; gibt 1 zurück, wenn `code` nicht 0 war.
+
+    Gezählt wird der **Rückgabewert**, nie eine erkannte Befundzeile. Bis zur Nachbesserung
+    von AP 14 las die Schleife den Rückgabewert von `contrast_check.py` nur für die Marke
+    und zählte stattdessen dessen `!`-Zeilen: Ein Abbruch ohne solche Zeile — Absturz,
+    fehlende Schrift, QML nicht geladen, falsches Argument — ergab sechsmal „FEHL" und
+    trotzdem „0 Befunde" bei Exit 0 (Befund B1, Durchsicht b2d5cab). `zeilen` ist deshalb
+    nur die schönere Auswahl; ist sie leer, steht die rohe Ausgabe da."""
+    if not code:
+        return 0
+    print(f"     {titel}:")
+    for zeile in (zeilen or ausgabe.splitlines())[:8]:
+        print("       " + zeile.strip()[:160])
+    return 1
+
+
 def main() -> int:
     # Wie in den übrigen tools/-Skripten: Ohne diese Zeile bricht jede deutsche
     # Ausgabe auf einer cp1252-Konsole mit UnicodeEncodeError ab.
@@ -119,23 +142,12 @@ def main() -> int:
         kopf = aus_m.splitlines()[0] if aus_m else ""
         worst = next((z for z in aus_m.splitlines() if "schlechtestes Paar" in z), "")
         marke = "OK  " if (code_s == 0 and code_l == 0 and code_m == 0) else "FEHL"
-        print(f"{marke} {ziel.name:38s} {worst.strip()}")
-        if code_s:
-            fehler += 1
-            print("     QML-Warnung:")
-            for zeile in aus_s.splitlines():
-                if "Warnung" in zeile or "QML" in zeile:
-                    print("       " + zeile.strip()[:160])
-        if code_l:
-            fehler += 1
-            print("     Layout:")
-            for zeile in aus_l.splitlines()[:8]:
-                print("       " + zeile.strip()[:160])
-        if schlecht:
-            fehler += 1
-            print(f"     Kontrast ({kopf}):")
-            for zeile in schlecht[:8]:
-                print("       " + zeile.strip()[:160])
+        print(f"{marke} {ziel.name:38s} {worst.strip()}", flush=True)
+
+        warnungen = [z for z in aus_s.splitlines() if "Warnung" in z or "QML" in z]
+        fehler += melde("QML-Warnung", code_s, aus_s, warnungen)
+        fehler += melde("Layout", code_l, aus_l, aus_l.splitlines())
+        fehler += melde(f"Kontrast ({kopf})", code_m, aus_m, schlecht)
 
     print(f"\n{len(auftraege)} Bilder, {fehler} Befunde")
     return 1 if fehler else 0
