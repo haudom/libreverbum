@@ -24,6 +24,13 @@ folgenden verkleinern; jedes Kapitel behält seinen eigenen Export. Kapitel ohne
 Fließtext werden gemeldet und übersprungen, kein Abbruch (`pipeline.list_chapters`, AP 4).
 Am Ende steht eine Bilanz über alle verarbeiteten und übersprungenen Kapitel.
 
+`--assess` (bauplan-phase2.md AP 7, E12, E3-Ausnahme): Buch-Schwierigkeitscheck statt
+Triage — `pipeline.assess_book` gegen das **vorhandene** Profil (keine interaktive
+Rückfrage, keine Vorbelegung, kein Sprachmodell außer spaCy), Tabelle je Kapitel mit
+Fließtext, eine Zeile fürs Buch, dazu die Einordnung aus `app.difficulty` mit dem Hinweis,
+dass die drei Schwellen eine Vermutung sind. Schließt sich mit `--chapter`/`--chapters`
+aus.
+
 Regel 9 (dokumentation.md §4), strukturelle Hälfte: Dieses Kommandozeilenprogramm hat
 keine Ereignisschleife und keinen Oberflächen-Thread, den ein NLP- oder Modellaufruf
 blockieren könnte — die prüfbare Hälfte der Regel ist hier **trivial erfüllt**, nicht
@@ -51,7 +58,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, assert_never
 
-from app import config, export, model
+from app import config, difficulty, export, model
 from cli import display, interaction
 from cli.display import finish_progress_line, safe_print, safe_print_progress
 from cli.interaction import ReadLine, WriteLine
@@ -94,6 +101,14 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "Kapitelbereich statt einer einzelnen Nummer, z. B. 3-7 oder all für alle "
             "Kapitel (bauplan-phase2.md AP 5); schließt sich mit --chapter aus"
+        ),
+    )
+    parser.add_argument(
+        "--assess",
+        action="store_true",
+        help=(
+            "Buch-Schwierigkeitscheck statt Triage: Tabelle je Kapitel, eine Zeile fürs "
+            "Buch (bauplan-phase2.md AP 7); schließt sich mit --chapter/--chapters aus"
         ),
     )
     parser.add_argument(
@@ -959,6 +974,105 @@ def _run_one_chapter(
     )
 
 
+def _run_assess(
+    *,
+    epub_path: Path,
+    dictionary_path: Path,
+    profile_path: Path,
+    nlp: Language,
+    cache_dir: Path,
+    write_line: WriteLine,
+) -> pipeline.BookDifficulty:
+    """Ruft `pipeline.assess_book` mit einer Fortschrittsanzeige auf (bauplan-phase2.md
+    AP 7) — dasselbe Muster wie `_run_chapter_with_progress`: `assess_book` meldet über
+    dieselben vier `ChapterStage`-Werte wie `run_chapter`, nur `READING_BOOK`/
+    `ANALYZING_BOOK` üblicherweise nur beim ersten Kapitel (danach trifft der
+    Zwischenspeicher, `pipeline.assess_book`s Docstring), `EXTRACTING_VOCABULARY`/
+    `LOOKING_UP_DICTIONARY` dagegen **je Kapitel** statt einmal. Eine feste Textzeile je
+    Kapitel wie bei `_run_chapter_with_progress` liefe hier zu einer Zeile je Kapitel auf;
+    stattdessen zählt diese Funktion die bereits begonnenen Kapitel mit und schreibt eine
+    sich fortschreibende Zeile (`safe_print_progress`)."""
+    progress_open = False
+    last_stage: pipeline.ChapterStage | None = None
+    chapters_started = 0
+
+    def _on_progress(progress: pipeline.ChapterProgress) -> None:
+        nonlocal progress_open, last_stage, chapters_started
+        if progress.stage != last_stage and progress_open:
+            finish_progress_line()
+            progress_open = False
+        last_stage = progress.stage
+        match progress.stage:
+            case pipeline.ChapterStage.READING_BOOK:
+                safe_print_progress(
+                    f"Buch wird gelesen: {progress.done} von {progress.total} Kapiteln."
+                )
+                progress_open = True
+            case pipeline.ChapterStage.ANALYZING_BOOK:
+                safe_print_progress(
+                    f"Wortschatz des Buchs wird analysiert: {progress.done} von "
+                    f"{progress.total} Kapiteln mit Text …"
+                )
+                progress_open = True
+            case pipeline.ChapterStage.EXTRACTING_VOCABULARY:
+                chapters_started += 1
+                safe_print_progress(f"Kapitel wird geprüft: {chapters_started} …")
+                progress_open = True
+            case pipeline.ChapterStage.LOOKING_UP_DICTIONARY:
+                pass
+            case _:
+                assert_never(progress.stage)
+
+    try:
+        return pipeline.assess_book(
+            epub_path=epub_path,
+            dictionary_path=dictionary_path,
+            profile_path=profile_path,
+            nlp=nlp,
+            cache_dir=cache_dir,
+            on_progress=_on_progress,
+        )
+    finally:
+        if progress_open:
+            finish_progress_line()
+
+
+# (bauplan-phase2.md AP 7): Deutsche Namen für `app.difficulty.DifficultyLevel` —
+# Oberflächentext ist Sache von `cli`/`gui`, nicht von `app` (`app/difficulty.py`,
+# „Liefert"). Jede Zeile trägt den Hinweis „Vermutung" (E12), nicht nur die Überschrift,
+# damit er auch bei einer isoliert gelesenen Zeile nicht verloren geht.
+_DIFFICULTY_LEVEL_LABELS = {
+    difficulty.DifficultyLevel.EASY: "leicht (Vermutung)",
+    difficulty.DifficultyLevel.MODERATE: "angemessen (Vermutung)",
+    difficulty.DifficultyLevel.HARD: "zu schwer für dich (Vermutung)",
+}
+
+
+def _write_assess_result(result: pipeline.BookDifficulty, write_line: WriteLine) -> None:
+    """Schreibt die Tabelle je Kapitel und die Buchzeile (bauplan-phase2.md AP 7) —
+    übersprungene Kapitel sichtbar mit ihrem Grund (Regel 13, dokumentation.md §4), nicht
+    still weggelassen, wie bei `_write_chapter_range_summary` oben."""
+    write_line("Schwierigkeitscheck:")
+    for chapter in result.chapters:
+        write_line(
+            f"  Kapitel {chapter.number} ({chapter.title}): "
+            f"{_format_count(chapter.token_count)} Wörter, "
+            f"{_format_count(chapter.unknown_lemma_count)} unbekannte Grundformen, "
+            f"{chapter.unknown_per_thousand:.1f} je 1.000, "
+            f"Abdeckung {chapter.coverage.share * 100:.1f} %."
+        )
+    for listing in result.skipped:
+        write_line(f"  Kapitel {listing.number}: übersprungen — {listing.skip_reason}.")
+    level = difficulty.classify_difficulty(result.unknown_per_thousand)
+    level_label = _DIFFICULTY_LEVEL_LABELS[level]
+    write_line(
+        f"Buch: {_format_count(result.token_count)} Wörter, "
+        f"{_format_count(result.unknown_lemma_count)} unbekannte Grundformen, "
+        f"{result.unknown_per_thousand:.1f} je 1.000, "
+        f"Abdeckung {result.coverage.share * 100:.1f} % — Einordnung: {level_label}."
+    )
+
+
 def _run(
     args: argparse.Namespace, *, read_line: ReadLine, write_line: WriteLine, style: display.Style
 ) -> int:
@@ -968,6 +1082,10 @@ def _run(
         # einen Bereich verarbeitet, ohne zu wissen, welche der beiden Angaben galt.
         raise ValueError(
             "--chapter und --chapters schließen sich aus — nur eine der beiden Optionen angeben."
+        )
+    if args.assess and (args.chapter is not None or args.chapters is not None):
+        raise ValueError(
+            "--assess schließt --chapter/--chapters aus — nur eine der Optionen angeben."
         )
     data_dir = args.data_dir or config.default_data_dir()
     # Jeder Lauf nennt sein Datenverzeichnis: Wo Profil, Wörterbuch und config.toml
@@ -1004,6 +1122,27 @@ def _run(
         # 44 s statt 1,1 s (technik.md §3, „Der Engpass ist das Nachschlagen, nicht das
         # Modell") — lautlos.
         dictionary.ensure_index(cfg.dictionary_path)
+
+    if args.assess:
+        # bauplan-phase2.md AP 7, E3-Ausnahme: `--assess` ist ein reiner Lesebericht — kein
+        # interaktives Anlegen des Profils, keine Niveaufrage, kein Sprachmodell außer
+        # spaCy. Ein fehlendes Profil öffnet `pipeline.assess_book` (über `run_chapter`)
+        # trotzdem klaglos als leere Profildatei (`profile.open_profile`, „legt beim ersten
+        # Aufruf das vollständige Schema an") — genau der „leeres Profil"-Fall aus der
+        # Prüfung dieses Auftrags, keine gesonderte Behandlung nötig.
+        write_line("Sprachmodell wird geladen …")
+        nlp = extraction.load_nlp()
+        write_line("Sprachmodell geladen.")
+        result = _run_assess(
+            epub_path=args.epub_path,
+            dictionary_path=cfg.dictionary_path,
+            profile_path=cfg.profile_path,
+            nlp=nlp,
+            cache_dir=data_dir / "cache",
+            write_line=write_line,
+        )
+        _write_assess_result(result, write_line)
+        return 0
 
     # Vor der Bestätigung festgehalten: Danach steht mit `_confirm_new_profile`s eigenem
     # `True` nicht mehr auseinander, ob die Datei schon da war oder gerade erst bestätigt

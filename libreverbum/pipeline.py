@@ -31,6 +31,12 @@ Kapitelauswahl, unabhängig von `run_chapter` und ohne `nlp` — sie liegt hier 
 `run_chapter` selbst auswertet (technik.md §8, offener Punkt „epub.read_chapter wirft
 ValueError bei Vorspann-Kapiteln").
 
+Dazu, seit AP 7 (bauplan-phase2.md), `assess_book`: der Buch-Schwierigkeitscheck (E12) —
+ruft `run_chapter` für jedes Kapitel mit Fließtext auf und errechnet mit `coverage` je
+Kapitel und fürs ganze Buch `unknown_per_thousand` und die Abdeckung, kein Modellaufruf.
+Die drei Schwellenworte, die daraus eine Einordnung „zu schwer für dich" machen, liegen in
+`app.difficulty`, nicht hier (E12, technik.md §14, E4).
+
 Voraussetzungen
 ---------------
 `nlp` ist ein bereits geladenes spaCy-Modell (`extraction.load_nlp()`) — das Laden kostet
@@ -820,6 +826,181 @@ def coverage(vocabulary: ChapterVocabulary, learned: Collection[Lemma] = ()) -> 
         unknown_lemma_count=unknown_lemma_count,
         share=understood_tokens / token_count,
         share_after_learning=understood_after_learning / token_count,
+    )
+
+
+@dataclass(frozen=True)
+class ChapterDifficulty:
+    """Schwierigkeit eines einzelnen Kapitels **mit** Fließtext, eine Zeile von
+    `BookDifficulty.chapters` (bauplan-phase2.md AP 7, E12): „unbekannte Grundformen je
+    1.000 Wortformen" statt einer Seite, die es im EPUB nicht gibt (E12, „Schwierigkeitscheck:
+    welche Maßzahl, welche Worte?").
+
+    `token_count` und `unknown_lemma_count` sind dieselben Werte wie in `coverage` — als
+    eigene Felder hier, weil `cli.main --assess` (E3-Ausnahme) sie unmittelbar für die
+    Kapitelzeile der Tabelle braucht, ohne durch `coverage` hindurchzugreifen; die Form ist
+    laut Auftragstext fest so genannt. `unknown_per_thousand` ist `unknown_lemma_count /
+    token_count * 1000`, `0.0` für den praktisch unerreichbaren Fall `token_count == 0`
+    (dieselbe Randfallbehandlung wie `coverage`; `assess_book` schließt ein solches Kapitel
+    aber ohnehin vorher als übersprungen aus, `epub.read_chapter` bricht dafür mit
+    `ChapterWithoutTextError` ab)."""
+
+    number: int
+    title: str
+    token_count: int
+    unknown_lemma_count: int
+    unknown_per_thousand: float
+    coverage: Coverage
+
+
+@dataclass(frozen=True)
+class BookDifficulty:
+    """Ergebnis von `assess_book` (bauplan-phase2.md AP 7, E12): je Kapitel mit Fließtext
+    eine `ChapterDifficulty` in Buchreihenfolge, `skipped` für die ausgesteuerten Kapitel
+    ohne Fließtext (`pipeline.ChapterListing`, dieselbe Form wie `list_chapters` sie schon
+    liefert — sichtbar in der Ausgabe, nicht still weggelassen, Regel 13), dazu dieselben
+    vier Größen fürs ganze Buch.
+
+    **Aggregiert wird über Wortformen, nicht als Mittel der Kapitelquoten**
+    (Auftragstext AP 7): `token_count` ist die Summe der Kapitel-`token_count`,
+    `unknown_lemma_count` die Summe der Kapitel-`unknown_lemma_count` — eine im Kapitel 3
+    *und* im Kapitel 9 unbekannte Grundform zählt damit zweimal, einmal je Kapitel, in dem
+    sie tatsächlich unverstandenen Text beiträgt, nicht einmal für das ganze Buch. Das ist
+    dieselbe Sichtweise wie `unknown_per_thousand` selbst: eine **Dichte** unverstandener
+    Vorkommen im gelesenen Text, keine Bestandsaufnahme des Wortschatzes. `coverage` ist
+    entsprechend `token_count`- statt Kapitel-gewichtet zusammengesetzt (`share = Summe
+    understood_tokens / Summe token_count`) — genau die Gewichtung, die `coverage`s eigener
+    Docstring unter „Vorbehalt für bauplan-phase2.md AP 7" verlangt: Ein ungewichtetes
+    Mittel der Kapitelquoten zöge den Wert durch ein leeres Kapitel (`share == 1.0`)
+    fälschlich nach oben; mit `token_count` als Gewicht bliebe ein solches Kapitel
+    wirkungslos (kommt hier ohnehin nie vor, `assess_book` schließt es vorher als
+    `skipped` aus). `share_after_learning` bleibt gleich `share`: `assess_book` kennt
+    keinen laufenden Triage-Durchgang, jedes Kapitel liefert seine `coverage` mit
+    `learned=()` (`coverage`s Vorgabe)."""
+
+    chapters: list[ChapterDifficulty]
+    skipped: list[ChapterListing]
+    token_count: int
+    unknown_lemma_count: int
+    unknown_per_thousand: float
+    coverage: Coverage
+
+
+def assess_book(
+    *,
+    epub_path: Path,
+    dictionary_path: Path,
+    profile_path: Path,
+    nlp: Language,
+    cache_dir: Path | None = None,
+    on_progress: Callable[[ChapterProgress], None] | None = None,
+) -> BookDifficulty:
+    """Buch-Schwierigkeitscheck (bauplan-phase2.md AP 7, E12): ganzes Buch gegen das Profil
+    halten — „ca. 14 unbekannte Wörter pro Seite, zu schwer für dich" (konzept.md, „Phase
+    2"), hier als `unknown_per_thousand` je Kapitel und fürs Buch, dazu die Abdeckung nach
+    E5.
+
+    Ruft `run_chapter` für jedes Kapitel **mit** Fließtext auf (`list_chapters` liefert die
+    Kapitelliste samt `skip_reason`, dieselbe Unterscheidung wie bei `cli.main --chapters`,
+    bauplan-phase2.md AP 5) und errechnet daraus mit `coverage` die Zeile dieses Kapitels —
+    keine eigene Extraktions- oder Nachschlagelogik: `run_chapter` ist bereits „Extraktion
+    und Wörterbuchabgleich je Kapitel" (Auftragstext), ein zweiter Weg dorthin wäre eine
+    Abstraktion ohne zweiten Anwendungsfall (Regel 14). Dass `run_chapter` dabei auch die
+    Mehrwortausdruck-Kandidaten mitermittelt, die `coverage` gar nicht benutzt
+    (`coverage`s Docstring: „`vocabulary.expressions` fließt nicht ein"), ist der Preis
+    dieser Wiederverwendung — kein Modellaufruf, siehe unten, aber ein zusätzlicher
+    spaCy-Lauf je Kapitel für `extract_particle_verb_candidates`/`extract_contiguous_
+    candidates` (`extraction.py`). Gemessen im Bericht zu diesem Auftragspaket.
+
+    `cache_dir` wird an jeden `run_chapter`-Aufruf unverändert weitergereicht (technik.md
+    §5, „Entschieden 15.09.2026: Zwischenspeicher für den buchweiten Eigennamenanteil"):
+    Der erste Aufruf (kein Zwischenspeichertreffer) liest das ganze Buch und schickt jedes
+    Kapitel einmal durch spaCy, um den buchweiten Eigennamenanteil zu bestimmen, und legt
+    das Ergebnis im Zwischenspeicher ab; jeder folgende Aufruf **innerhalb desselben
+    Buchs** — hier: jedes weitere Kapitel desselben `assess_book`-Laufs — trifft ihn und
+    braucht dafür weder das Buch erneut zu lesen noch spaCy dafür aufzurufen. Ohne
+    `cache_dir` (Vorgabe `None`, wie bei `run_chapter`) liefe dieser volle Buchdurchgang bei
+    **jedem** Kapitel neu — E12s Kostenangabe „ein spaCy-Durchgang über das ganze Buch (22
+    bis 29 s)" gilt deshalb nur mit gesetztem `cache_dir`; `cli.main` setzt ihn wie bei
+    `run_chapter` auf `<data_dir>/cache`.
+
+    Kein Modellaufruf (Auftragstext): `run_chapter` ruft `translation.choose_sense` nicht
+    auf, das bleibt `resolve_triage_entries` vorbehalten (Moduldocstring, „`run_chapter`
+    bleibt der netzlose Teil"). `on_progress` wird unverändert an jeden `run_chapter`-Aufruf
+    weitergereicht — dieselben vier `ChapterStage`-Werte, nur je Kapitel mit Text statt
+    einmal; `cli.main` ordnet ihnen wie bei `run_chapter` deutschen Text zu.
+
+    Bricht sichtbar ab (Regel 13), wenn `dictionary_path` keine lesbare Datei ist — geprüft
+    **vor** dem ersten `run_chapter`-Aufruf, aus demselben Grund wie dort: ein Buch ohne ein
+    einziges erkanntes Vorkommen riefe das Wörterbuch sonst nie auf und ein fehlendes
+    Wörterbuch bliebe hinter einem leeren, aber scheinbar erfolgreichen Ergebnis unbemerkt.
+    Jeder andere Fehlschlag (ungültige EPUB- oder Profildatei) reicht aus `list_chapters`
+    beziehungsweise `run_chapter` unverändert durch.
+
+    Ein reiner Lesezugriff aufs Profil: `run_chapter` vergleicht über `profile.
+    compare_chapter_vocabulary` (dessen Docstring: „Ein reiner Lesezugriff"), es wird kein
+    Ereignis geschrieben (Auftragstext, „genügt lesend, keine Schreibzugriffe aufs
+    Profil" — Beobachtung aus AP 5: Anders als `cli._run`, das eine Profilverbindung über
+    mehrere Kapitel eines `--chapters`-Laufs offen hält, öffnet und schließt jeder
+    `run_chapter`-Aufruf seine eigene; für `assess_book` genügt das, weil keiner der Aufrufe
+    etwas bucht, das ein späterer Aufruf sehen müsste — anders als die „kenne ich"-Buchungen,
+    auf die AP 5s Abnahmekriterium 2 abzielt."""
+    if not dictionary_path.is_file():
+        raise FileNotFoundError(f"Wörterbuch nicht lesbar: {dictionary_path}")
+
+    listings = list_chapters(epub_path)
+    chapters: list[ChapterDifficulty] = []
+    skipped: list[ChapterListing] = []
+    for listing in listings:
+        if listing.skip_reason is not None:
+            skipped.append(listing)
+            continue
+        vocabulary = run_chapter(
+            epub_path=epub_path,
+            chapter_number=listing.number,
+            dictionary_path=dictionary_path,
+            profile_path=profile_path,
+            nlp=nlp,
+            cache_dir=cache_dir,
+            on_progress=on_progress,
+        )
+        chapter_coverage = coverage(vocabulary)
+        unknown_per_thousand = (
+            chapter_coverage.unknown_lemma_count / chapter_coverage.token_count * 1000
+            if chapter_coverage.token_count
+            else 0.0
+        )
+        chapters.append(
+            ChapterDifficulty(
+                number=listing.number,
+                title=listing.title,
+                token_count=chapter_coverage.token_count,
+                unknown_lemma_count=chapter_coverage.unknown_lemma_count,
+                unknown_per_thousand=unknown_per_thousand,
+                coverage=chapter_coverage,
+            )
+        )
+
+    total_token_count = sum(chapter.token_count for chapter in chapters)
+    total_understood_tokens = sum(chapter.coverage.understood_tokens for chapter in chapters)
+    total_unknown_lemma_count = sum(chapter.unknown_lemma_count for chapter in chapters)
+    book_share = total_understood_tokens / total_token_count if total_token_count else 1.0
+    book_unknown_per_thousand = (
+        total_unknown_lemma_count / total_token_count * 1000 if total_token_count else 0.0
+    )
+    return BookDifficulty(
+        chapters=chapters,
+        skipped=skipped,
+        token_count=total_token_count,
+        unknown_lemma_count=total_unknown_lemma_count,
+        unknown_per_thousand=book_unknown_per_thousand,
+        coverage=Coverage(
+            token_count=total_token_count,
+            understood_tokens=total_understood_tokens,
+            unknown_lemma_count=total_unknown_lemma_count,
+            share=book_share,
+            share_after_learning=book_share,
+        ),
     )
 
 

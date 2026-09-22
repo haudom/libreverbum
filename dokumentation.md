@@ -149,6 +149,10 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | Einrichtung, Erstlauf | `setup` |
 | Kapitel ohne Fließtext (Vorspann, Impressum, Bildband) | `ChapterWithoutTextError`, `skip_reason` |
 | Kapitelübersicht für die Kapitelauswahl (Nummer, Titel, Wortumfang, `skip_reason`, ohne spaCy) | `ChapterListing` (`pipeline.list_chapters`, bauplan-phase2.md AP 4) |
+| Schwierigkeitscheck-Ergebnis für ein Kapitel mit Fließtext (Zeile der Kapiteltabelle) | `ChapterDifficulty` (`pipeline.assess_book`, bauplan-phase2.md AP 7) |
+| Schwierigkeitscheck-Ergebnis fürs ganze Buch (`assess_book`, je Kapitel eine `ChapterDifficulty`, dazu dieselben vier Größen aggregiert) | `BookDifficulty` |
+| Maßzahl des Schwierigkeitschecks (`unknown_lemma_count / token_count * 1000`, E12) | `unknown_per_thousand` |
+| Einordnung des Schwierigkeitschecks in eine von drei Stufen (Schwellenworte, ausdrücklich als Vermutung markiert, E12, liegt in `app/`, nicht im Kern) | `DifficultyLevel`, `classify_difficulty` (`app.difficulty`) |
 
 Neue Begriffe kommen hierher, **bevor** der erste Bezeichner damit entsteht.
 

@@ -2471,3 +2471,102 @@ def test_resolve_silently_writes_nothing_to_the_screen_while_resolving_a_block(
         "Der stille Vorladeblock hat auf dem Bildschirm geschrieben - Festlegung 3 aus "
         "technik.md §12 verlangt, dass er nichts ausgibt."
     )
+
+
+# --------------------------------------------------------- --assess (bauplan-phase2.md AP 7)
+#
+# Kein `model_server_double` nötig: `--assess` ruft `pipeline.assess_book` auf, das nie
+# `translation.choose_sense` erreicht (Moduldocstring `pipeline.py`, „`run_chapter` bleibt
+# der netzlose Teil") — die Dummy-Adresse unten wird nie angefragt, `_no_read` sichert
+# zusätzlich zu, dass kein interaktiver Prompt (Profil anlegen, Sprachniveau) auftritt.
+
+
+def test_run_rejects_assess_with_chapter(tmp_path: Path) -> None:
+    """bauplan-phase2.md AP 7, E3-Ausnahme: `--assess` schließt sich mit `--chapter` (und
+    `--chapters`) aus — beide zugleich angegeben bricht sichtbar ab (Regel 13,
+    dokumentation.md §4), statt eine der beiden Angaben still zu bevorzugen."""
+    written: list[str] = []
+
+    exit_code = main(
+        ["irrelevant.epub", "--assess", "--chapter", "1", "--data-dir", str(tmp_path)],
+        read_line=_no_read,
+        write_line=written.append,
+    )
+
+    assert exit_code == 1
+    assert any("--assess" in line for line in written)
+
+
+def test_assess_reports_a_table_and_a_book_line_without_prompting(
+    tmp_path: Path, two_chapter_book_epub: Path, mini_dictionary_db: Path
+) -> None:
+    """bauplan-phase2.md AP 7: `--assess` liest das vorhandene Profil, ohne danach zu
+    fragen (`_no_read` wirft, sobald `main` doch eine Eingabe verlangt — insbesondere
+    keine Frage nach einem neuen Profil oder einem Sprachniveau, anders als bei einem
+    normalen Kapiteldurchlauf), und schreibt eine Zeile je Kapitel mit Fließtext sowie
+    eine Buchzeile mit Einordnung."""
+    data_dir = tmp_path / "data"
+    _write_config(
+        data_dir,
+        model_url="http://127.0.0.1:0/v1",
+        model_name="unerreicht",
+        dictionary_path=mini_dictionary_db,
+    )
+    written: list[str] = []
+
+    exit_code = main(
+        [str(two_chapter_book_epub), "--assess", "--data-dir", str(data_dir)],
+        read_line=_no_read,
+        write_line=written.append,
+    )
+
+    assert exit_code == 0, "\n".join(written)
+    assert any(line == "Schwierigkeitscheck:" for line in written)
+    assert any(line.strip().startswith("Kapitel 1") for line in written)
+    assert any(line.strip().startswith("Kapitel 2") for line in written)
+    book_lines = [line for line in written if line.startswith("Buch:")]
+    assert len(book_lines) == 1, "\n".join(written)
+    assert "je 1.000" in book_lines[0]
+    assert "Einordnung:" in book_lines[0]
+
+
+def test_assess_reports_a_skipped_chapter_without_a_break(
+    tmp_path: Path,
+    three_chapter_book_epub_with_a_skipped_first_chapter: Path,
+    mini_dictionary_db: Path,
+) -> None:
+    """bauplan-phase2.md AP 7: Ein Kapitel ohne Fließtext wird gemeldet, nicht still
+    weggelassen (Regel 13, dokumentation.md §4) — der Lauf bricht dafür nicht ab und
+    verarbeitet die beiden übrigen Kapitel unverändert weiter.
+
+    Verfälschungsprobe (dokumentation.md §5, „Ein Test gilt erst als Test, wenn er einmal
+    rot war"): `pipeline.assess_book` auf `if listing.skip_reason is None: continue`
+    umgestellt — also genau umgekehrt, das Kapitel **mit** Fließtext übersprungen statt des
+    Vorspanns — ließ diesen Test rot werden (`Kapitel 2`/`Kapitel 3` fehlten in der
+    Ausgabe, siehe Bericht)."""
+    data_dir = tmp_path / "data"
+    _write_config(
+        data_dir,
+        model_url="http://127.0.0.1:0/v1",
+        model_name="unerreicht",
+        dictionary_path=mini_dictionary_db,
+    )
+    written: list[str] = []
+
+    exit_code = main(
+        [
+            str(three_chapter_book_epub_with_a_skipped_first_chapter),
+            "--assess",
+            "--data-dir",
+            str(data_dir),
+        ],
+        read_line=_no_read,
+        write_line=written.append,
+    )
+
+    assert exit_code == 0, "\n".join(written)
+    assert any(
+        line.strip().startswith("Kapitel 1") and "übersprungen" in line for line in written
+    ), "\n".join(written)
+    assert any(line.strip().startswith("Kapitel 2") for line in written)
+    assert any(line.strip().startswith("Kapitel 3") for line in written)

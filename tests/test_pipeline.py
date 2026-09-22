@@ -31,6 +31,8 @@ from libreverbum.entities import (
 from libreverbum.extraction import load_nlp
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
+
     from conftest import ModelServerDouble
     from spacy.language import Language
 
@@ -2999,3 +3001,187 @@ def test_coverage_of_a_chapter_without_a_single_alphabetic_token_is_fully_unders
     assert result.unknown_lemma_count == 0
     assert result.share == 1.0
     assert result.share_after_learning == 1.0
+
+
+# --------------------------------------------------------- assess_book (bauplan-phase2.md AP 7)
+
+
+def test_assess_book_reports_the_same_coverage_as_run_chapter_per_chapter(
+    pipeline_epub: Path, mini_dictionary_db: Path, profile_path: Path, nlp: Language
+) -> None:
+    """bauplan-phase2.md AP 7: `assess_book` erfindet keine zweite Extraktions- oder
+    Nachschlagelogik (Moduldocstring `assess_book`: „kein zweiter Weg dorthin") — je
+    Kapitel mit Fließtext liefert es dieselbe `Coverage` wie ein eigener `run_chapter`-
+    plus `coverage`-Aufruf auf dasselbe Kapitel, mit demselben (leeren) Profil."""
+    structure = epub.read_structure(pipeline_epub)
+    expected = {
+        chapter.number: pipeline.coverage(
+            pipeline.run_chapter(
+                epub_path=pipeline_epub,
+                chapter_number=chapter.number,
+                dictionary_path=mini_dictionary_db,
+                profile_path=profile_path,
+                nlp=nlp,
+            )
+        )
+        for chapter in structure.chapters
+    }
+
+    result = pipeline.assess_book(
+        epub_path=pipeline_epub,
+        dictionary_path=mini_dictionary_db,
+        profile_path=profile_path,
+        nlp=nlp,
+    )
+
+    assert [chapter.number for chapter in result.chapters] == [1, 2]
+    assert result.skipped == []
+    for chapter in result.chapters:
+        assert chapter.coverage == expected[chapter.number]
+        assert chapter.token_count == expected[chapter.number].token_count
+        assert chapter.unknown_lemma_count == expected[chapter.number].unknown_lemma_count
+        assert chapter.unknown_per_thousand == pytest.approx(
+            expected[chapter.number].unknown_lemma_count
+            / expected[chapter.number].token_count
+            * 1000
+        )
+
+
+def test_assess_book_skips_a_chapter_without_text_and_reports_it(
+    pipeline_epub_with_a_chapter_without_text: Path,
+    mini_dictionary_db: Path,
+    profile_path: Path,
+    nlp: Language,
+) -> None:
+    """bauplan-phase2.md AP 7: Ein Kapitel ohne Fließtext (hier Kapitel 2, reiner
+    Vorspann/Impressum) fehlt in `chapters`, steht aber mit seinem Grund in `skipped` —
+    sichtbar gemeldet, nicht still weggelassen (Regel 13, dokumentation.md §4). Der
+    Buchwert entspricht dann genau dem einen verbliebenen Kapitel, nicht verdünnt durch
+    ein textloses.
+
+    Verfälschungsprobe (dokumentation.md §5, „Ein Test gilt erst als Test, wenn er einmal
+    rot war"; siehe Bericht zu diesem Auftragspaket): Die Bedingung in `assess_book`
+    umgekehrt (`if listing.skip_reason is None: skipped.append(listing); continue`) —
+    also das Vorspann-Kapitel verarbeitet und das Kapitel mit Text übersprungen — ließ
+    diesen Test rot werden, aber anders als erwartet: `run_chapter` wirft für das dann
+    „verarbeitete" Vorspann-Kapitel selbst `epub.ChapterWithoutTextError` (`assess_book`
+    fängt sie nicht ab, Regel 13), der Test schlägt also mit dieser Ausnahme fehl statt
+    mit einer Assertion — ebenfalls rot, nur lauter als vermutet."""
+    result = pipeline.assess_book(
+        epub_path=pipeline_epub_with_a_chapter_without_text,
+        dictionary_path=mini_dictionary_db,
+        profile_path=profile_path,
+        nlp=nlp,
+    )
+
+    assert [chapter.number for chapter in result.chapters] == [1]
+    assert [listing.number for listing in result.skipped] == [2]
+    assert result.skipped[0].skip_reason is not None
+    assert result.token_count == result.chapters[0].token_count
+    assert result.unknown_lemma_count == result.chapters[0].unknown_lemma_count
+
+
+def test_assess_book_aggregates_over_word_forms_not_as_average_of_chapter_shares(
+    pipeline_epub: Path, mini_dictionary_db: Path, profile_path: Path, nlp: Language
+) -> None:
+    """Auftragstext AP 7: „Die Buchzahl aggregiert über Wortformen (Summe der
+    token_count), nicht als Mittel der Kapitelquoten." Kapitel 1 und 2 aus `pipeline_epub`
+    tragen unterschiedlich viele Wortformen — ein ungewichtetes Mittel der beiden
+    Kapitelquoten weicht deshalb messbar vom `token_count`-gewichteten Buchwert ab, den
+    `coverage`s eigener Docstring unter „Vorbehalt für bauplan-phase2.md AP 7" verlangt.
+
+    Verfälschungsprobe (Bericht): `book_share` in `assess_book` auf das ungewichtete
+    Mittel der Kapitelquoten umgestellt (`sum(c.coverage.share for c in chapters) /
+    len(chapters)` statt `Summe understood_tokens / Summe token_count`) ließ diesen Test
+    rot werden — die beiden Werte fielen dabei nicht mehr zusammen."""
+    result = pipeline.assess_book(
+        epub_path=pipeline_epub,
+        dictionary_path=mini_dictionary_db,
+        profile_path=profile_path,
+        nlp=nlp,
+    )
+
+    assert len(result.chapters) == 2
+    total_token_count = sum(chapter.token_count for chapter in result.chapters)
+    total_understood = sum(chapter.coverage.understood_tokens for chapter in result.chapters)
+    assert result.token_count == total_token_count
+    assert result.coverage.understood_tokens == total_understood
+    assert result.coverage.share == pytest.approx(total_understood / total_token_count)
+
+    naive_average = sum(chapter.coverage.share for chapter in result.chapters) / len(
+        result.chapters
+    )
+    assert result.coverage.share != pytest.approx(naive_average), (
+        "Testvoraussetzung verletzt: Buchwert und ungewichtetes Mittel der Kapitelquoten "
+        "fallen bei pipeline_epub zusammen - dieser Test prüft dann nicht die verlangte "
+        "Gewichtung."
+    )
+
+    total_unknown_lemma_count = sum(chapter.unknown_lemma_count for chapter in result.chapters)
+    assert result.unknown_lemma_count == total_unknown_lemma_count
+    assert result.unknown_per_thousand == pytest.approx(
+        total_unknown_lemma_count / total_token_count * 1000
+    )
+
+
+def test_assess_book_raises_for_a_missing_dictionary_file(
+    pipeline_epub: Path, tmp_path: Path, profile_path: Path, nlp: Language
+) -> None:
+    """Regel 13 (dokumentation.md §4): Bricht sichtbar ab, geprüft vor dem ersten
+    `run_chapter`-Aufruf — dieselbe Zusicherung wie bei `run_chapter` selbst (siehe dessen
+    Test `test_run_chapter_checks_the_dictionary_file_before_extracting_any_vocabulary`
+    weiter oben)."""
+    with pytest.raises(FileNotFoundError, match="Wörterbuch nicht lesbar"):
+        pipeline.assess_book(
+            epub_path=pipeline_epub,
+            dictionary_path=tmp_path / "fehlt.sqlite3",
+            profile_path=profile_path,
+            nlp=nlp,
+        )
+
+
+def test_assess_book_computes_the_proper_noun_ratio_cache_only_once_per_run(
+    pipeline_epub: Path,
+    mini_dictionary_db: Path,
+    profile_path: Path,
+    nlp: Language,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """bauplan-phase2.md AP 7: `assess_book` ruft `run_chapter` für jedes Kapitel mit
+    Fließtext auf — ohne den Zwischenspeicher aus technik.md §5 (`cache_dir`) läge darin
+    ein voller Buchdurchgang je Kapitel. Mit gesetztem `cache_dir` trifft ab dem zweiten
+    Kapitel derselbe Zwischenspeicher, den der erste Aufruf gerade erst geschrieben hat
+    (`pipeline_epub` trägt zwei Kapitel mit Text): `extraction.book_proper_noun_ratios`
+    läuft deshalb genau einmal, nicht zweimal — geprüft an einer zählenden Attrappe, die
+    den echten Aufruf durchreicht (dokumentation.md §5, „Woran geprüft wird").
+
+    Verfälschungsprobe (Bericht): Im Aufruf von `run_chapter` innerhalb von `assess_book`
+    `cache_dir=cache_dir` durch `cache_dir=None` ersetzt ließ diesen Test mit zwei statt
+    einem Aufruf rot werden."""
+    cache_dir = tmp_path / "cache"
+    calls = 0
+    real_book_proper_noun_ratios = extraction.book_proper_noun_ratios
+
+    def _counting(
+        chapters: Sequence[Chapter],
+        nlp_arg: Language,
+        *,
+        on_progress: Callable[[int, int], None] | None = None,
+    ) -> dict[str, float]:
+        nonlocal calls
+        calls += 1
+        return real_book_proper_noun_ratios(chapters, nlp_arg, on_progress=on_progress)
+
+    monkeypatch.setattr(extraction, "book_proper_noun_ratios", _counting)
+
+    result = pipeline.assess_book(
+        epub_path=pipeline_epub,
+        dictionary_path=mini_dictionary_db,
+        profile_path=profile_path,
+        nlp=nlp,
+        cache_dir=cache_dir,
+    )
+
+    assert len(result.chapters) == 2
+    assert calls == 1
