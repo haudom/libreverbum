@@ -173,14 +173,15 @@ brauchen, tragen die Marke `needs_gui` und laufen mit `QT_QPA_PLATFORM=offscreen
 reicht bei einem GUI-AP nicht: Dazu kommt die **Screenshot-Prüfschleife**, und die hat
 seit AP 14 **vier** Schritte, nicht einen — rendern, QML-Warnungen zählen, den Objektbaum
 auf Layoutüberlauf und gekürzten Text prüfen, den Kontrast **im gerenderten PNG** an jeder
-Textstelle messen. Die beiden mittleren und der letzte fangen je einen Fehlschlag, den die
-anderen nicht sehen: „0 QML-Warnungen" fängt keinen Überlauf, und aus den Token gerechneter
-Kontrast liefert falsches Grün (technik.md §14, „Gemessen wird im Bild, nicht aus den
-Token"). Geprüft wird bei 1280×800 und bei der Mindestgröße, hell und dunkel, gegen die
-vorab notierte „verifiziert heißt"-Liste des Bildschirms (konzept.md, „Die sieben
-Bildschirme der Oberfläche"). `tools/gui_screenshot.py` entsteht in AP 15; bis dahin
-machen die drei Skripte in `tools/design_mockup/` dieselbe Arbeit. Ohne die Schleife meldet
-ein Agent auch bei kaputter Seite Erfolg.
+Textstelle messen. Welcher Schritt welchen Fehlschlag fängt und warum keiner die anderen
+ersetzt, steht an **einer** Stelle: technik.md §14, „Gemessen wird im Bild, nicht aus den
+Token" — hier wird es nicht nacherzählt, denn drei nacherzählte Fassungen sagten zuletzt
+drei verschiedene Dinge. Geprüft wird bei 1280×800 und bei der Mindestgröße, hell und
+dunkel, gegen die vorab notierte „verifiziert heißt"-Liste des Bildschirms (konzept.md,
+„Die sieben Bildschirme der Oberfläche"). `tools/gui_screenshot.py` entsteht in AP 15; bis
+dahin machen die drei Skripte in `tools/design_mockup/` dieselbe Arbeit. Ohne die Schleife
+meldet ein Agent auch bei kaputter Seite Erfolg — und ein Werkzeug, das **nichts**
+angesehen hat, meldet das seit der Nachbesserung von AP 14 selbst, statt grün zu sein.
 
 **Nach den vier Befehlen folgt die Durchsicht.** Sie ist kein fünfter Befehl, sondern die
 Antwort auf eine andere Frage: Das Tor prüft **Form** — ob das Gebaute das Richtige tut,

@@ -7,6 +7,12 @@ von Dateien sind davon ausgenommen und stehen unter einer eigenen Lizenz:
     libreverbum/wordfreq_en_5000.txt          CC BY-SA 4.0   → Abschnitte 1 bis 4
     gui/fonts/*.ttf                           SIL OFL 1.1    → Abschnitt 5
 
+Dazu eine dritte Datei, die **nicht** unter einer eigenen Lizenz steht, aber fremdes
+Material zitiert und deshalb ebenfalls eine Namensnennung braucht:
+
+    tools/design_mockup/qml/Mock/Content.qml  vier WikDict-Zitate, CC BY-SA
+                                                             → Abschnitt 6
+
 Die erste Datei enthält eine bearbeitete Auswahl aus den Häufigkeitsdaten der Python-
 Bibliothek `wordfreq` (Fassung 3.1.1, https://github.com/rspeer/wordfreq/) — der
 Rangliste der 5.000 häufigsten englischen Grundformen. Genaueres zur Bearbeitung
@@ -212,25 +218,41 @@ des übrigen Codes. Die vollständigen Lizenztexte liegen bei den Schriftdateien
     gui/fonts/Inter[opsz,wght].ttf             Inter, Variable
     gui/fonts/OFL_inter.txt                    Lizenztext dazu
 
-Die Angaben unten sind wörtlich aus den Lizenzdateien übernommen, die mit den
-Schriftdateien selbst ausgeliefert werden — nicht aus dem Gedächtnis nacherzählt
-(dokumentation.md §4, Regel 15, „die Rohquelle entscheidet"), geprüft am 17.09.2026.
+Die Angaben unten sind wörtlich aus der `name`-Tabelle der mitgelieferten Schriftdateien
+selbst übernommen — nicht aus dem Gedächtnis nacherzählt und nicht aus einer
+danebenliegenden Lizenzdatei abgeschrieben (dokumentation.md §4, Regel 15, „die Rohquelle
+entscheidet"). Gegen die Binärdateien geprüft am 22.09.2026.
 
-Literata
+    Berichtigt am 22.09.2026. Bis dahin las diese Stelle „wörtlich aus den
+    Lizenzdateien übernommen, die mit den Schriftdateien selbst ausgeliefert werden".
+    Das war plausibel und für Literata richtig, für Inter aber falsch:
+    `gui/fonts/OFL_inter.txt` nannte Copyright 2020 und die Lizenz-URL
+    https://scripts.sil.org/OFL, während die ausgelieferte
+    `gui/fonts/Inter[opsz,wght].ttf` (Version 4.001) in ihrer `name`-Tabelle
+    Copyright 2016 und https://openfontlicense.org führt — die Lizenzdatei stammte
+    ersichtlich aus einer anderen Inter-Auslieferung als die Schrift. Die OFL verlangt
+    die Weitergabe des **zutreffenden** Copyright-Vermerks; maßgeblich ist deshalb die
+    Schriftdatei, und `OFL_inter.txt` wurde in genau diesen beiden Zeilen an sie
+    angeglichen (Befund B5, Durchsicht b2d5cab). Wer die Schriften austauscht, prüft
+    wieder an der Binärdatei, nicht an der Textdatei daneben.
+
+Literata (Version 3.103)
     Copyright 2017 The Literata Project Authors
     (https://github.com/googlefonts/literata)
 
     This Font Software is licensed under the SIL Open Font License, Version 1.1.
+    This license is available with a FAQ at: https://scripts.sil.org/OFL
 
     Entworfen von TypeTogether für Google. Im Programm trägt sie alles, was Sprache
     *ist*: englische Wortform, Belegsatz aus dem Buch, Listenwörter, deutsche
     Übersetzung, Buch- und Kapiteltitel.
 
-Inter
-    Copyright 2020 The Inter Project Authors
+Inter (Version 4.001)
+    Copyright 2016 The Inter Project Authors
     (https://github.com/rsms/inter)
 
     This Font Software is licensed under the SIL Open Font License, Version 1.1.
+    This license is available with a FAQ at: https://openfontlicense.org
 
     Entworfen von Rasmus Andersson. Im Programm trägt sie alles, was das Programm
     *sagt*: Beschriftungen, Zähler, Spaltenköpfe, Schaltflächen, Meldungen.
@@ -238,7 +260,10 @@ Inter
 Was die OFL 1.1 verlangt und wie es hier erfüllt ist:
 
 - **Namensnennung und Weitergabe des Lizenztextes.** Beide Copyright-Zeilen stehen
-  oben, beide vollständigen Lizenztexte liegen unverändert in `gui/fonts/`.
+  oben, beide vollständigen Lizenztexte liegen in `gui/fonts/`. Der Lizenztext selbst
+  (die OFL 1.1) ist in beiden Dateien unverändert; in `OFL_inter.txt` sind am
+  22.09.2026 die **Kopfzeile mit dem Copyright-Vermerk** und die **FAQ-Adresse** an die
+  Angaben der ausgelieferten Schriftdatei angeglichen worden (siehe den Nachtrag oben).
 - **Kein Verkauf der Schriften für sich.** LibreVerbum gibt sie nur als Bestandteil
   des Programms weiter.
 - **Kein Reserved Font Name.** Weder Literata noch Inter führt in seiner
@@ -248,3 +273,31 @@ Was die OFL 1.1 verlangt und wie es hier erfüllt ist:
 - **Kein starkes Copyleft auf den Code.** Die OFL bindet nur die Schriftdateien; sie
   greift nicht auf das Programm über, das sie lädt (Regel 15, Prüfung vor der
   Aufnahme).
+
+
+6. Die Wörterbuchzitate in den Vorführdaten des Mockups
+----------------------------------------------------------
+
+`tools/design_mockup/qml/Mock/Content.qml` sind die Vorführdaten der Gestaltungsrichtung
+(technik.md §14). Sie zeigen bewusst **echte** Inhalte statt Blindtext, und vier davon
+stammen aus dem Wörterbuch:
+
+    zwei Übersetzungsketten      (`translation`)
+    zwei Bedeutungsangaben       (`senseLabel`)
+    dazu `dictionary.SOURCE_NOTICE` im Wortlaut (`sourceNotice`)
+
+Herkunft und Lizenz dieser Zeichenketten:
+
+    Wörterbuch: WikDict, Sprachpaar Englisch-Deutsch, aus Wiktionary erzeugt über das
+    DBnary-Projekt (https://wikdict.com). Lizenz: Creative Commons BY-SA.
+
+Die Wörterbuchdatei selbst wird **nicht** mitgeliefert, sondern beim ersten Start bezogen
+(technik.md §2, „Warum nicht mitgeliefert"); ebenso wenig der Zwischenstand
+`tools/design_mockup/data.json`, der 1.486 solcher Einträge trug und seit dem 22.09.2026
+nicht mehr versioniert ist (technik.md §14, „Was vom Mockup versioniert ist und was
+nicht"). Übrig bleibt hier Zitatgröße — aber auch ein Zitat wird benannt.
+
+Der übrige Inhalt von `Content.qml` — Wortformen, Häufigkeiten, Belegsätze, Kapitellisten
+— stammt aus `tools/sherlock.epub` und `tools/dorian_gray.epub`, beides Ausgaben des
+Project Gutenberg und gemeinfrei. Die Datei selbst steht unter der MIT-Lizenz wie der
+übrige Code; dieser Abschnitt nennt nur die darin zitierte Fremdquelle.

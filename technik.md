@@ -3521,6 +3521,12 @@ worüber sie liegt — genau das konnte das Glas nicht.
 | L1 Fläche | `surface` | das Blatt: Karte, Liste, Formular | `#FDFCFA` | `#2B261C` |
 | L2 Hervorhebung | `marked` | **nur** die laufende/gewählte Zeile | `#F6E9D2` | `#372B19` |
 
+> Die sechs Werte sind ein **Zitat** aus `gui/qml/Theme.qml` und keine zweite Quelle —
+> dort stehen sie in den Zeilen `ground`, `surface`, `marked`, und dort allein werden sie
+> geändert. Kein Prüfbefehl liest diese Tabelle (`tests/test_design_tokens.py` prüft die
+> QML-Dateien, nicht die Dokumente): Wer ein Token ändert, zieht sie von Hand nach,
+> nachzulesen mit `grep -n "ground\|surface\|marked" gui/qml/Theme.qml`.
+
 Zugesichert und im Bild nachgemessen: **L1 zu L0 ≥ 1,25:1, gemessen 1,30:1 in beiden
 Themen.** Hell ist das Blatt heller als der Tisch, dunkel dunkler — dieselbe Aussage,
 zweimal richtig herum. Getrennt wird sonst durch eine Haarlinie (`hairline`), sonst
@@ -3553,7 +3559,7 @@ gerendert bekommen, prüft nichts.
 
 **Maß.** Rastereinheit 8, Abstände 4/8/16/24/32/48 (`xs: 4` ist die halbe Einheit und die
 einzige ausgewiesene Ausnahme). **Sechs Schriftstufen mit je einer benannten Aufgabe** —
-12 Marke, 14 klein, 18 Belegsatz, 16 normal, 24 Titel, 60 Kopfwort — und zwei Gewichte.
+12 Marke, 14 klein, 16 normal, 18 Belegsatz, 24 Titel, 60 Kopfwort — und zwei Gewichte.
 Wer eine siebte Stufe braucht, hat eine Aufgabe übersehen, nicht eine Größe.
 
 #### Die Layoutregel: das dehnbare Element bekommt die Resthöhe
@@ -3585,9 +3591,24 @@ Lauf ist grün. Geprüft wird deshalb der Objektbaum auf Überlauf, tatsächlich
 Abschneiden und gekürzten Text (`tools/design_mockup/layout_check.py`).
 
 Beides zusammen ist die Screenshot-Prüfschleife, die AP 15 in `tools/gui_screenshot.py`
-übernimmt: **rendern, Warnungen zählen, Layout prüfen, Kontrast im Bild messen** — vier
-Schritte, nicht einer. Ohne die letzten beiden meldet ein Agent auch bei kaputter Seite
-Erfolg.
+übernimmt. **Dies ist die eine Fassung ihrer Beschreibung**; CLAUDE.md und
+bauplan-phase2.md AP 15 verweisen hierher, statt sie nachzuerzählen — drei Fassungen
+standen bis zur Nachbesserung von AP 14 nebeneinander und sagten drei verschiedene Dinge
+(Befund B9, Durchsicht `b2d5cab`).
+
+**Vier Schritte, nicht einer: rendern, Warnungen zählen, Layout prüfen, Kontrast im Bild
+messen.** Der erste Schritt ist die Voraussetzung, die **letzten drei** sind die Prüfung,
+und jeder von ihnen fängt einen Fehlschlag, den die beiden anderen nicht sehen: Eine
+QML-Warnung meldet weder Überlauf noch Kontrast; „0 QML-Warnungen" fängt keinen
+Layoutüberlauf; und aus den Token gerechneter Kontrast liefert falsches Grün. Ohne sie
+meldet ein Agent auch bei kaputter Seite Erfolg.
+
+Dazu die **Untergrenze**, seit der Nachbesserung von AP 14 in jedem der drei Werkzeuge:
+Ein Bildschirm ohne eine einzige Textstelle bestand zuvor alle drei mit „0 Warnungen",
+„kein Überlauf" und „0 Textstellen gemessen, 0 unter der Schwelle" — dieselbe Ausgabe, die
+`contrast_check.py` in seinem eigenen Modulkopf als den vorangegangenen Fehlschlag
+beschreibt (Befund B4). Ein Werkzeug, das nichts angesehen hat, meldet das jetzt, statt
+grün zu sein.
 
 #### Der Mockup rendert gegen den Bestand
 
@@ -3611,10 +3632,43 @@ Verzeichnis unter `tools/` ist vorübergehend, `gui/qml/Theme.qml` ist es nicht.
 Renderings sind **nicht versioniert**: Sie entstehen aus einem Befehl, und ein
 eingefrorener Satz Bilder veraltet mit dem ersten geänderten Token.
 
+#### Was vom Mockup versioniert ist und was nicht — und warum verschieden
+
+Drei Sorten Datei, drei Entscheidungen. Begründet war bisher allein `png/`, und das nur in
+`.gitignore`; für die beiden JSON-Dateien stand nirgends etwas (Befund B6, Durchsicht
+`b2d5cab`):
+
+- **`png/`, die 30 Renderings: nicht versioniert.** Siehe oben — ein eingefrorener Satz
+  Bilder veraltet mit dem ersten geänderten Token.
+- **`data.json`, der Zwischenstand von `collect_data.py`: nicht versioniert.** Hier wiegt
+  ein zweiter Grund schwerer als die Reproduzierbarkeit: Die Datei trug 1.486
+  WikDict-Bedeutungseinträge (`trans`, `sense`) und rund 106.000 Zeichen Buchtext. Damit
+  gab das Repositorium genau das weiter, was Abschnitt 2, „Warum nicht mitgeliefert"
+  bewusst **nicht** weitergibt — eine CC-BY-SA-Datenbank samt Namensnennungs- und
+  Weitergabepflichten —, während `NOTICE` dem Klonenden sagte, außer zwei benannten
+  Gruppen stehe alles unter MIT.
+- **`chapter.json` und `qml/Mock/Content.qml`: versioniert.** `chapter.json` hält
+  Kapitelnummern, Titel, Ebenen und Wortzahlen aus `pipeline.list_chapters`, keine
+  Wörterbuchinhalte und keinen Fließtext; es entsteht als einziges hier **nicht** aus
+  einem Skript des Bestands und wäre ohne die Datei überhaupt nicht wiederherstellbar.
+  `Content.qml` ist das, was der Mockup rendert.
+
+Was an WikDict-Material in `Content.qml` bleibt, ist **Zitatgröße**: zwei
+Übersetzungsketten, zwei `sense`-Texte und `dictionary.SOURCE_NOTICE` im Wortlaut. Ohne
+sie zeigte der Mockup Blindtext statt echter Wörterbuchinhalte, und genau das soll er
+nicht (review_round1.md B24). Ausgewiesen sind diese Zitate in `NOTICE`, Abschnitt 6.
+
+**Der Preis, ausdrücklich benannt:** Wer `build_content.py` neu laufen lassen will,
+braucht `tools/sherlock.epub` und `tools/en-de.sqlite3` und erzeugt sich `data.json` mit
+`collect_data.py` neu. Ein Fremder, der nur klont, kann `Content.qml` also nicht neu
+erzeugen — **rendern** kann er den Mockup trotzdem, denn `render_all.py` liest keine der
+beiden JSON-Dateien.
+
 #### Gemessene Zahlen, 17.09.2026
 
 Aus `render_all.py` gegen den eingecheckten Stand: vier Bildschirme, hell und dunkel, bei
-1280×800 und 900×600, dazu sechs Nebenfälle — **30 Bilder, 0 Befunde** (keine QML-Warnung,
+1280×800 und 900×600 — das sind 16 Bilder —, dazu fünf Nebenfälle (`NEBEN` in
+`render_all.py`) mit 14 weiteren: **30 Bilder, 0 Befunde** (keine QML-Warnung,
 kein Überlauf, keine Kürzung, keine Textstelle unter ihrer Schwelle). Jeder Bildschirm
 steht dabei im **ungünstigsten** Datenfall: längster Belegsatz des Kapitels (473 Zeichen),
 alle Etappen offen, Fehlschlag im Wortlaut, 22 Kapitel mit Bildlauf.

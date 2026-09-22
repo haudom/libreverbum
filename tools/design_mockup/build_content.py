@@ -18,6 +18,12 @@ gemeint ist (sonst `translation.choose_sense`). Ebenso die Marke „neue Bedeutu
 bekannten Wortes" — sie kommt aus dem Profil, nicht aus dem Kapitel. Beides ist unten am
 Ort vermerkt.
 
+**`data.json` ist nicht versioniert** (`.gitignore`, Begründung in technik.md §14, „Was vom
+Mockup versioniert ist und was nicht"): Es trägt 1.486 WikDict-Bedeutungseinträge, und die
+CC-BY-SA-Datenbank gibt das Repositorium bewusst nicht weiter. Wer dieses Skript neu laufen
+lassen will, erzeugt die Datei zuerst mit `collect_data.py`. `chapter.json` liegt dagegen
+im Repositorium — es enthält keine Wörterbuchinhalte und entsteht aus keinem Skript.
+
 Der Mockup zeigt durchweg den **ungünstigsten** Datenfall (review_round1.md B24): den
 längsten Belegsatz des Kapitels (473 Zeichen), die längste Übersetzungskette und die
 längste Bedeutungsangabe des Blocks, den Fortschritt im Anfangszustand, die Einrichtung

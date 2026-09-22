@@ -379,18 +379,29 @@ Triage-Eintrag). Die übrigen drei entstehen mit AP 18b und AP 19.
 ┌───────────────────────────────────────────────────────────────────────────┐
 │  The Adventures of Sherlock Holmes · Arthur Conan Doyle   [ Buch öffnen ] │
 │  ────────────────────────────────────────────────────────────────────     │
-│   Nr  Kapitel                                          Wörter            │
-│    1  THE ADVENTURES OF SHERLOCK HOLMES                 —   kein Fließ-  │
-│                                                             text (Vorspann)│
-│    2  I. A SCANDAL IN BOHEMIA                        9 421               │
-│    3  II. THE RED-HEADED LEAGUE                      9 918               │
-│      ⌐ 4  III. A CASE OF IDENTITY                    6 971               │
+│   Nr  Kapitel                                            Wörter           │
+│    1  The Adventures of Sherlock Holmes                       97          │
+│    2  I. A SCANDAL IN BOHEMIA                              8 580          │
+│    3  II. THE RED-HEADED LEAGUE                            9 176          │
+│    4  III. A CASE OF IDENTITY                              7 035          │
 │  …                                                                        │
-│   14  XII. THE COPPER BEECHES                       10 205               │
+│   13  XII. THE ADVENTURE OF THE COPPER BEECHES            10 005          │
+│   14  THE FULL PROJECT GUTENBERG™ LICENSE      — besteht nur aus          │
+│                                                   Vorspann bzw. Impressum │
 │  ────────────────────────────────────────────────────────────────────     │
-│  Gewählt: Kapitel 2                     [ Buch prüfen ] [ Vorbereiten ]  │
+│  Gewählt: Kapitel 2                     [ Buch prüfen ] [ Vorbereiten ]   │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
+
+> **Die Zahlen sind echt.** Nummer, Titel, Wortzahl und `skip_reason` stammen aus
+> `pipeline.list_chapters` über `tools/sherlock.epub` (nachzusehen in
+> `tools/design_mockup/chapter.json`). Bis zur Nachbesserung von AP 14 stand hier ein
+> erfundener Satz Zahlen unter dem echten Buchtitel: Kapitel 1 trug einen `skip_reason`,
+> den es nicht hat, das wirklich übersprungene Kapitel 14 fehlte, Kapitel 4 war
+> eingerückt, obwohl kein Kapitel dieses Buchs `level > 0` hat, und vier Wortzahlen waren
+> um bis zu 900 daneben. AP 17 und AP 18 prüfen gegen diese Seite (Befund B8, Durchsicht
+> `b2d5cab`). Prüfzeile 5 lässt sich an **diesem** Buch deshalb nicht zeigen — ein Buch
+> mit Gliederungsebenen ist `tools/dorian_gray.epub`.
 
 **Verifiziert heißt:**
 

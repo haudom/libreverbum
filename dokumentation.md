@@ -810,7 +810,7 @@ betroffenen Testdateien laufen lassen" verkleinert das Problem, löst es aber ni
 > `needs_wordfreq`, die einzigen beiden Marken, die nicht an `tools/` hängen (`addopts =
 > ["-rs"]` in `pyproject.toml` nennt jeden Skip namentlich, ohne Zusatzaufwand), dazu der
 > `pytest.skip()` im Rumpf von `test_gui_does_not_import_cli`
-> (`tests/test_architecture.py`), solange das Paket `gui/` noch nicht existiert —, und
+> (`tests/test_architecture.py`), solange `gui/` noch **kein Python-Modul** enthält —, und
 > **vier** ohne PySide6, weil dann `needs_gui` als weitere Marke dazukommt. Meldet der Lauf
 > stattdessen rund fünfunddreißig Übersprungene, ist die Kopie missraten — `tools/en-de.sqlite3`
 > oder ein EPUB fehlt —, und die Durchsicht hält für grün, was gar nicht gelaufen ist. Zur
@@ -825,8 +825,18 @@ betroffenen Testdateien laufen lassen" verkleinert das Problem, löst es aber ni
 > `pytest.skip()` im Rumpf von `test_rule_9_app_package_does_not_import_the_interfaces`
 > (`tests/test_architecture.py`), solange das Paket `app/` noch nicht existierte. AP 3 hat
 > `app/` angelegt (`421cb95`); seither ist dieser Skip weg. Sein Nachfolger ist der oben
-> genannte `gui`-Skip: Sobald `gui/` entsteht, fällt auch er weg, und es gilt wieder
-> **zwei**/**drei**.
+> genannte `gui`-Skip — und der hängt **nicht am Verzeichnis**: AP 14 (`b2d5cab`) hat
+> `gui/qml/Theme.qml` und `gui/fonts/` angelegt, das Verzeichnis gibt es also seither, aber
+> Python bekommt `gui/` erst mit AP 15. Bedingung des Tests ist deshalb das **erste
+> Python-Modul** darunter, nicht der Ordner; bis AP 15 bleibt es folglich bei
+> **drei**/**vier**, danach gilt wieder **zwei**/**drei**.
+>
+> *Warum das hier steht:* Bis zur Nachbesserung von AP 14 stand an dieser Stelle „solange
+> das Paket `gui/` noch nicht existiert" und „sobald `gui/` entsteht, fällt auch er weg".
+> Beides war seit `b2d5cab` falsch, und CLAUDE.md verweist für die Begründung ausdrücklich
+> hierher: Wer dem Verweis folgte, erwartete zwei Übersprungene, fand drei und hielt seine
+> Wegwerfkopie für missraten — falscher Alarm an genau der Vorrichtung, mit der sich die
+> Durchsicht selbst absichert (Befund B3, Durchsicht `b2d5cab`).
 
 **Das Vergleichspaar einer Durchsicht ist der Commit selbst — `git show <commit>`,
 gleichwertig `git diff <unmittelbarer Vorgänger> <commit>`.** Die Falle ist eine

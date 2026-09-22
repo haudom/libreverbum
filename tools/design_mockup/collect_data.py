@@ -5,6 +5,12 @@ ausdrücklich der **längste** Belegsatz des Kapitels unter den häufigsten Wör
 **längste** Übersetzungskette, weil der Mockup im ungünstigsten Datenfall zu rendern ist
 (review_round1.md B24).
 
+Das Ergebnis `data.json` ist **nicht versioniert**: Es trägt 1.486
+WikDict-Bedeutungseinträge, und die CC-BY-SA-Datenbank gibt das Repositorium bewusst nicht
+weiter (technik.md §2, „Warum nicht mitgeliefert"; §14, „Was vom Mockup versioniert ist und
+was nicht"). Versioniert ist nur, was `build_content.py` daraus macht — und dort in
+Zitatgröße, ausgewiesen in `NOTICE`, Abschnitt 6.
+
 Aufruf aus dem Wurzelverzeichnis des Repositoriums:
     PYTHONPATH=. .venv/Scripts/python.exe <dieses Skript>
 """

@@ -50,3 +50,13 @@ agent_status.json
 # nicht nachzuschlagen.
 tools/design_mockup/png/
 tools/design_mockup/_live_shell.qml
+
+# Zwischenstand von collect_data.py: 1.486 WikDict-Bedeutungseinträge und rund 106.000
+# Zeichen Buchtext. Er entsteht reproduzierbar aus einem Befehl, und vor allem gäbe das
+# Repositorium mit ihm eine CC-BY-SA-Datenbank weiter, die es nach technik.md §2, „Warum
+# nicht mitgeliefert" bewusst nicht mitliefert. Was davon in qml/Mock/Content.qml steht,
+# ist Zitatgröße und in NOTICE, Abschnitt 6 ausgewiesen. Ausdrücklich **nicht** hierher
+# gehört chapter.json: Es enthält keine Wörterbuchinhalte und entsteht als einziges nicht
+# aus einem Skript des Bestands. Begründung: technik.md §14, „Was vom Mockup versioniert
+# ist und was nicht".
+tools/design_mockup/data.json

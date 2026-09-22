@@ -569,10 +569,15 @@ neue QML-Dateien bekommt. **nach** AP 14.
 > **Ergänzt am 17.09.2026 zur Prüfschleife.** `tools/gui_screenshot.py` rendert nicht
 > nur: Es zählt QML-Warnungen, prüft den Objektbaum auf Layoutüberlauf und gekürzten
 > Text und misst den Kontrast **im PNG an jeder Textstelle** — vier Schritte, nicht
-> einer. Die ersten drei fangen je einen Fehlschlag, den die anderen nicht sehen
-> (technik.md §14, „Gemessen wird im Bild, nicht aus den Token"). Vorbild und
-> Vorlage sind `shot.py`, `layout_check.py` und `contrast_check.py` in
-> `tools/design_mockup/`; sie bleiben dort, bis `gui_screenshot.py` ihre Arbeit tut.
+> einer. **Welcher Schritt welchen Fehlschlag fängt, steht an einer Stelle:** technik.md
+> §14, „Gemessen wird im Bild, nicht aus den Token". Hier stand bis zum 22.09.2026 eine
+> eigene Fassung davon („die ersten drei"), die ausgerechnet die Kontrastmessung
+> ausschloss, um derentwillen der Nachtrag geschrieben wurde — nachzulesen ist die Sache
+> deshalb dort und nur dort (Befund B9, Durchsicht `b2d5cab`). Vorbild und Vorlage sind
+> `shot.py`, `layout_check.py` und `contrast_check.py` in `tools/design_mockup/`; sie
+> bleiben dort, bis `gui_screenshot.py` ihre Arbeit tut. Jedes der drei meldet seit der
+> Nachbesserung von AP 14 auch, wenn es **nichts** angesehen hat — die Untergrenze aus
+> Befund B4 gehört mit nach `gui_screenshot.py`.
 
 #### AP 16a — Einstellungen und Wörterbuch · M · `gui/`, `libreverbum/dictionary.py`, Tests
 
