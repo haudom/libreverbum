@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from libreverbum import printout
-from libreverbum.entities import Book, Lemma, Occurrence, Sense
+from libreverbum.entities import Book, Lemma, Occurrence, ProperNounEntry, Sense
 
 _BOOK = Book(title="Das Zeichen der Vier", author="Arthur Conan Doyle")
 
@@ -38,6 +38,19 @@ def _entry(
     )
     sense = Sense(lemma=lemma, translation=translation, uncertain=uncertain)
     return occurrence, sense
+
+
+def _proper_noun(
+    text: str,
+    *,
+    ent_type: str = "PERSON",
+    frequency: int = 1,
+    chapter_number: int = 3,
+    book: Book = _BOOK,
+) -> ProperNounEntry:
+    return ProperNounEntry(
+        book=book, chapter_number=chapter_number, text=text, ent_type=ent_type, frequency=frequency
+    )
 
 
 class _StructureParser(HTMLParser):
@@ -413,3 +426,103 @@ def test_multiword_expression_entries_have_no_pos_abbreviation(tmp_path: Path) -
     parser = _parse(path)
     assert "give up" in parser.body_text
     assert "aufgeben" in parser.body_text
+
+
+# ------------------------------------------- Anhang „Figuren & Orte" (bauplan-phase2.md AP 8)
+
+
+def test_proper_nouns_omitted_by_default_no_appendix_appears(tmp_path: Path) -> None:
+    """`proper_nouns=None` (Vorgabe): unverändertes Verhalten, kein Anhang — die
+    bestehenden Tests oben rufen `write_printout` ohne `proper_nouns` auf und dürfen sich
+    nicht ändern. Geprüft am sichtbaren Anhang (Überschrift, Blatt-Container), nicht am
+    rohen Dokumenttext: Die CSS-Regeln für den Anhang stehen unabhängig davon immer im
+    `<style>`-Block."""
+    path = tmp_path / "kapitelliste.html"
+
+    printout.write_printout(path, [_entry("beehive", "Bienenstock")])
+
+    document = path.read_text(encoding="utf-8")
+    assert '<div class="blatt anhang">' not in document
+    assert "<h2>Figuren</h2>" not in document
+    assert "<h2>Orte</h2>" not in document
+
+
+def test_proper_nouns_empty_sequence_also_omits_the_appendix(tmp_path: Path) -> None:
+    """Eine leere Sequenz wird wie `None` behandelt (Moduldocstring, „Der Anhang »Figuren
+    & Orte«"): Ein Kapitel ganz ohne erkannten Eigennamen bekäme sonst einen Anhang ohne
+    einen einzigen Eintrag."""
+    path = tmp_path / "kapitelliste.html"
+
+    printout.write_printout(path, [_entry("beehive", "Bienenstock")], proper_nouns=[])
+
+    document = path.read_text(encoding="utf-8")
+    assert '<div class="blatt anhang">' not in document
+
+
+def test_proper_nouns_appear_grouped_into_figures_and_places(tmp_path: Path) -> None:
+    """bauplan-phase2.md AP 8, konzept.md §6: Bei Angabe hängt `write_printout` den Anhang
+    „Figuren & Orte" an, PERSON-Einträge unter „Figuren", GPE/LOC/FAC-Einträge unter
+    „Orte".
+
+    Verfälschungsprobe: `write_printout` ignoriert `proper_nouns` (Parameter entgegen-
+    genommen, aber nie in die Ausgabe geschrieben) lässt `"Holmes" in document` und
+    `"Bohemia" in document` beide rot werden."""
+    path = tmp_path / "kapitelliste.html"
+    proper_nouns = [
+        _proper_noun("Holmes", ent_type="PERSON", frequency=37),
+        _proper_noun("Bohemia", ent_type="GPE", frequency=1),
+        _proper_noun("Baker Street", ent_type="FAC", frequency=4),
+    ]
+
+    printout.write_printout(path, [_entry("beehive", "Bienenstock")], proper_nouns=proper_nouns)
+
+    document = path.read_text(encoding="utf-8")
+    parser = _parse(path)
+    assert "<h2>Figuren</h2>" in document
+    assert "<h2>Orte</h2>" in document
+    assert "Holmes" in parser.body_text
+    assert "Bohemia" in parser.body_text
+    assert "Baker Street" in parser.body_text
+    # Häufigkeit steht mit auf der Seite.
+    assert "37" in parser.body_text
+
+    # Reihenfolge im rohen Dokument, an den eindeutigen Überschrift-Tags gemessen (nicht
+    # am body_text der Vorrichtung: „Kapitel 3 – Figuren & Orte" enthält „Figuren" und
+    # „Orte" bereits als Teilstring der Kapitelüberschrift und machte eine textbasierte
+    # Reihenfolgeprüfung dort mehrdeutig).
+    figures_index = document.index("<h2>Figuren</h2>")
+    places_index = document.index("<h2>Orte</h2>")
+    holmes_index = document.index("Holmes")
+    bohemia_index = document.index("Bohemia")
+    assert figures_index < holmes_index < places_index
+    assert places_index < bohemia_index
+
+
+def test_proper_nouns_within_a_group_are_sorted_alphabetically(tmp_path: Path) -> None:
+    """Dieselbe Sortierregel wie die Wortliste (`_sort_key`, `casefold`): innerhalb einer
+    Gruppe alphabetisch nach der Oberflächenform."""
+    path = tmp_path / "kapitelliste.html"
+    proper_nouns = [
+        _proper_noun("Watson", ent_type="PERSON"),
+        _proper_noun("Adler", ent_type="PERSON"),
+        _proper_noun("Holmes", ent_type="PERSON"),
+    ]
+
+    printout.write_printout(path, [_entry("beehive", "Bienenstock")], proper_nouns=proper_nouns)
+
+    parser = _parse(path)
+    positions = {name: parser.body_text.index(name) for name in ("Adler", "Holmes", "Watson")}
+    assert positions["Adler"] < positions["Holmes"] < positions["Watson"]
+
+
+def test_proper_nouns_from_a_different_chapter_are_rejected(tmp_path: Path) -> None:
+    """Regel 13, `_ensure_proper_nouns_match_chapter`: Der Anhang gehört zum selben
+    Kapitel wie die Wortliste — ein Eintrag aus einem anderen Kapitel ist ein sichtbarer
+    Fehlschlag, keine stillschweigend zusammengelegte Liste (dieselbe Prüfung wie
+    `test_rejects_entries_from_different_chapters` oben, hier über `proper_nouns`)."""
+    path = tmp_path / "kapitelliste.html"
+    entries = [_entry("beehive", "Bienenstock", chapter_number=3)]
+    proper_nouns = [_proper_noun("Holmes", chapter_number=5)]
+
+    with pytest.raises(ValueError):
+        printout.write_printout(path, entries, proper_nouns=proper_nouns)

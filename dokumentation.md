@@ -141,7 +141,11 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | Abdeckung jetzt (`understood_tokens / token_count`) beziehungsweise nach dem Lernen der in diesem Durchgang auf `learning` gebuchten Grundformen | `share` / `share_after_learning` |
 | Schwierigkeit (eines Buchs) | `difficulty` |
 | Lesezeichen (Druckformat) | `bookmark` |
-| Figuren & Orte | `proper_noun_list` |
+| Figuren & Orte (Liste, konzept.md §6) | `proper_noun_list` — Platzhalter der Planung, kein Bezeichner im Bestand |
+| Eintrag der Liste „Figuren & Orte" (Oberflächenform, Häufigkeit, Entitätstyp; bauplan-phase2.md AP 8) | `entities.ProperNounEntry` |
+| Extraktion der rohen Eigennamen-Vorkommen eines Kapitels (über spaCys Entitätserkennung PERSON/GPE/LOC/FAC) | `extraction.extract_proper_noun_list` |
+| Eigennamen-Vorkommen eines Kapitels, roh (`ChapterVocabulary`-Feld, bauplan-phase2.md AP 8) | `proper_nouns` |
+| Anzeigegruppen des gedruckten Anhangs „Figuren & Orte" (PERSON → „Figuren"; GPE, LOC, FAC → „Orte", `printout._appendix_html`) | `_FIGURE_ENTITY_TYPE` |
 | Sicherung / Ausleiten | `backup` / `dump` |
 | Einstufungstest | `placement_test` |
 | Anki-Import | `anki_import`, Herkunft `Origin.IMPORT` |

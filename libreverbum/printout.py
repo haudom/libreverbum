@@ -20,7 +20,10 @@ bei `triage.defer_beyond_word_limit` (konzept.md §4, „Blockweise Triage mit
 Fortsetzungsfrage"), hier erneut
 geprüft (`_ensure_single_chapter`), weil dieses Modul nach technik.md §7, „Die
 Importregel" nur `entities` importieren darf und weder `triage` noch `dictionary` selbst
-kennen darf.
+kennen darf — aus demselben Grund auch nicht `extraction`: `proper_nouns` (seit
+bauplan-phase2.md AP 8) kommt bereits als fertiges `entities.ProperNounEntry` herein,
+nicht als spaCy-Entität. `proper_nouns`, falls angegeben, gehört ebenfalls zu demselben
+einen Kapitel wie `entries` (`_ensure_proper_nouns_match_chapter`).
 
 Liefert
 -------
@@ -30,7 +33,8 @@ Wort, Wortart-Kürzel bei Homographen (Befund 4, Review T14) und Übersetzung je
 alphabetisch nach `word_form` (Begründung unten, „Warum alphabetisch"). `<`, `>` und `&`
 aus dem Buchtext werden maskiert (`html.escape`, `quote=False` wie `anki._escaped`) — ein
 Belegsatz darf die Seite nicht zerlegen; typografische Anführungszeichen und Gedankenstrich
-bleiben unangetastet (dokumentation.md §1).
+bleiben unangetastet (dokumentation.md §1). Seit bauplan-phase2.md AP 8 optional dazu der
+Anhang „Figuren & Orte" (Abschnitt „Der Anhang »Figuren & Orte«" unten).
 
 Wie mit mehr als MAX_ENTRIES Einträgen verfahren wird
 -------------------------------------------------------
@@ -86,22 +90,32 @@ bereits eine eigene Druckvariante vor, das „Lesezeichen-Format" (Phase 2, „L
 Druck und weitere Druckvarianten") — ein Schalter in diesem Modul wäre die Abstraktung,
 die Regel 14 untersagt.
 
-Wohin die Liste „Figuren & Orte" gehört
-----------------------------------------
-Der Bauplan legt den offenen Punkt aus technik.md §7 hier vor. konzept.md §6 nennt sie
-unter „Druckausgabe" als *optionalen* Anhang, in derselben Aufzählung wie das
-„Lesezeichen-Format" — und der Phasenplan zählt „Lesezeichen-Druck und weitere
-Druckvarianten" ausdrücklich zu Phase 2. Der Phase-1-Satz im Phasenplan („Anki-Deck und
-Druckseite") und Abnahmekriterium 5 nennen beide nur die eine Kapitelliste. Die Liste
-gehört damit **nicht** in T14, sondern nach Phase 2, „weitere Druckvarianten", und wird
-hier nicht gebaut (Regel 14) — obwohl die Daten dafür schon vorlägen
-(`Occurrence.proper_noun_frequency`, Regel 12).
+Der Anhang „Figuren & Orte" (bauplan-phase2.md AP 8)
+-----------------------------------------------------
+`write_printout(..., proper_nouns=None)` — bei Angabe (nicht-leere Sequenz) hängt sie den
+Anhang „Figuren & Orte" an (konzept.md §6, „Export"; technik.md §7, „Die Liste »Figuren &
+Orte« ist Phase 2"). Die Eingabe kommt aus `extraction.extract_proper_noun_list`
+(`ChapterVocabulary.proper_nouns`) — Oberflächenform, Häufigkeit und Entitätstyp je
+Vorkommen, ungruppiert. Das **Zusammenstellen** des Anhangs — Gruppierung in „Figuren"
+(`ProperNounEntry.ent_type == "PERSON"`) und „Orte" (alles andere: GPE, LOC, FAC),
+alphabetische Sortierung je Gruppe, HTML — liegt hier, nicht in `extraction`: Dieses
+Modul kennt nach der Importregel keinen der vier spaCy-Entitätstypen selbst (es
+importiert nur `entities`), sondern nur das fertig aufbereitete `ProperNounEntry`
+(technik.md §7, „Die Importregel").
 
-Würde sie später gebaut, gehörte das Zusammenstellen nach `printout`, nicht nach
-`extraction`: `extraction` liefert bereits je Vorkommen, wie oft es ein Eigenname war
-(Regel 12) — mehr als diese Zahl braucht eine solche Liste nicht. Das Zusammenstellen
-einer zweiten, separaten Ausgabeliste daraus ist Ausgabe, keine Extraktion, und gehört
-damit an dieselbe Stelle wie die Kapitelliste selbst.
+`proper_nouns=None` (Vorgabe) heißt: kein Anhang, unverändertes Verhalten — dieselbe
+Vorgabe-Bedeutung wie `pipeline.run_chapter`s `cache_dir: Path | None = None`
+(technik.md §5). Eine **leere** Sequenz wird wie `None` behandelt (kein Anhang): Ein
+Kapitel ganz ohne erkannten Eigennamen ergäbe sonst einen Anhang ohne einen einzigen
+Eintrag — Lärm wie „Blatt 1 von 1" oben, kein Fehlschlag. `proper_nouns` muss zum selben
+Kapitel gehören wie `entries` (`_ensure_proper_nouns_match_chapter`, Regel 13, dieselbe
+Prüfung wie `_ensure_single_chapter`).
+
+Kapazität und Umbruch des Anhangs sind hier **nicht** gemessen (anders als `MAX_ENTRIES`
+oben): Der Anhang bleibt ein einzelnes Blatt, ohne die für die Wortliste gemessene
+Seitenkapazität — ein offener Punkt für eine künftige Messung mit `tools/
+print_fit_check.py`, sollte ein Kapitel mit sehr vielen Eigennamen das sprengen
+(Regel 14: keine Messung ohne gemessenen Anlass).
 
 Offener Punkt
 -------------
@@ -116,7 +130,7 @@ import html
 from collections.abc import Sequence
 from pathlib import Path
 
-from libreverbum.entities import Occurrence, Sense
+from libreverbum.entities import Occurrence, ProperNounEntry, Sense
 
 # (Befund 1, Review T14): Kapazität ist eine Eigenschaft des Blattes (Satzspiegel und
 # Zeilenhöhe), nicht der Triage — anders als zuvor hier angenommen, und verschieden von
@@ -244,6 +258,90 @@ def _sort_key(entry: tuple[Occurrence, Sense]) -> tuple[str, str, str]:
     return (occurrence.word_form.casefold(), occurrence.lemma.text, occurrence.lemma.pos)
 
 
+def _ensure_proper_nouns_match_chapter(
+    entries: Sequence[tuple[Occurrence, Sense]], proper_nouns: Sequence[ProperNounEntry]
+) -> None:
+    """Bricht sichtbar ab (Regel 13), wenn der Anhang „Figuren & Orte" Einträge aus einem
+    anderen Kapitel enthält als die Wortliste selbst — dieselbe Prüfung wie
+    `_ensure_single_chapter`, hier über `entries` und `proper_nouns` hinweg: Beide gehören
+    zu demselben `run_chapter`-Aufruf (`ChapterVocabulary.entries` und `.proper_nouns`).
+    Wird nur gerufen, wenn `proper_nouns` nicht leer ist — `entries` ist an dieser Stelle
+    durch `_ensure_single_chapter` bereits auf ein einzelnes Kapitel geprüft, `entries[0]`
+    trägt es deshalb verlässlich."""
+    chapter_key = (entries[0][0].book, entries[0][0].chapter_number)
+    fremde = {
+        (p.book, p.chapter_number)
+        for p in proper_nouns
+        if (p.book, p.chapter_number) != chapter_key
+    }
+    if fremde:
+        gefundene = ", ".join(
+            f"„{book.title}“ Kapitel {chapter_number}"
+            for book, chapter_number in sorted(fremde, key=lambda paar: (paar[0].title, paar[1]))
+        )
+        raise ValueError(
+            f"Der Anhang „{_APPENDIX_TITLE}“ gehört zum selben Kapitel wie die Wortliste "
+            f"(„{chapter_key[0].title}“ Kapitel {chapter_key[1]}), enthält aber Einträge "
+            f"aus: {gefundene}."
+        )
+
+
+# (bauplan-phase2.md AP 8): Eigene, kleine Zuordnung statt eines Imports aus `extraction`
+# — printout darf `extraction` nach der Importregel nicht importieren (Moduldocstring,
+# „Voraussetzungen"; technik.md §7). PERSON wird „Figuren", jeder andere der vier
+# Entitätstypen aus `extraction._PROPER_NOUN_ENTITY_TYPES` (GPE, LOC, FAC) wird „Orte" —
+# über Ausschluss, nicht über eine zweite, hier gepflegte Liste, die mit der Liste in
+# `extraction` auseinanderlaufen könnte.
+_FIGURE_ENTITY_TYPE = "PERSON"
+_APPENDIX_TITLE = "Figuren & Orte"
+_FIGURES_HEADING = "Figuren"
+_PLACES_HEADING = "Orte"
+
+
+def _proper_noun_sort_key(entry: ProperNounEntry) -> tuple[str, str]:
+    """Alphabetisch nach der Oberflächenform, `casefold` wie `_sort_key` — dieselbe
+    Begründung: Wer im Anhang nachschlägt, sucht die Schreibung, nicht den Entitätstyp."""
+    return (entry.text.casefold(), entry.text)
+
+
+def _proper_noun_group_html(heading: str, group: Sequence[ProperNounEntry]) -> str:
+    """Eine Gruppe des Anhangs („Figuren" oder „Orte") als Überschrift plus Liste —
+    leer bleibt eine Gruppe ganz weg, statt einer Überschrift ohne einen einzigen
+    Eintrag (dieselbe Lärmvermeidung wie `sheet_label` oben)."""
+    if not group:
+        return ""
+    items = "\n    ".join(
+        f'<li><span class="wort">{_escaped(entry.text)}</span> '
+        f'<span class="anzahl">({entry.frequency})</span></li>'
+        for entry in sorted(group, key=_proper_noun_sort_key)
+    )
+    return f"""<h2>{heading}</h2>
+    <ul class="namensliste">
+    {items}
+    </ul>
+    """
+
+
+def _appendix_html(
+    proper_nouns: Sequence[ProperNounEntry], book_title: str, chapter_number: int
+) -> str:
+    """Der Anhang „Figuren & Orte" als eigener Blatt-Container (`div class="blatt
+    anhang"`) — trägt dieselbe Klasse `blatt` wie die Wortlisten-Blätter, damit ihn
+    dasselbe CSS (`div.blatt:last-of-type`, Moduldocstring „Wie mit mehr als MAX_ENTRIES
+    Einträgen verfahren wird") ohne eigene Regel als letztes Blatt ohne erzwungenen
+    Umbruch danach behandelt."""
+    figures = [entry for entry in proper_nouns if entry.ent_type == _FIGURE_ENTITY_TYPE]
+    places = [entry for entry in proper_nouns if entry.ent_type != _FIGURE_ENTITY_TYPE]
+    groups = _proper_noun_group_html(_FIGURES_HEADING, figures) + _proper_noun_group_html(
+        _PLACES_HEADING, places
+    )
+    return f"""<div class="blatt anhang">
+    <h1>{book_title}</h1>
+    <p class="kapitel">Kapitel {chapter_number} – {_APPENDIX_TITLE}</p>
+    {groups}
+    </div>"""
+
+
 _CSS = """
     @page { size: A4; margin: 15mm; }
     body { font-family: sans-serif; font-size: 11pt; margin: 0; }
@@ -282,6 +380,25 @@ _CSS = """
       page-break-after: auto;
       break-after: auto;
     }
+    /* Anhang „Figuren & Orte" (bauplan-phase2.md AP 8): eigene Überschriften „Figuren"/
+       „Orte" und eine schmalere Liste ohne Übersetzungstrennzeichen — nur Name und
+       Häufigkeit. */
+    div.anhang h2 { font-size: 12pt; margin: 6mm 0 2mm 0; }
+    ul.namensliste {
+      columns: 2;
+      column-gap: 10mm;
+      list-style: none;
+      margin: 0 0 4mm 0;
+      padding: 0;
+    }
+    ul.namensliste li {
+      break-inside: avoid;
+      page-break-inside: avoid;
+      margin: 0 0 2mm 0;
+      overflow-wrap: break-word;
+      hyphens: auto;
+    }
+    span.anzahl { font-size: 9pt; color: #555555; }
     """
 
 
@@ -331,22 +448,34 @@ def _sheet_html(
     </div>"""
 
 
-def write_printout(path: Path, entries: Sequence[tuple[Occurrence, Sense]]) -> None:
+def write_printout(
+    path: Path,
+    entries: Sequence[tuple[Occurrence, Sense]],
+    *,
+    proper_nouns: Sequence[ProperNounEntry] | None = None,
+) -> None:
     """Schreibt die Kapitelliste als druckfertige HTML-Datei nach `path` (bauplan.md T14,
     Abnahmekriterium 5): Buch und Kapitel als Überschrift, darunter `entries` alphabetisch
     nach `word_form` (Moduldocstring, „Warum alphabetisch"), auf so viele Blätter verteilt,
     wie nötig — höchstens `MAX_ENTRIES` je Blatt (Moduldocstring, „Wie mit mehr als
     MAX_ENTRIES Einträgen verfahren wird").
 
+    `proper_nouns` (bauplan-phase2.md AP 8, Vorgabe `None`): eine nicht-leere Sequenz
+    hängt den Anhang „Figuren & Orte" an (Moduldocstring, „Der Anhang »Figuren & Orte«");
+    `None` oder eine leere Sequenz lassen die Ausgabe unverändert wie vor AP 8.
+
     Sichtbare Fehlschläge statt einer leeren, stillschweigend gekürzten oder
     unvollständigen Datei (Regel 13): eine leere Liste, Wörter aus mehreren Kapiteln
-    (`_ensure_single_chapter`) oder eine nicht aufgelöste und nicht als unsicher
-    bestätigte Übersetzung (`_translation_html`, Moduldocstring „Wie mit uncertain
-    verfahren wird").
+    (`_ensure_single_chapter`), ein Anhang aus einem anderen Kapitel als die Wortliste
+    (`_ensure_proper_nouns_match_chapter`) oder eine nicht aufgelöste und nicht als
+    unsicher bestätigte Übersetzung (`_translation_html`, Moduldocstring „Wie mit
+    uncertain verfahren wird").
     """
     if not entries:
         raise ValueError("Druckseite ohne Wörter ergibt keine sinnvolle Kapitelliste.")
     _ensure_single_chapter(entries)
+    if proper_nouns:
+        _ensure_proper_nouns_match_chapter(entries, proper_nouns)
 
     ordered = sorted(entries, key=_sort_key)
     book_title = _escaped(ordered[0][0].book.title)
@@ -356,6 +485,7 @@ def write_printout(path: Path, entries: Sequence[tuple[Occurrence, Sense]]) -> N
         _sheet_html(group, book_title, chapter_number, sheet_number, len(groups))
         for sheet_number, group in enumerate(groups, start=1)
     )
+    appendix = _appendix_html(proper_nouns, book_title, chapter_number) if proper_nouns else ""
 
     document = f"""<!DOCTYPE html>
 <html lang="de">
@@ -366,6 +496,7 @@ def write_printout(path: Path, entries: Sequence[tuple[Occurrence, Sense]]) -> N
 </head>
 <body>
     {sheets}
+    {appendix}
 </body>
 </html>
 """

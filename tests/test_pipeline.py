@@ -1342,6 +1342,19 @@ def test_run_chapter_processes_a_real_chapter_with_the_real_dictionary(
     eine Aussage über den Inhalt selbst, wie `test_dictionary.py` sie gegen die echte Datei
     trifft: „woman" ist im Kapitel unzweideutig und liefert in `tools/en-de.sqlite3` genau
     eine Zeile, deren Übersetzung „Frau" enthält.
+
+    Trägt seit bauplan-phase2.md AP 8 auch die Prüfung von `ChapterVocabulary.proper_
+    nouns` mit, statt dafür einen zweiten, ebenso teuren `run_chapter`-Lauf über dasselbe
+    Buch zu fahren (voller spaCy-Durchgang, rund 15 bis 29 s, technik.md §3) — derselbe
+    Grund wie bei `test_list_chapters_reports_the_real_gutenberg_license_chapter_as_
+    skipped" weiter unten: „ein eigener, ebenso teurer Lauf käme ohne neuen
+    Erkenntnisgewinn". `proper_nouns` stimmt dabei mit einem unabhängigen Aufruf von
+    `extraction.extract_proper_noun_list` am selben Kapitel überein — die Abnahmeprüfung
+    aus AP 8 selbst (Holmes/Sherlock Holmes, Irene Adler, Bohemia; nicht Miss) steht in
+    `tests/test_extraction.py`, hier wird nur die Verkettung geprüft.
+
+    Verfälschungsprobe: `proper_nouns=[]` fest in `pipeline.run_chapter` statt des
+    tatsächlichen Aufrufs lässt `result.proper_nouns == expected_proper_nouns` rot werden.
     """
     dictionary_copy = tmp_path / "en-de.sqlite3"
     shutil.copyfile(real_dictionary_path, dictionary_copy)
@@ -1384,6 +1397,14 @@ def test_run_chapter_processes_a_real_chapter_with_the_real_dictionary(
     woman = _entry(result, "woman")
     assert woman.occurrence.lemma.pos == "NOUN"
     assert any("Frau" in (sense.wikdict_trans_list or "") for sense in woman.candidates)
+
+    # (bauplan-phase2.md AP 8): dieselbe Liste wie ein unabhängiger Aufruf am selben
+    # eingelesenen Kapitel — run_chapter erfindet keinen zweiten Weg dorthin.
+    reference = next(c for c in structure.chapters if c.number == chapter_number)
+    chapter = epub.read_chapter(real_epub_paths["sherlock"], structure.book, reference)
+    expected_proper_nouns = extraction.extract_proper_noun_list(chapter, nlp)
+    assert result.proper_nouns == expected_proper_nouns
+    assert any(entry.text == "Holmes" for entry in result.proper_nouns)
 
 
 @pytest.mark.needs_epub
@@ -3031,6 +3052,7 @@ def _mini_chapter_vocabulary() -> pipeline.ChapterVocabulary:
         entries=entries,
         expressions=[],
         token_count=token_count,
+        proper_nouns=[],
     )
 
 
@@ -3107,7 +3129,12 @@ def test_coverage_of_a_chapter_without_a_single_alphabetic_token_is_fully_unders
     sonst durch null. Hier gibt es nichts zu verstehen, also gilt beides als vollständig
     verstanden (`1.0`) statt undefiniert."""
     vocabulary = pipeline.ChapterVocabulary(
-        chapter=_COVERAGE_CHAPTER, notice=None, entries=[], expressions=[], token_count=0
+        chapter=_COVERAGE_CHAPTER,
+        notice=None,
+        entries=[],
+        expressions=[],
+        token_count=0,
+        proper_nouns=[],
     )
 
     result = pipeline.coverage(vocabulary)

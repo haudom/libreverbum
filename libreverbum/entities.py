@@ -7,9 +7,10 @@ das einzige, das jeder Schritt importieren darf (technik.md §7, „Die Importre
 
 Liefert
 -------
-`Book`, `Chapter`, `Lemma`, `Sense`, `Occurrence`, `Event` und `Card` als Datenklassen,
-dazu `KnowledgeState`, `Origin`, `CardDirection` und `CefrLevel`. **Nicht** den
-Kenntnisstand: Der ist die Ableitung aus der Ereignisfolge und entsteht in `profile`.
+`Book`, `Chapter`, `Lemma`, `Sense`, `Occurrence`, `ProperNounEntry`, `Event` und `Card`
+als Datenklassen, dazu `KnowledgeState`, `Origin`, `CardDirection` und `CefrLevel`.
+**Nicht** den Kenntnisstand: Der ist die Ableitung aus der Ereignisfolge und entsteht in
+`profile`.
 
 Alle Klassen sind `frozen`. Ein Vorkommen, ein Ereignis und eine Karte sind Feststellungen
 zu einem Zeitpunkt; geändert wird nicht der Gegenstand, sondern es kommt ein neues Ereignis
@@ -225,6 +226,32 @@ class Occurrence:
     # Behebung schon um die eigennamigen Vorkommen bereinigt, nicht mehr die Summe mit
     # `proper_noun_frequency`.
     proper_noun_frequency: int
+
+
+@dataclass(frozen=True)
+class ProperNounEntry:
+    """Ein Eigenname aus der Liste „Figuren & Orte" (bauplan-phase2.md AP 8; konzept.md
+    §6, „Export"; technik.md §7, „Die Liste »Figuren & Orte« ist Phase 2"):
+    Oberflächenform und Häufigkeit eines von spaCy erkannten Entitätsvorkommens (PERSON,
+    GPE, LOC oder FAC), nie über die Grundform (technik.md §5, offener Punkt
+    „Über-Lemmatisierung von Eigennamen") — „Holmes" bliebe sonst „holme".
+
+    Ein Eintrag je Kapitel und Oberflächenform, wie bei `Occurrence`: dasselbe „Holmes"
+    zählt in Kapitel 2 anders als in Kapitel 9. `book` und `chapter_number` statt eines
+    vollständigen `Chapter`, aus demselben Grund wie bei `Occurrence` — ins Ergebnis
+    wandert nur, welches Kapitel verarbeitet wurde.
+
+    `ent_type` ist spaCys `ent.label_` und bleibt deshalb unübersetzt (dokumentation.md
+    §1) — wie `Lemma.pos` bei `token.pos_`. Diese Klasse behauptet nichts über eine
+    Anzeigegruppe; `printout` übersetzt daraus die beiden deutschen Gruppen „Figuren" und
+    „Orte" (technik.md §7, „Die Importregel": das Zusammenstellen des gedruckten Anhangs
+    liegt bei `printout`, nicht hier)."""
+
+    book: Book
+    chapter_number: int
+    text: str
+    ent_type: str
+    frequency: int
 
 
 @dataclass(frozen=True)

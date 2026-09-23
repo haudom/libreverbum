@@ -1971,7 +1971,12 @@ def _stub_vocabulary() -> pipeline.ChapterVocabulary:
     # Fortschrittsablauf der Kommandozeile, nicht die Abdeckung — der Wert ist hier
     # gleichgültig.
     return pipeline.ChapterVocabulary(
-        chapter=_STUB_CHAPTER, notice=None, entries=[], expressions=[], token_count=0
+        chapter=_STUB_CHAPTER,
+        notice=None,
+        entries=[],
+        expressions=[],
+        token_count=0,
+        proper_nouns=[],
     )
 
 

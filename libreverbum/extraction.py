@@ -42,6 +42,15 @@ Beide liefern nur Kandidaten und schlagen selbst nicht nach — der Wörterbucha
 samt `uncertain`-Markierung ist T7 (Regel 14). T7 unterscheidet die zwei Arten daran,
 welche der beiden Funktionen sie geliefert hat, nicht an einem Feld auf `Occurrence`.
 
+Dazu, seit bauplan-phase2.md AP 8, `extract_proper_noun_list`: ein `ProperNounEntry` je
+Kapitel und Oberflächenform für die Liste „Figuren & Orte" (konzept.md §6, „Export"),
+über spaCys eigene Entitätserkennung (`doc.ents`), nicht über den Wortart-/Grundform-Weg
+der Funktionen oben — eine Entität wie „Sherlock Holmes" ist keine Grundform, und die
+Liste braucht ausdrücklich die Oberflächenform, nie die lemmatisierte (technik.md §5,
+offener Punkt „Über-Lemmatisierung von Eigennamen"). Das Zusammenstellen des gedruckten
+Anhangs selbst liegt bei `printout`, nicht hier (technik.md §7, „Die Liste »Figuren &
+Orte« ist Phase 2").
+
 Regeln
 ------
 Reihenfolge Wortart → Grundform → Nachschlagen ist verbindlich (technik.md, „Warum die
@@ -76,7 +85,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, NamedTuple
 
-from libreverbum.entities import Chapter, Lemma, Occurrence
+from libreverbum.entities import Chapter, Lemma, Occurrence, ProperNounEntry
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping, Sequence
@@ -149,6 +158,19 @@ _NO_SINGLE_POS = ""
 
 _WHITESPACE = re.compile(r"\s+")
 
+# REGEL (bauplan-phase2.md AP 8: „PERSON, GPE, LOC, FAC — Vermutung, am Bestand zu
+# prüfen"): Geprüft an tools/sherlock.epub Kapitel 2 und tools/dorian_gray.epub Kapitel 1
+# (siehe Bericht zu diesem Arbeitspaket). PERSON und GPE tragen die drei geforderten
+# Fundstellen „Holmes"/„Sherlock Holmes", „Irene Adler" und „Bohemia"; LOC und FAC liefern
+# an Sherlock Kapitel 2 zusätzliche, offensichtlich sinnvolle Fundstellen („Baker Street"
+# FAC, „Europe" LOC), auch wenn an Dorian Gray Kapitel 1 keiner von beiden einen einzigen
+# Treffer beisteuert — an einem einzelnen, entitätsarmen Kapitel zu verwerfen wäre
+# verfrüht. spaCys NER tastet dabei auch daneben (an Sherlock Kapitel 2 etwa „landau",
+# „chin", „sally", „marm", „Pshaw" fälschlich als PERSON, „Bohemia" selbst überwiegend als
+# PERSON statt GPE) — kein Befund gegen diese vier Typen, sondern die bekannte
+# Fehlerquote der Entitätserkennung selbst; eine Bereinigung auf Vorrat verbietet Regel 14.
+_PROPER_NOUN_ENTITY_TYPES = frozenset({"PERSON", "GPE", "LOC", "FAC"})
+
 
 def load_nlp() -> Language:
     """Lädt das für Entscheidung 5 festgelegte Modell (technik.md §5, `en_core_web_md`)."""
@@ -167,6 +189,18 @@ def _require_lemmatizer(nlp: Language) -> None:
         raise ValueError(
             "spaCy-Modell ohne Lemmatisierer geladen — Wortschatzextraktion abgebrochen, "
             "statt Wortformen still als Grundform zu verwenden."
+        )
+
+
+def _require_ner(nlp: Language) -> None:
+    """Bricht ab, wenn `nlp` ohne Entitätserkennung geladen ist (Regel 13, analog
+    `_require_lemmatizer`): Ohne `ner` liefert `doc.ents` stillschweigend eine leere
+    Sequenz — eine Liste „Figuren & Orte" aus lauter Nullfunden sähe dann wie ein
+    Kapitel ganz ohne Eigennamen aus, statt einen falsch geladenen `nlp` zu melden."""
+    if "ner" not in nlp.pipe_names:
+        raise ValueError(
+            "spaCy-Modell ohne Entitätserkennung (ner) geladen — Liste »Figuren & Orte« "
+            "abgebrochen, statt eine leere Liste als vollständiges Ergebnis auszugeben."
         )
 
 
@@ -687,3 +721,67 @@ def _occurrences_from_candidates(
             )
         )
     return occurrences
+
+
+def extract_proper_noun_list(chapter: Chapter, nlp: Language) -> list[ProperNounEntry]:
+    """Extrahiert die rohen Eigennamen-Vorkommen eines Kapitels für die Liste „Figuren &
+    Orte" (bauplan-phase2.md AP 8) — über spaCys eigene Entitätserkennung (`doc.ents`,
+    `ent.label_` in `_PROPER_NOUN_ENTITY_TYPES`), unabhängig vom Wortart-/Grundform-Weg
+    von `extract_vocabulary`: Eine mehrwortige Entität wie „Sherlock Holmes" ist keine
+    Grundform, und die Liste braucht ausdrücklich die **Oberflächenform**, nie die
+    lemmatisierte (technik.md §5, offener Punkt „Über-Lemmatisierung von Eigennamen" —
+    „Holmes" → „holme"). Liefert nur die rohen, je Kapitel gezählten Vorkommen; Sortierung
+    und Gruppierung („Figuren" gegen „Orte") sind Sache von `printout`, nicht dieser
+    Funktion (technik.md §7, „Die Liste »Figuren & Orte« ist Phase 2").
+
+    Mehrere Vorkommen derselben Oberflächenform im Kapitel werden zu einem Eintrag
+    zusammengezählt (`frequency`), unabhängig vom beobachteten Entitätstyp: spaCy tastet
+    bei sonst gleicher Textstelle uneinheitlich (an `tools/sherlock.epub` Kapitel 2 etwa
+    „Briony Lodge" als GPE, FAC **und** PERSON, „Bohemia" überwiegend als PERSON statt
+    GPE, siehe REGEL bei `_PROPER_NOUN_ENTITY_TYPES`) — ohne diese Zusammenfassung
+    erschiene dieselbe Oberflächenform mehrfach in der Liste. `ent_type` des
+    zusammengeführten Eintrags ist der häufigste beobachtete Typ dieser Oberflächenform,
+    bei Gleichstand der zuerst gesehene — dieselbe Regel wie die Wortartwahl in
+    `extract_vocabulary` (siehe dort, „Mischt eine Grundform mehrere Wortarten …").
+
+    Zeilenumbrüche aus dem Buchsatz innerhalb einer Entitätsspanne (`Span.text`, wie bei
+    `extract_particle_verb_candidates`) werden wie dort zu einem Leerzeichen
+    zusammengezogen (`_collapse_whitespace`).
+
+    Reihenfolge: erstes Auftreten im Kapitel, unsortiert (wie `extract_vocabulary`s
+    `occurrences`)."""
+    _require_ner(nlp)
+
+    doc = nlp(chapter.text)
+
+    labels_by_text: dict[str, list[str]] = collections.defaultdict(list)
+    order: list[str] = []
+    for ent in doc.ents:
+        if ent.label_ not in _PROPER_NOUN_ENTITY_TYPES:
+            continue
+        text = _collapse_whitespace(ent.text)
+        if text not in labels_by_text:
+            order.append(text)
+        labels_by_text[text].append(ent.label_)
+
+    entries: list[ProperNounEntry] = []
+    for text in order:
+        labels = labels_by_text[text]
+        type_counts: collections.Counter[str] = collections.Counter()
+        first_seen_at: dict[str, int] = {}
+        for index, label in enumerate(labels):
+            type_counts[label] += 1
+            first_seen_at.setdefault(label, index)
+        chosen_type = min(
+            type_counts, key=lambda label: (-type_counts[label], first_seen_at[label])
+        )
+        entries.append(
+            ProperNounEntry(
+                book=chapter.book,
+                chapter_number=chapter.number,
+                text=text,
+                ent_type=chosen_type,
+                frequency=len(labels),
+            )
+        )
+    return entries

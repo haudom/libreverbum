@@ -69,6 +69,12 @@ aus `extraction.extract_vocabulary` mitgezählt (`ChapterVocabulary.token_count`
 die reine Rechnung `coverage`, die daraus und aus `entries` die Abdeckung des Kapitels
 bestimmt (E5, bauplan-phase2.md).
 
+Dazu, seit bauplan-phase2.md AP 8, `ChapterVocabulary.proper_nouns` — die rohen
+Eigennamen-Vorkommen des Kapitels aus `extraction.extract_proper_noun_list` für die Liste
+„Figuren & Orte", ein von `entries`/`expressions` unabhängiger dritter Extraktionsweg
+über spaCys Entitätserkennung statt über Wortart und Grundform. Das Zusammenstellen des
+gedruckten Anhangs bleibt Sache von `printout.write_printout` (technik.md §7).
+
 Beide Felder stehen **nebeneinander**, nicht zu einer gemeinsamen Liste zusammengeführt
 (Befund 1, Review T15): Wie eine Wendung und die Einzelwörter, aus denen sie besteht, bei
 Überschneidung in einer Anzeige zueinanderstehen sollen — Reihenfolge, Vorrang
@@ -162,6 +168,7 @@ from libreverbum.entities import (
     Lemma,
     Occurrence,
     Origin,
+    ProperNounEntry,
     Sense,
 )
 from libreverbum.profile import VocabularyStatus
@@ -215,13 +222,20 @@ class ChapterVocabulary:
     Funktionswörter und Grundformen ab der Eigennamenschwelle
     (`extraction._PROPER_NOUN_RATIO_THRESHOLD`, nicht nur die ganz eigennamigen, Befund 4
     Durchsicht 3e71fb8) dort gar nicht erst als eigener Eintrag erscheinen (siehe deren
-    Docstrings), für die Abdeckung nach E5 aber als verstanden zählen."""
+    Docstrings), für die Abdeckung nach E5 aber als verstanden zählen.
+
+    `proper_nouns` (bauplan-phase2.md AP 8): die rohen Eigennamen-Vorkommen des Kapitels
+    für die Liste „Figuren & Orte", aus `extraction.extract_proper_noun_list` — ein
+    eigener Extraktionsweg über spaCys Entitätserkennung, unabhängig von `entries` und
+    `expressions` (der Wortart-/Grundform-Weg). Unsortiert, in Reihenfolge des ersten
+    Auftretens; Sortierung und Gruppierung sind Sache von `printout` (technik.md §7)."""
 
     chapter: Chapter
     notice: str | None
     entries: list[VocabularyEntry]
     expressions: list[VocabularyEntry]
     token_count: int
+    proper_nouns: list[ProperNounEntry]
 
 
 def _drop_prefix_dominated_expressions(
@@ -718,12 +732,21 @@ def run_chapter(
         for occurrence, matches in expression_pairs
     ]
 
+    # (bauplan-phase2.md AP 8): eigener Extraktionsweg über spaCys Entitätserkennung,
+    # unabhängig von den beiden Nachschlage-Wegen oben — kein Wörterbuchabgleich, kein
+    # Zwischenspeicher (siehe Moduldocstring, Abschnitt „`run_chapter` bleibt der netzlose
+    # Teil": der Zwischenspeicher hält ausschließlich `book_proper_noun_ratios` fest, mit
+    # `extract_proper_noun_list` unberührt — ein Treffer im Zwischenspeicher überspringt
+    # diesen Aufruf nicht, ein fehlender Zwischenspeicher verhindert ihn nicht, Regel 13).
+    proper_nouns = extraction.extract_proper_noun_list(chapter, nlp)
+
     return ChapterVocabulary(
         chapter=chapter,
         notice=structure.notice,
         entries=entries,
         expressions=expressions,
         token_count=extraction_result.token_count,
+        proper_nouns=proper_nouns,
     )
 
 

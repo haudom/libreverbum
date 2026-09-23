@@ -107,7 +107,6 @@ offen").
 | §4 | Umgang mit gleichzeitigem Zugriff, falls eine Weboberfläche hinzukommt |
 | §4 | `book.language` und `lemma.language` beschlossen, nicht gebaut — mit der nächsten Schemafassung mitnehmen |
 | §4 | Profil-Identität einer Bedeutung schließt die Anki-GUID aus — Fallrisiko beim nächsten Wörterbuchbezug |
-| §5 | Über-Lemmatisierung von Eigennamen — bei „Figuren & Orte" zu beachten |
 | §5 | Ob die Zwischenspeicher-Kennung eine Fassungsnummer der Berechnung braucht |
 | §6 | `encoding="utf-8"` maschinell erzwingen (`PLW1514`) |
 | §6 | `tools/` bleibt von der Typprüfung ausgenommen — ob das so bleibt |
@@ -1584,9 +1583,21 @@ ein Dateizugriff).
 
 ### Offene Punkte
 
-- Über-Lemmatisierung von Eigennamen (`Holmes` → `holme`) — harmlos, solange der Filter
+- ~~Über-Lemmatisierung von Eigennamen (`Holmes` → `holme`) — harmlos, solange der Filter
   aus dem vorigen Abschnitt greift, aber beim Anlegen der Liste „Figuren & Orte" zu
-  beachten
+  beachten~~ — **entschieden mit dem Bau von AP 8** (bauplan-phase2.md, 23.09.2026):
+  `extraction.extract_proper_noun_list` nimmt die Liste „Figuren & Orte" über spaCys
+  eigene Entitätserkennung (`doc.ents`, `ent.text`) statt über den Wortart-/Grundform-Weg
+  dieses Abschnitts — die Oberflächenform wird nie lemmatisiert, der Fall tritt für diese
+  Liste also gar nicht mehr ein. Gegengeprüft an `tools/sherlock.epub` Kapitel 2 (Bericht
+  zu AP 8): Ein Ersatz von `ent.text` durch `token.lemma_` je Token der Entitätsspanne
+  ändert „Holmes" dort **nicht** zu „holme" — spaCys `en_core_web_md` vertaggt es im
+  Satzzusammenhang zuverlässig als `PROPN` und liefert dafür `lemma_ == text`; „holme"
+  entsteht nur, wenn ein Token gezielt auf `NOUN`/`NNS` umgetaggt wird, bevor der
+  Regel-Lemmatisierer läuft — ein Fall, der über `doc.ents` nicht vorkommt. Die ursprüngliche
+  Befürchtung war insofern eine Vermutung, keine Messung (dokumentation.md §5, „Womit zu
+  verfälschen sei, ist eine Vermutung und kein Auftrag"); harmlos bleibt sie wie bisher für
+  `extract_vocabulary`s eigenen Weg, den dieser Abschnitt beschreibt
 - ~~Ob der buchweite Eigennamenanteil zwischengespeichert wird~~ — **entschieden am
   15.09.2026**, siehe oben, „Entschieden 15.09.2026: Zwischenspeicher für den buchweiten
   Eigennamenanteil"
@@ -1915,16 +1926,41 @@ ist.
 
 ### Die Liste „Figuren & Orte" ist Phase 2
 
-Entschieden am 21.08.2026 mit dem Bau der Druckausgabe (T14). konzept.md §6, „Export"
-führt sie unter „Druckausgabe" als *optionalen* Anhang, in derselben Aufzählung wie das
-„Lesezeichen-Format" — und der Phasenplan zählt „Lesezeichen-Druck und weitere
-Druckvarianten" ausdrücklich zu Phase 2; der Phase-1-Satz und Abnahmekriterium 5 nennen
-nur die eine Kapitelliste. In Phase 1 entsteht sie deshalb nicht (Regel 14).
+Entschieden am 21.08.2026 mit dem Bau der Druckausgabe (T14), dass sie in Phase 1 nicht
+entsteht: konzept.md §6, „Export" führt sie unter „Druckausgabe" als *optionalen* Anhang,
+in derselben Aufzählung wie das „Lesezeichen-Format" — und der Phasenplan zählt
+„Lesezeichen-Druck und weitere Druckvarianten" ausdrücklich zu Phase 2; der Phase-1-Satz
+und Abnahmekriterium 5 nennen nur die eine Kapitelliste (Regel 14).
 
-Würde sie gebaut, gehörte das Zusammenstellen nach `printout` und nicht nach `extraction`:
-`extraction` liefert je Vorkommen bereits, wie oft es ein Eigenname war
-(`Occurrence.proper_noun_frequency`, Regel 12) — mehr braucht die Liste nicht, und eine
-zweite Ausgabeliste daraus ist Ausgabe, keine Extraktion.
+**Gebaut am 23.09.2026 (bauplan-phase2.md AP 8) — ersetzt die hier ursprünglich
+vorgesehene Umsetzung.** Der Bauplan (15.09.2026) hat sich gegen den hier ursprünglich
+vorgesehenen Weg über
+`Occurrence.proper_noun_frequency` entschieden — der ist **grundformbasiert** und liefe
+genau in die Falle der „Über-Lemmatisierung von Eigennamen" oben (`Holmes` → `holme`).
+Gebaut ist stattdessen `extraction.extract_proper_noun_list(chapter, nlp) ->
+list[entities.ProperNounEntry]`: ein eigener Extraktionsweg über spaCys
+Entitätserkennung (`doc.ents`, `ent.label_` in `PERSON`, `GPE`, `LOC`, `FAC`), der die
+**Oberflächenform** liefert, mehrwortig („Sherlock Holmes"), nie die Grundform — unabhängig
+vom Wortart-/Grundform-Weg der übrigen `extraction`-Funktionen. Geprüft an
+`tools/sherlock.epub` Kapitel 2: „Sherlock Holmes"/„Holmes", „Irene Adler" und „Bohemia"
+sind enthalten, „Miss" nicht (Regel 12) — spaCy schließt die Anrede aus der Entitätsspanne
+selbst aus. Die vier Entitätstypen sind eine Vermutung, am Bestand geprüft: PERSON und GPE
+tragen die drei geforderten Fundstellen; LOC und FAC liefern an Sherlock Kapitel 2
+zusätzliche, sinnvolle Fundstellen („Baker Street" FAC, „Europe" LOC), auch wenn sie an
+`tools/dorian_gray.epub` Kapitel 1 keinen einzigen Treffer beisteuern. spaCys
+Entitätserkennung tastet dabei auch spürbar daneben — an Sherlock Kapitel 2 unter anderem
+„landau", „chin", „sally", „marm", „Pshaw" fälschlich als PERSON, „Bohemia" selbst
+überwiegend als PERSON statt GPE —, eine bekannte Fehlerquote der Erkennung selbst, keine
+Falle der Grundform; eine Bereinigung auf Vorrat verbietet Regel 14 (Bericht zu AP 8).
+
+Das **Zusammenstellen** liegt bei `printout`, nicht bei `extraction`, wie hier ursprünglich
+vorgesehen: `extraction.extract_proper_noun_list` liefert die rohen, je Kapitel gezählten
+Vorkommen unsortiert; `printout.write_printout(..., proper_nouns=None)` gruppiert sie bei
+Angabe in die Anzeigegruppen „Figuren" (`ent_type == "PERSON"`) und „Orte" (alles andere),
+sortiert alphabetisch und hängt den Anhang an. `ChapterVocabulary.proper_nouns`
+(`pipeline.run_chapter`) füllt sich bei jedem Aufruf frisch, ohne den Zwischenspeicher aus
+Abschnitt 5 zu berühren — der hält ausschließlich `book_proper_noun_ratios` fest, mit dem
+diese Liste nichts zu tun hat.
 
 ### Offene Punkte
 

@@ -10,11 +10,12 @@ from typing import TYPE_CHECKING
 import pytest
 
 from libreverbum import epub, triage
-from libreverbum.entities import Book, Chapter, Occurrence
+from libreverbum.entities import Book, Chapter, Occurrence, ProperNounEntry
 from libreverbum.extraction import (
     book_proper_noun_ratios,
     extract_contiguous_candidates,
     extract_particle_verb_candidates,
+    extract_proper_noun_list,
     extract_vocabulary,
     load_nlp,
 )
@@ -39,6 +40,16 @@ def nlp_without_lemmatizer() -> Language:
     import spacy
 
     return spacy.load("en_core_web_md", exclude=["lemmatizer"])
+
+
+@pytest.fixture(scope="module")
+def nlp_without_ner() -> Language:
+    """spaCy-Pipeline ohne Entitätserkennung — Testvorrichtung für `_require_ner`
+    (bauplan-phase2.md AP 8, Regel 13, analog `nlp_without_lemmatizer`): `doc.ents` wäre
+    sonst stets leer, statt den falsch geladenen `nlp` zu melden."""
+    import spacy
+
+    return spacy.load("en_core_web_md", exclude=["ner"])
 
 
 def make_chapter(text: str, *, number: int = 1) -> Chapter:
@@ -858,3 +869,146 @@ def test_contiguous_candidate_form_matches_written_rep_in_the_real_dictionary(
         "Testvoraussetzung verletzt: nicht alle Vergleichsphrasen stehen in der echten Datei"
     )
     assert written_reps <= candidate_texts
+
+
+# -------------------------------------------------------- extract_proper_noun_list (AP 8)
+
+
+def find_proper_noun(entries: list[ProperNounEntry], text: str) -> ProperNounEntry:
+    matches = [entry for entry in entries if entry.text == text]
+    assert len(matches) == 1, f"{text!r} genau einmal erwartet, {len(matches)}-mal gefunden"
+    return matches[0]
+
+
+def has_proper_noun_text(entries: list[ProperNounEntry], text: str) -> bool:
+    return any(entry.text == text for entry in entries)
+
+
+@pytest.mark.needs_epub
+def test_acceptance_ap8_sherlock_chapter_2_lists_the_figures_and_places_but_not_the_title(
+    nlp: Language, real_epub_paths: dict[str, Path]
+) -> None:
+    """bauplan-phase2.md AP 8, Prüfung: Gegen `tools/sherlock.epub` Kapitel 2 enthält die
+    Liste „Sherlock Holmes"/„Holmes", „Irene Adler" und „Bohemia", aber nicht „Miss"
+    (Regel 12, „miss" ist Lernvokabel).
+
+    Verfälschungsprobe: Grundform statt Oberflächenform (`token.lemma_` je Token der
+    Entitätsspanne statt `ent.text`) verwandelt „Holmes" in „holme" — spaCys
+    Lemmatisierer behandelt die Endung „-es" wie bei einem regelmäßigen Plural
+    („boxes" → „box"). Mit dieser Verfälschung schlägt `assert has_proper_noun_text(...,
+    "Holmes")` fehl, weil die Liste nur noch „holme" enthält."""
+    path = real_epub_paths["sherlock"]
+    structure = epub.read_structure(path)
+    reference = next(c for c in structure.chapters if c.number == 2)
+    chapter = epub.read_chapter(path, structure.book, reference)
+
+    entries = extract_proper_noun_list(chapter, nlp)
+    texts = {entry.text for entry in entries}
+
+    assert "Holmes" in texts
+    assert "Sherlock Holmes" in texts
+    assert "Irene Adler" in texts
+    assert "Bohemia" in texts
+    assert not any("Miss" in text for text in texts)
+
+
+@pytest.mark.needs_epub
+def test_acceptance_ap8_holmes_and_irene_adler_carry_their_surface_frequency(
+    nlp: Language, real_epub_paths: dict[str, Path]
+) -> None:
+    """Ergänzung zur Abnahmeprüfung: `frequency` zählt die Vorkommen der jeweiligen
+    Oberflächenform, nicht bloß eine feste Zahl (Rezept: gezählt gegen
+    tools/sherlock.epub Kapitel 2, siehe Bericht zu diesem Arbeitspaket — „Holmes" 37,
+    „Sherlock Holmes" 7, „Irene Adler" 11 Vorkommen)."""
+    path = real_epub_paths["sherlock"]
+    structure = epub.read_structure(path)
+    reference = next(c for c in structure.chapters if c.number == 2)
+    chapter = epub.read_chapter(path, structure.book, reference)
+
+    entries = extract_proper_noun_list(chapter, nlp)
+
+    assert find_proper_noun(entries, "Holmes").frequency == 37
+    assert find_proper_noun(entries, "Sherlock Holmes").frequency == 7
+    assert find_proper_noun(entries, "Irene Adler").frequency == 11
+
+
+def test_proper_noun_occurrences_of_the_same_surface_form_are_merged_into_one_entry(
+    nlp: Language,
+) -> None:
+    """Mehrere Vorkommen derselben Oberflächenform im Kapitel werden zu einem Eintrag
+    zusammengezählt (Moduldocstring, „extract_proper_noun_list").
+
+    Verfälschungsprobe: Zusammenführung entfernt (jedes `doc.ents`-Vorkommen wird ein
+    eigener Eintrag) lässt `len(entries) == 1` rot werden — zwei Einträge mit
+    `frequency == 1` statt einem mit `frequency == 2`."""
+    chapter = make_chapter(
+        "Sherlock Holmes walked to Baker Street. Sherlock Holmes then returned home."
+    )
+    entries = extract_proper_noun_list(chapter, nlp)
+
+    matches = [entry for entry in entries if entry.text == "Sherlock Holmes"]
+    assert len(matches) == 1
+    assert matches[0].frequency == 2
+
+
+def test_proper_noun_list_excludes_entity_types_outside_person_gpe_loc_fac(nlp: Language) -> None:
+    """Nur die vier vermuteten Entitätstypen zählen (`extraction._PROPER_NOUN_ENTITY_TYPES`)
+    — ein `DATE`-Vorkommen wie „Yesterday" erscheint nicht in der Liste, während „London"
+    (GPE) und „Sherlock Holmes" (PERSON) im selben Satz erscheinen.
+
+    Verfälschungsprobe: `_PROPER_NOUN_ENTITY_TYPES` um `DATE` erweitert lässt
+    `not has_proper_noun_text(entries, "Yesterday")` rot werden."""
+    chapter = make_chapter("Yesterday, Sherlock Holmes visited London.")
+    entries = extract_proper_noun_list(chapter, nlp)
+
+    assert not has_proper_noun_text(entries, "Yesterday")
+    assert has_proper_noun_text(entries, "London")
+    assert has_proper_noun_text(entries, "Sherlock Holmes")
+
+
+def test_proper_noun_list_keeps_the_original_capitalization_not_a_lowercased_lemma(
+    nlp: Language,
+) -> None:
+    """Die Liste trägt die Oberflächenform, keine kleingeschriebene Grundform — anders
+    als `extract_vocabulary`s `Lemma.text` (Regel 12: Grundformen werden dort
+    kleingeschrieben; hier ausdrücklich nicht, siehe Moduldocstring)."""
+    chapter = make_chapter("Watson followed Holmes to Baker Street.")
+    entries = extract_proper_noun_list(chapter, nlp)
+
+    assert has_proper_noun_text(entries, "Holmes")
+    assert not has_proper_noun_text(entries, "holmes")
+
+
+def test_proper_noun_list_order_matches_first_occurrence_in_the_chapter(nlp: Language) -> None:
+    """Reihenfolge wie bei `extract_vocabulary`s `occurrences`: erstes Auftreten im
+    Kapitel, unsortiert (Moduldocstring)."""
+    chapter = make_chapter("Watson met Holmes near Baker Street. Later, Holmes met Watson again.")
+    entries = extract_proper_noun_list(chapter, nlp)
+    texts = [entry.text for entry in entries]
+
+    assert texts.index("Watson") < texts.index("Holmes") < texts.index("Baker Street")
+
+
+def test_proper_noun_list_scopes_to_the_given_chapter(nlp: Language) -> None:
+    """Wie bei den Wortlisten-Extraktionsfunktionen: `book` und `chapter_number` gehören
+    zum übergebenen `Chapter` (Moduldocstring, „Ein Eintrag je Kapitel und
+    Oberflächenform" — `entities.ProperNounEntry`)."""
+    chapter = make_chapter("Holmes walked down Baker Street.", number=5)
+    entries = extract_proper_noun_list(chapter, nlp)
+
+    holmes = find_proper_noun(entries, "Holmes")
+    assert holmes.book == chapter.book
+    assert holmes.chapter_number == 5
+
+
+def test_broken_pipeline_without_ner_aborts_the_proper_noun_extraction(
+    nlp_without_ner: Language,
+) -> None:
+    """Regel 13 (bauplan-phase2.md AP 8, `_require_ner`): Fehlt die Entitätserkennung,
+    bricht die Extraktion sichtbar ab, statt eine leere Liste als vollständiges Ergebnis
+    auszugeben — analog `test_broken_pipeline_without_lemmatizer_aborts_instead_of_
+    silently_using_surface_forms`."""
+    chapter = make_chapter("Sherlock Holmes walked to Baker Street.")
+
+    with pytest.raises(ValueError):
+        extract_proper_noun_list(chapter, nlp_without_ner)
