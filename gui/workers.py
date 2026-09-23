@@ -27,10 +27,19 @@ Bildschirm stehen, ohne dass etwas den Fehlschlag meldet.
 # ohne Meldung (Exit 127), ohne dass `on_done`/`on_error` je liefen. `run_in_worker` hält
 # deshalb selbst eine Referenz in `_ACTIVE_WORKERS`, bis `finished` feuert; der Aufrufer
 # braucht dafür keine eigene mehr.
+#
+# (Befund F13, Nachprüfung d00e7c9): Zwei stille Fehlschläge blieben trotzdem übrig —
+# beendet sich die Anwendung, während ein Arbeiter noch läuft, endete der Prozess mit
+# Exit 127, ohne jede Meldung (`wait_for_active_workers`, an `QGuiApplication.aboutToQuit`
+# gehängt in `gui.app.build_engine`); und eine Ausnahme in `on_done`/`on_error` selbst kam
+# nur als Traceback irgendwo auf stderr an, ohne erkennbaren Bezug zum Rückruf, und die
+# Oberfläche blieb scheinbar unbeeindruckt auf der laufenden Etappe stehen
+# (`_guarded` unten).
 """
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable
 from typing import Any
 
@@ -73,6 +82,22 @@ class Worker(QThread):
 _ACTIVE_WORKERS: set[Worker] = set()
 
 
+def _guarded(callback: Callable[[Any], None], art: str) -> Callable[[Any], None]:
+    """Hüllt `on_done`/`on_error` so ein, dass eine Ausnahme **darin** sichtbar auf stderr
+    steht, statt nur als anonymer Traceback irgendwo im Protokoll zu verschwinden (Befund
+    F13, Nachprüfung d00e7c9) — und läuft danach weiter durch (`raise`), verschluckt also
+    selbst nichts (Regel 13: kein `except`, das nur protokolliert)."""
+
+    def wrapped(value: Any) -> None:
+        try:
+            callback(value)
+        except BaseException as error:
+            print(f"FEHLER im Rückruf ({art}), nicht verschluckt: {error!r}", file=sys.stderr)
+            raise
+
+    return wrapped
+
+
 def run_in_worker(
     fn: Callable[[], Any],
     *,
@@ -87,10 +112,28 @@ def run_in_worker(
     Rückgabewert verwirft (Befund B10, Durchsicht d993e3e) — `_ACTIVE_WORKERS` hält die
     Referenz, `finished` trägt ihn aus und räumt ihn danach über `deleteLater` auf."""
     worker = Worker(fn, parent)
-    worker.succeeded.connect(on_done)
-    worker.failed.connect(on_error)
+    worker.succeeded.connect(_guarded(on_done, "on_done"))
+    worker.failed.connect(_guarded(on_error, "on_error"))
     _ACTIVE_WORKERS.add(worker)
     worker.finished.connect(lambda: _ACTIVE_WORKERS.discard(worker))
     worker.finished.connect(worker.deleteLater)
     worker.start()
     return worker
+
+
+def wait_for_active_workers(timeout_ms: int = 5000) -> None:
+    """Wird an `QGuiApplication.aboutToQuit` gehängt (`gui.app.build_engine`, einmal je
+    Prozess). Beendet sich die Anwendung, während ein Arbeiter noch läuft, endete der
+    Prozess bisher mit Exit 127, ohne jede Meldung (Befund F13, Nachprüfung d00e7c9) — hier
+    wird je laufendem Arbeiter gewartet und, falls er selbst das Zeitlimit reißt, das
+    gemeldet statt stillschweigend abgeschnitten zu werden."""
+    for worker in list(_ACTIVE_WORKERS):
+        if not worker.isRunning():
+            continue
+        print(
+            f"Anwendung beendet sich, ein Arbeiter läuft noch — warte bis {timeout_ms} ms",
+            file=sys.stderr,
+        )
+        fertig = worker.wait(timeout_ms)
+        if not fertig:
+            print(f"Arbeiter nach {timeout_ms} ms nicht beendet, wird abgebrochen", file=sys.stderr)

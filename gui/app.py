@@ -41,6 +41,15 @@ in `load_fonts` unten ist davon unabhaengig und laeuft in jedem Treiber gleich.
 # `QT_QPA_PLATFORM=offscreen` sogar gar nichts Auffaelliges. `load_fonts` bricht deshalb
 # jetzt ab, wenn keine einzige Schriftfamilie geladen wurde oder eine der beiden von
 # `Theme.qml` (`fonts.book`, `fonts.ui`) genannten Familien nicht darunter ist — Regel 13.
+
+# (Befund F7/F9, Nachprüfung d00e7c9): `install_message_handler` unten ist die **eine**
+# Stelle, die `qInstallMessageHandler` einrichtet — sowohl für `build_engine` hier als
+# auch für den Direktpfad von `tools/gui_screenshot.py` (der bisher gar keinen Handler
+# hatte und `console.warn` sowie Qt-eigene Meldungen unbemerkt durchließ, Befund F7).
+# Dieselbe Stelle dedupliziert auch (Befund F9): `QQmlApplicationEngine.warnings` und der
+# Meldungs-Handler berichten denselben QML-Bindungsfehler manchmal über **beide** Wege —
+# am Bestand beobachtet an einer fehlenden Kontexteigenschaft, die als zwei Warnungen
+# statt einer gezählt wurde.
 """
 
 from __future__ import annotations
@@ -51,6 +60,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from PySide6.QtGui import QGuiApplication
     from PySide6.QtQml import QQmlApplicationEngine
 
@@ -113,6 +124,42 @@ def _expected_font_families() -> list[str]:
     ]
 
 
+def install_message_handler(warnings: list[str]) -> Callable[[str], None]:
+    """Installiert `qInstallMessageHandler` so, dass jede Qt-/QML-Warnung sofort nach
+    stderr geschrieben und an `warnings` angehängt wird (Befund B5, Durchsicht d993e3e).
+    Liefert `record(message)` zurück — dieselbe Aufzeichnung, mit der auch
+    `QQmlApplicationEngine.warnings` seine Fehler einträgt (Befund F9, Nachprüfung
+    d00e7c9): Beide Wege können denselben QML-Bindungsfehler melden; `record` verwirft
+    einen Text, der in diesem Aufbau schon einmal vorkam, statt ihn doppelt zu zählen.
+
+    Eine Stelle für beide Aufrufer (Befund F7): `build_engine` unten **und** der
+    Direktpfad von `tools/gui_screenshot.py` (`--qml-dir` außerhalb von `gui/qml/`) rufen
+    diese Funktion, statt je einen eigenen Handler zu schreiben."""
+    from PySide6.QtCore import QtMsgType, qInstallMessageHandler
+
+    gesehen: set[str] = set()
+
+    def record(message: str) -> None:
+        if message in gesehen:
+            return
+        gesehen.add(message)
+        warnings.append(message)
+        # REGEL (Befund B5, Durchsicht d993e3e): main() liest `warnings` nur ein einziges
+        # Mal, bevor `app.exec()` startet — jede Warnung, die erst während der
+        # Ereignisschleife auftritt, verschwand bisher spurlos, auch von stderr. Die
+        # Zusicherung „QML-Warnungen gehen nach stderr" gilt deshalb hier, sofort bei
+        # jeder Meldung, nicht erst über die Liste weiter unten.
+        print(message, file=sys.stderr)
+
+    def on_qt_message(msg_type: QtMsgType, context: object, message: str) -> None:
+        del context
+        if msg_type in (QtMsgType.QtWarningMsg, QtMsgType.QtCriticalMsg, QtMsgType.QtFatalMsg):
+            record(message)
+
+    qInstallMessageHandler(on_qt_message)
+    return record
+
+
 def build_engine(
     argv: list[str] | None = None,
     *,
@@ -130,10 +177,12 @@ def build_engine(
     `appAnimate`) müssen **vor** `engine.load` gesetzt sein, wie beim Mockup-Vorbild."""
     from typing import cast
 
-    from PySide6.QtCore import QtMsgType, QUrl, qInstallMessageHandler
+    from PySide6.QtCore import QUrl
     from PySide6.QtGui import QGuiApplication
     from PySide6.QtQml import QQmlApplicationEngine
     from PySide6.QtQuickControls2 import QQuickStyle
+
+    from gui.workers import wait_for_active_workers
 
     # Siehe Modulkopf, „Regeln", letzter Absatz — nur unter offscreen nötig.
     # setdefault, damit eine Vorgabe aus der aufrufenden Shell nicht überschrieben wird
@@ -148,23 +197,16 @@ def build_engine(
     # instance() ist auf QCoreApplication typisiert (Basisklasse); in diesem Prozess ist
     # es entweder None oder genau die hier selbst erzeugte QGuiApplication (Abschnitt 8:
     # „Genau eine QGuiApplication je Prozess") — der cast trägt nur diese Zusicherung nach.
-    app = cast("QGuiApplication", QGuiApplication.instance()) or QGuiApplication(args)
+    bestehende = cast("QGuiApplication | None", QGuiApplication.instance())
+    app = bestehende or QGuiApplication(args)
+    if bestehende is None:
+        # (Befund F13, Nachprüfung d00e7c9): nur beim ersten Aufbau in diesem Prozess
+        # verbinden — ein zweiter `build_engine`-Aufruf auf derselben `QGuiApplication`
+        # (wie in mehreren Tests) hinge sonst denselben Rückruf mehrfach ein.
+        app.aboutToQuit.connect(lambda: wait_for_active_workers())
 
     warnings: list[str] = []
-
-    def on_qt_message(msg_type: QtMsgType, context: object, message: str) -> None:
-        del context
-        if msg_type in (QtMsgType.QtWarningMsg, QtMsgType.QtCriticalMsg, QtMsgType.QtFatalMsg):
-            warnings.append(message)
-            # REGEL (Befund B5, Durchsicht d993e3e): main() liest `warnings` nur ein
-            # einziges Mal, bevor `app.exec()` startet — jede Warnung, die erst während
-            # der Ereignisschleife auftritt (etwa `console.warn` aus einem späten
-            # Rückruf), verschwand bisher spurlos, auch von stderr. Die Zusicherung „QML-
-            # Warnungen gehen nach stderr" (bauplan-phase2.md AP 15) gilt deshalb hier,
-            # sofort bei jeder Meldung, nicht erst über die Liste weiter unten.
-            print(message, file=sys.stderr)
-
-    qInstallMessageHandler(on_qt_message)
+    record = install_message_handler(warnings)
 
     load_fonts(font_dir)
 
@@ -172,9 +214,7 @@ def build_engine(
 
     def on_engine_warnings(errors: list[object]) -> None:
         for error in errors:
-            text = str(error)
-            warnings.append(text)
-            print(text, file=sys.stderr)  # REGEL (Befund B5, wie oben)
+            record(str(error))
 
     engine.warnings.connect(on_engine_warnings)
 

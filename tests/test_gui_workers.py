@@ -196,6 +196,56 @@ def test_run_in_worker_callbacks_run_on_the_main_thread(qt_gui_app: QGuiApplicat
     worker.wait(1000)
 
 
+def test_guarded_prints_to_stderr_and_reraises_instead_of_swallowing(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Befund F13 (Nachprüfung d00e7c9): Eine Ausnahme in `on_done`/`on_error` selbst kam
+    bisher nur als anonymer Traceback irgendwo auf stderr an, ohne erkennbaren Bezug zum
+    Rückruf. `_guarded` schreibt jetzt eine eigene, benannte Meldung und läuft danach
+    weiter durch (`raise`) — Regel 13: kein `except`, das nur protokolliert.
+
+    Verfälschung: das `raise` am Ende von `_guarded` entfernen → der Aufruf unten liefe
+    ohne Ausnahme durch, `pytest.raises` schlägt fehl."""
+    from gui.workers import _guarded
+
+    def kaputter_rueckruf(_value: object) -> None:
+        raise ValueError("kaputt")
+
+    eingehuellt = _guarded(kaputter_rueckruf, "on_done")
+
+    with pytest.raises(ValueError, match="kaputt"):
+        eingehuellt(None)
+
+    captured = capsys.readouterr()
+    assert "FEHLER im Rückruf (on_done)" in captured.err
+
+
+def test_wait_for_active_workers_waits_for_a_running_worker(
+    qt_gui_app: QGuiApplication, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Befund F13 (Nachprüfung d00e7c9): Beendet sich die Anwendung, während ein Arbeiter
+    noch läuft, endete der Prozess bisher mit Exit 127, ohne jede Meldung. An
+    `QGuiApplication.aboutToQuit` gehängt (`gui.app.build_engine`), wartet
+    `wait_for_active_workers` jetzt je laufendem Arbeiter und meldet das auf stderr.
+
+    Verfälschung: `if not worker.isRunning(): continue` in `wait_for_active_workers`
+    umdrehen (`if worker.isRunning(): continue`) → kein laufender Arbeiter würde mehr
+    gemeldet, die Zusicherung unten wird rot."""
+    del qt_gui_app
+    from gui.workers import run_in_worker, wait_for_active_workers
+
+    worker = run_in_worker(
+        lambda: time.sleep(0.3), on_done=lambda _r: None, on_error=lambda _e: None
+    )
+
+    wait_for_active_workers(timeout_ms=2000)
+
+    captured = capsys.readouterr()
+    assert "Arbeiter läuft noch" in captured.err
+    assert not worker.isRunning()
+    worker.wait(100)
+
+
 def test_run_in_worker_still_calls_back_when_the_return_value_is_discarded(
     qt_gui_app: QGuiApplication,
 ) -> None:

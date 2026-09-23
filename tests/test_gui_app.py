@@ -84,6 +84,37 @@ def test_late_qml_warning_reaches_stderr(
         qInstallMessageHandler(None)
 
 
+def test_install_message_handler_deduplicates_identical_messages(
+    qt_gui_app: QGuiApplication,
+) -> None:
+    """Befund F9 (Nachprüfung d00e7c9): `QQmlApplicationEngine.warnings` und der
+    Meldungs-Handler melden manchmal denselben QML-Bindungsfehler über **beide** Wege —
+    am Bestand beobachtet an `tests/qml_fixtures/` mit einer fehlenden
+    Kontexteigenschaft, dort als zwei Warnungen statt einer gezählt. `record` (aus
+    `install_message_handler`) verwirft deshalb einen Text, der in diesem Aufbau schon
+    einmal vorkam.
+
+    Verfälschung: `if message in gesehen: return` in `install_message_handler` entfernen
+    → `warnings` bekäme die gleiche Meldung zweimal, die Zusicherung unten wird rot."""
+    del qt_gui_app
+    from PySide6.QtCore import qInstallMessageHandler
+
+    from gui.app import install_message_handler
+
+    warnings: list[str] = []
+    record = install_message_handler(warnings)
+    try:
+        record("gleiche Meldung")
+        record("gleiche Meldung")
+        record("andere Meldung")
+        assert warnings == ["gleiche Meldung", "andere Meldung"]
+    finally:
+        # Wie test_main_qml_loads_without_a_qml_warning oben: ein installierter
+        # Meldungs-Handler wirkt prozessweit, ein liegengebliebener wäre selbst der
+        # stille Fehlschlag, gegen den dieser Test antritt.
+        qInstallMessageHandler(None)
+
+
 def test_load_fonts_fails_on_an_empty_font_directory(
     qt_gui_app: QGuiApplication, tmp_path: Path
 ) -> None:

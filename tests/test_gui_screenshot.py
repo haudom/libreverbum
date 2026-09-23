@@ -214,29 +214,212 @@ def test_gui_screenshot_reports_text_hidden_under_a_zero_sized_holder(tmp_path: 
     assert "AUSSERHALB DES SICHTBAREN BEREICHS" in result.stdout
 
 
-def test_gui_screenshot_flags_mixed_box_content(tmp_path: Path) -> None:
-    """Befund B3 (Durchsicht d993e3e), Kernfall: ein dunkler Balken im selben Textkasten
-    wie ein blasser Text (`tests/qml_fixtures/Underline.qml`, der Balken nach dem Text
-    deklariert, liegt beim Zeichnen also über ihm). Der alte Weg maß die häufigste oder
-    extremste Farbe im **ganzen** Kasten als Vordergrund — der Balken hätte den blassen
-    Text dabei überdeckt und einen guten Kontrast vorgetäuscht. Gemessen wird deshalb
-    **isoliert**: Jedes andere sichtbare, überschneidende und nach dem Text gezeichnete
-    Element wird vor der Messung ausgeblendet, das Fenster neu gegriffen.
+def test_gui_screenshot_measures_the_true_contrast_despite_a_line_crossing_the_box(
+    tmp_path: Path,
+) -> None:
+    """Nachprüfung d00e7c9, Befunde F1–F3: ein dunkler Balken im selben Textkasten wie ein
+    blasser Text (`tests/qml_fixtures/Underline.qml`, der Balken nach dem Text deklariert,
+    liegt beim Zeichnen also über ihm). Der alte Weg (Commit `d00e7c9`) meldete das bloße
+    Überschneiden bereits als eigenen Befund „GEMISCHTER KASTENINHALT" — an jedem der
+    sechzehn bekannt guten Mockup-Bilder, weil dort ein Fokusring, eine `MouseArea` oder
+    ein weggerollter, per `clip` unsichtbarer Nachbar jeden Kasten berühren kann, ohne ihn
+    zu betreffen (Befund F1). Das Differenzbild (`check_contrast`) kennt diesen Begriff
+    nicht mehr: Es greift das Fenster einmal mit und einmal ohne die Textstelle selbst und
+    misst nur noch, was sich dabei tatsächlich ändert.
 
-    Verfälschung: in `check_contrast` die Zeile `aktives_bild = window.grabWindow()`
-    entfernen (`aktives_bild` bliebe immer `image`, das ursprüngliche, unisolierte Bild)
-    → der Kontrastwert für „Blasser Text mit Linie" träfe den Balken (rund 12,5:1, ohne
-    „!") statt den blassen Text selbst (rund 1,2:1) — `returncode` bliebe zwar 1 (die
-    „GEMISCHTER KASTENINHALT"-Zeile allein setzt das schon), aber ohne den zweiten
-    Beleg unten wäre das falsche Grün an der eigentlichen Messung unentdeckt geblieben."""
+    Verfälschung: `item.setOpacity(0.0)` durch `pass` ersetzen (die Textstelle bleibt
+    sichtbar, „mit" und „ohne" wären identisch) → `aenderungen` bliebe für jede Textstelle
+    leer, „UNSICHTBAR" käme für **jede** Textstelle im Bild, nicht nur für „Blasser Text
+    mit Linie" — die Zusicherung unten wird rot, weil der falsche Kontrastwert (rund
+    1,2:1) dann gar nicht mehr vorkäme."""
     result = _run_fixture("Underline", tmp_path)
 
     assert result.returncode == 1, result.stdout + result.stderr
-    assert "GEMISCHTER KASTENINHALT" in result.stdout
+    assert "GEMISCHTER KASTENINHALT" not in result.stdout
     assert re.search(r"!\s+1\.\d\d:1.*'Blasser Text mit Linie'", result.stdout), (
-        "der Kontrastwert der Textstelle selbst muss unter der Schwelle liegen, nicht "
-        f"nur die Zusatzmeldung: {result.stdout}"
+        f"der Kontrastwert der Textstelle selbst muss unter der Schwelle liegen: {result.stdout}"
     )
+
+
+def test_gui_screenshot_flags_text_wider_than_its_own_box(tmp_path: Path) -> None:
+    """Befund F4 (Nachprüfung d00e7c9): `check_layout` maß bisher nur die Höhe
+    (`implicitHeight` gegen `height`), nie die Breite. Ein Text mit fester, zu schmaler
+    Breite, ohne `elide` und ohne Umbruch, überschreibt seinen Nachbarn unbemerkt
+    (`tests/qml_fixtures/WidthOverflow.qml`, wie `NxOwnBox` in der Nachprüfung).
+
+    Verfälschung: die `TEXT ZU BREIT`-Prüfung (Vergleich `contentWidth - child.width()`)
+    aus `check_layout` entfernen → `returncode` würde 0, „TEXT ZU BREIT" käme nicht vor."""
+    result = _run_fixture("WidthOverflow", tmp_path)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "TEXT ZU BREIT" in result.stdout
+
+
+def test_gui_screenshot_names_a_mismatched_text_property_and_exempts_a_mirrored_one(
+    tmp_path: Path,
+) -> None:
+    """Befund F5 (Nachprüfung d00e7c9): „ÜBERSEHENE TEXTEIGENSCHAFT" war bisher ein
+    einziger Vergleich zweier Zahlen über den ganzen Baum — er schlug bei **jeder**
+    Komponente mit eigener `property string text` an, ohne sie zu nennen, MessageBox im
+    Mockup und jeden Controls-`Button` eingeschlossen, obwohl deren `text` nur den eines
+    eigenen `Text`-Nachfahren spiegelt (`tests/qml_fixtures/MirroredText.qml`: eine
+    Komponente spiegelt ihren Wert richtig, eine zweite zeigt einen anderen Text als ihr
+    Nachfahre).
+
+    Verfälschung: die Ausnahmeprüfung (`ausgenommen = any(...)`) aus `check_layout`
+    entfernen, sodass jeder Kandidat unbedingt gemeldet wird → `gespiegelt` käme
+    fälschlich als zweiter Befund vor, nicht nur `auseinandergelaufen` — die Zusicherung
+    unten (genau **ein** Fundstellen-Name) wird rot."""
+    result = _run_fixture("MirroredText", tmp_path)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "auseinandergelaufen" in result.stdout
+    assert "ÜBERSEHENE TEXTEIGENSCHAFT" in result.stdout
+    ueberzaehlige = result.stdout.count("ÜBERSEHENE TEXTEIGENSCHAFT")
+    assert ueberzaehlige == 1, f"nur `auseinandergelaufen` darf gemeldet werden: {result.stdout}"
+    assert "gespiegelt" not in result.stdout.split("ÜBERSEHENE TEXTEIGENSCHAFT")[1]
+
+
+def test_gui_screenshot_distinguishes_occluded_from_invisible_text(tmp_path: Path) -> None:
+    """Befund F3-Vorschlag (Nachprüfung d00e7c9): Ändert sich beim Ausblenden einer
+    Textstelle nichts, ist sie entweder deckungsgleich mit ihrem Grund (UNSICHTBAR,
+    `tests/qml_fixtures/InvisibleAndEmpty.qml`, „farbgleich") oder von einem anderen,
+    später gezeichneten Element vollständig verdeckt (ÜBERDECKT,
+    `tests/qml_fixtures/Occluded.qml`, „verdeckt") — unterschieden über `_find_occluder`.
+
+    Verfälschung: in `check_contrast` `verdecker = _find_occluder(...)` durch
+    `verdecker = None` ersetzen → `Occluded` meldete „UNSICHTBAR" statt „ÜBERDECKT", die
+    zweite Zusicherung unten wird rot."""
+    unsichtbar = _run_fixture("InvisibleAndEmpty", tmp_path)
+    assert unsichtbar.returncode == 1, unsichtbar.stdout + unsichtbar.stderr
+    assert "! UNSICHTBAR: 'Verschwindet im Grund'" in unsichtbar.stdout
+    assert "ÜBERDECKT" not in unsichtbar.stdout
+
+    ueberdeckt = _run_fixture("Occluded", tmp_path)
+    assert ueberdeckt.returncode == 1, ueberdeckt.stdout + ueberdeckt.stderr
+    assert "ÜBERDECKT" in ueberdeckt.stdout
+    assert "'Wichtiger Hinweis, verdeckt'" in ueberdeckt.stdout
+
+
+def test_gui_screenshot_skips_empty_text_without_flagging_it(tmp_path: Path) -> None:
+    """Befund F6 (Nachprüfung d00e7c9): Ein leerer Text hat nichts zu messen — er wird
+    übersprungen, nicht als „UNSICHTBAR" gemeldet und nicht mitgezählt
+    (`tests/qml_fixtures/InvisibleAndEmpty.qml`, „leer").
+
+    Verfälschung: die Bedingung `if text.strip():` in `check_contrast` entfernen (jede,
+    auch die leere Textstelle wird angehängt) → „leer" käme mit einer eigenen Zeile vor
+    (leerer String in Anführungszeichen), die Zusicherung unten wird rot."""
+    result = _run_fixture("InvisibleAndEmpty", tmp_path)
+
+    assert result.returncode == 1, result.stdout + result.stderr  # wegen "farbgleich"
+    assert "''" not in result.stdout
+    assert "2 Textstellen gemessen" in result.stdout
+
+
+def test_gui_screenshot_does_not_flag_a_font_generic_alias_as_unloaded(tmp_path: Path) -> None:
+    """Befund F8 (Nachprüfung d00e7c9): RichText mit `<font face="Inter">`, aber ohne
+    eigenes `font.family` — die Item-eigene Angabe bleibt der QML-Vorgabewert ("Sans
+    Serif", ein generischer Alias, keine echte Familie). Der alte Vergleich
+    (`font.family()` gegen `QFontInfo(font).family()`) meldete dafür „SCHRIFT NICHT
+    GELADEN", obwohl die Textstelle tatsächlich ordentlich rendert
+    (`tests/qml_fixtures/FontEdgeCases.qml`, „richtext").
+
+    Verfälschung: die Ausnahme `if erwartet.strip().lower() not in _GENERISCHE_FAMILIEN:`
+    durch eine bedingungslose Prüfung ersetzen → „SCHRIFT NICHT GELADEN" käme für
+    „richtext" vor, die Zusicherung unten wird rot."""
+    result = _run_fixture("FontEdgeCases", tmp_path)
+
+    assert "SCHRIFT NICHT GELADEN" not in result.stdout, result.stdout
+
+
+def test_gui_screenshot_resolves_point_size_fonts_to_a_real_pixel_size(tmp_path: Path) -> None:
+    """Befund F11 (Nachprüfung d00e7c9): `font.pixelSize()` liefert -1, wenn die Schrift
+    über `pointSize` statt `pixelSize` gesetzt wurde (Qt kennt nur eine der beiden Angaben
+    je Font) — die WCAG-Schwelle fiele dann auf 4,5 statt der korrekten 3,0 für großen Text
+    (`tests/qml_fixtures/FontEdgeCases.qml`, „punktgroesse", 30 pt).
+
+    Verfälschung: `QFontInfo(font).pixelSize()` durch `font.pixelSize()` ersetzen →
+    „-1px" käme in der Ausgabe vor, die Zusicherung unten wird rot."""
+    result = _run_fixture("FontEdgeCases", tmp_path)
+
+    assert "-1px" not in result.stdout, result.stdout
+    assert re.search(r"Soll 3\.0 \d\dpx.*'Grosse Schrift in Punkt'", result.stdout), result.stdout
+
+
+def test_gui_screenshot_catches_console_warn_on_the_direct_qml_dir_path(tmp_path: Path) -> None:
+    """Befund F7 (Nachprüfung d00e7c9): Der Direktpfad (`--qml-dir` außerhalb von
+    `gui/qml/`, für Angriffsvorlagen) hatte vor der Nachbesserung keinen eigenen
+    `qInstallMessageHandler` — `console.warn` und Qt-eigene Meldungen liefen unbemerkt
+    durch, „Ergebnis: OK" trotz kaputter Seite (`tests/qml_fixtures/ConsoleWarn.qml`).
+
+    Verfälschung: den Aufruf `install_message_handler(warnings)` in `_load_direct`
+    entfernen → `returncode` bliebe 0, „F7-Testwarnung" käme nicht in der Ausgabe vor."""
+    result = _run_fixture("ConsoleWarn", tmp_path)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "F7-Testwarnung" in result.stdout + result.stderr
+
+
+def test_gui_screenshot_reports_a_window_below_main_qml_minimum_size(tmp_path: Path) -> None:
+    """Befund F12 (Nachprüfung d00e7c9): Unter `--offscreen` klemmt Qt eine angeforderte
+    Größe nicht von selbst auf `Main.qml`s `minimumWidth`/`minimumHeight` — 700×400 hätte
+    klaglos ohne jeden Hinweis gerendert, obwohl `Main.qml` 900×600 verlangt.
+
+    Verfälschung: den Vergleich `window.width() < min_w or window.height() < min_h` in
+    `render()` entfernen → die Meldung „unter Main.qml-Mindestgröße" käme nicht vor,
+    `returncode` bliebe 0."""
+    png = tmp_path / "placeholder.png"
+    result = _run("Placeholder", str(png), "--offscreen", "--size", "700x400")
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "unter Main.qml-Mindestgröße" in result.stdout + result.stderr
+
+
+def test_gui_screenshot_does_not_bypass_main_qml_via_a_relative_qml_dir(tmp_path: Path) -> None:
+    """Befund F12, zweiter Fall: `--qml-dir gui/qml` (relativ statt der absoluten Vorgabe)
+    wich bisher, ohne jede Meldung, auf den Direktpfad aus — derselbe Bildschirm, aber
+    ohne `Main.qml`, ohne Fenster, ohne Mindestgröße.
+
+    Verfälschung: `_is_main_qml_path` von `qml_dir.resolve() == GUI_QML.resolve()` auf
+    `qml_dir == GUI_QML` zurücksetzen → dieser Aufruf liefe über den Direktpfad, „›
+    screenStack" (der Loader aus `Main.qml`) käme in keiner Fundmeldung vor, und die
+    Zusicherung unten (Mindestgrößen-Meldung bei zu kleiner Anforderung) wird rot."""
+    png = tmp_path / "placeholder.png"
+    result = _run(
+        "Placeholder", str(png), "--offscreen", "--qml-dir", "gui/qml", "--size", "700x400"
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "unter Main.qml-Mindestgröße" in result.stdout + result.stderr
+
+
+def test_gui_screenshot_finds_no_finding_on_a_real_mockup_screen(tmp_path: Path) -> None:
+    """Abnahmekriterium der Nachprüfung d00e7c9: Der bekannt gute Bestand ist grün — nicht
+    nur der Platzhalter, sondern auch die vier fertig gestalteten Mockup-Bildschirme aus
+    `tools/design_mockup/qml/`. Diese Gegenprobe rendert `Triage` (den Datenfall `lang`,
+    rund 117 Textstellen, darunter eine am unteren Rand angeschnittene Listenzeile) und
+    verlangt „Ergebnis: OK" — die Kehrseite der Angriffstests oben: Ein Werkzeug, das nur
+    noch rot melden kann, wäre so nutzlos wie eines, das nur noch grün meldet.
+
+    Verfälschung: die Zusicherung `ganz = (sichtbar.width() >= ... and ...)` in
+    `check_contrast` durch `ganz = True` ersetzen (jeder, auch ein nur angeschnittener
+    Kasten, gilt als ganz sichtbar) → die angeschnittene letzte Listenzeile bekäme einen
+    Fehlalarm „ÜBERDECKT"/„UNSICHTBAR", die Zusicherung unten wird rot."""
+    png = tmp_path / "triage.png"
+    result = _run(
+        "Triage",
+        str(png),
+        "--offscreen",
+        "--qml-dir",
+        str(REPO_ROOT / "tools" / "design_mockup" / "qml"),
+        "--fall",
+        "lang",
+        "--size",
+        "1280x800",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Ergebnis: OK" in result.stdout
 
 
 def test_gui_screenshot_fails_when_the_font_directory_is_empty(tmp_path: Path) -> None:
