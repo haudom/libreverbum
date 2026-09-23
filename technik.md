@@ -3715,6 +3715,35 @@ bei 2,41:1 — bei gleichzeitiger Meldung „0 Paare unter 4,5:1" durch das dama
   Sie steht als Kommentar an der Stelle in `tools/design_mockup/qml/Robot.qml`, an der sie
   zugeschlagen hat
 
+### E12 — Schwierigkeitscheck: Maßzahl und Profilzugriff — entschieden 23.09.2026
+
+Zwei Entscheidungen Dominiks aus der Nachbesserung einer Durchsicht von AP 7
+(bauplan-phase2.md AP 7, Durchsicht `c6f3875`, Befunde 1 und 2).
+
+**Maßzahl der Einordnung ist die Abdeckung** (`Coverage.share`, Abschnitt 2 dieses
+Dokuments gilt sinngemäß, E5), nicht mehr „unbekannte Grundformen je 1.000": Letztere
+summierte über Kapitel und hing damit an der Kapitelteilung desselben Buchs — Dune (drei
+Riesenkapitel) kam auf 53,2 „angemessen", obwohl seine Abdeckung (84,1 %) unter Sherlocks
+(87,3 %) liegt. Die drei Schwellen in `app.difficulty` bleiben Vermutung, jetzt auf der
+Abdeckung: `EASY` ab 90 %, `MODERATE` ab 75 %, darunter `HARD` — niedriger als die
+Leseforschung (Hu & Nation 2000, zusammengefasst in Nation 2006: rund 95 %/98 %), weil ein
+fester Boden an Wortformen ohne Wörterbucheintrag (1.179 bis 1.876 je gemessenem Buch) die
+Decke selbst auf rund 97,6 bis 98,1 % begrenzt und ein B1-Leser realistisch bei 84 bis 87 %
+liegt. Rezept: `pipeline.assess_book` gegen `tools/sherlock.epub`, `tools/dorian_gray.epub`,
+`tools/dune.epub`, `.venv/Scripts/python.exe`, je einmal mit `pipeline.
+write_vocabulary_preset(cefr_level=CefrLevel.B1)`, 23.09.2026 — Abdeckung 87,34 %/
+85,89 %/84,10 %, alle `MODERATE`; Laufzeit 65 bis 156 s (statt der zuvor angenommenen 22
+bis 29 s), weil `run_chapter` je Kapitel drei spaCy-Läufe kostet (Einzelwörter,
+Verb-Partikel- und n-Gramm-Kandidaten), nicht einen.
+
+**`assess_book` öffnet das Profil nur lesend und legt nie eine Datei an** — gegen ein
+leeres, gerade erst angelegtes Profil käme immer „zu schwer" heraus (Sherlock leer: 58,4 %
+Abdeckung). Fehlt die Profildatei, bricht `assess_book` mit `FileNotFoundError` ab;
+`cli.main` prüft dieselbe Bedingung zusätzlich selbst und meldet vor dem Laden von spaCy
+„Noch kein Profil vorhanden — der Schwierigkeitscheck braucht dein Profil. Lege es mit
+einem normalen Lauf an, dort wählst du dein Niveau." (Exit-Code 1) — am echten Lauf
+geprüft, keine Profildatei entsteht dabei.
+
 ### Offene Punkte
 - **Ob Qt Quick für Desktop-Anwendungen bei Sonnet tatsächlich mehr Durchsichtsrunden
   braucht** als ein Web-Stack, ist eine Vermutung der Recherche, nicht an diesem Bestand

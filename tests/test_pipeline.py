@@ -205,6 +205,34 @@ def pipeline_epub_with_a_missing_chapter_document(tmp_path: Path) -> Path:
     return path
 
 
+# Zwei Kapitel, die genau eine unbekannte Grundform teilen ("watch" als Substantiv, in
+# mini_dictionary_db vorhanden) — sonst kein gemeinsames Inhaltswort (bauplan-phase2.md
+# AP 7, Befund 3, Durchsicht c6f3875: Vereinigung statt Summe fürs Buch).
+_SHARED_WORD_CHAPTER_1_TEXT = "She looked at the old watch on the table."
+_SHARED_WORD_CHAPTER_2_TEXT = "He also had a golden watch in his pocket."
+
+
+def _build_two_chapter_epub_sharing_a_word(path: Path) -> None:
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        archive.writestr("META-INF/container.xml", _CONTAINER_XML)
+        archive.writestr("OEBPS/content.opf", _package_opf(with_navigation=True))
+        archive.writestr(
+            "OEBPS/chapter1.xhtml", _chapter_xhtml("Erstes Kapitel", _SHARED_WORD_CHAPTER_1_TEXT)
+        )
+        archive.writestr(
+            "OEBPS/chapter2.xhtml", _chapter_xhtml("Zweites Kapitel", _SHARED_WORD_CHAPTER_2_TEXT)
+        )
+        archive.writestr("OEBPS/nav.xhtml", _nav_xhtml())
+
+
+@pytest.fixture
+def pipeline_epub_sharing_a_word(tmp_path: Path) -> Path:
+    path = tmp_path / "pipeline_shared_word.epub"
+    _build_two_chapter_epub_sharing_a_word(path)
+    return path
+
+
 @pytest.fixture(scope="module")
 def nlp() -> Language:
     """Lädt das spaCy-Modell einmal für alle Tests dieser Datei (technik.md §5, rund eine
@@ -215,6 +243,17 @@ def nlp() -> Language:
 @pytest.fixture
 def profile_path(tmp_path: Path) -> Path:
     return tmp_path / "profil.sqlite3"
+
+
+@pytest.fixture
+def existing_profile_path(profile_path: Path) -> Path:
+    """Wie `profile_path`, nur liegt die Datei schon vor — leer, aber mit angelegtem
+    Schema (Befund 1, Durchsicht c6f3875): `assess_book` legt seit dieser Nachbesserung
+    nie mehr selbst eine Profildatei an (Entscheidung Dominiks 23.09.2026), jeder Test
+    dafür muss die Datei also vorher selbst anlegen — genau das übernimmt diese
+    Vorrichtung, damit es nicht in jedem Testkörper wiederholt wird."""
+    profile.open_profile(profile_path).close()
+    return profile_path
 
 
 def _entry(result: pipeline.ChapterVocabulary, lemma_text: str) -> pipeline.VocabularyEntry:
@@ -3050,7 +3089,7 @@ def test_assess_book_reports_the_same_coverage_as_run_chapter_per_chapter(
 def test_assess_book_skips_a_chapter_without_text_and_reports_it(
     pipeline_epub_with_a_chapter_without_text: Path,
     mini_dictionary_db: Path,
-    profile_path: Path,
+    existing_profile_path: Path,
     nlp: Language,
 ) -> None:
     """bauplan-phase2.md AP 7: Ein Kapitel ohne Fließtext (hier Kapitel 2, reiner
@@ -3070,7 +3109,7 @@ def test_assess_book_skips_a_chapter_without_text_and_reports_it(
     result = pipeline.assess_book(
         epub_path=pipeline_epub_with_a_chapter_without_text,
         dictionary_path=mini_dictionary_db,
-        profile_path=profile_path,
+        profile_path=existing_profile_path,
         nlp=nlp,
     )
 
@@ -3078,11 +3117,11 @@ def test_assess_book_skips_a_chapter_without_text_and_reports_it(
     assert [listing.number for listing in result.skipped] == [2]
     assert result.skipped[0].skip_reason is not None
     assert result.token_count == result.chapters[0].token_count
-    assert result.unknown_lemma_count == result.chapters[0].unknown_lemma_count
+    assert result.unique_unknown_lemma_count == result.chapters[0].unknown_lemma_count
 
 
 def test_assess_book_aggregates_over_word_forms_not_as_average_of_chapter_shares(
-    pipeline_epub: Path, mini_dictionary_db: Path, profile_path: Path, nlp: Language
+    pipeline_epub: Path, mini_dictionary_db: Path, existing_profile_path: Path, nlp: Language
 ) -> None:
     """Auftragstext AP 7: „Die Buchzahl aggregiert über Wortformen (Summe der
     token_count), nicht als Mittel der Kapitelquoten." Kapitel 1 und 2 aus `pipeline_epub`
@@ -3097,7 +3136,7 @@ def test_assess_book_aggregates_over_word_forms_not_as_average_of_chapter_shares
     result = pipeline.assess_book(
         epub_path=pipeline_epub,
         dictionary_path=mini_dictionary_db,
-        profile_path=profile_path,
+        profile_path=existing_profile_path,
         nlp=nlp,
     )
 
@@ -3117,10 +3156,14 @@ def test_assess_book_aggregates_over_word_forms_not_as_average_of_chapter_shares
         "Gewichtung."
     )
 
-    total_unknown_lemma_count = sum(chapter.unknown_lemma_count for chapter in result.chapters)
-    assert result.unknown_lemma_count == total_unknown_lemma_count
+    # Befund 3 (Durchsicht c6f3875): die Buchzahl ist seit dieser Nachbesserung die
+    # Vereinigung, keine Summe der Kapitelzahlen mehr — Selbstkonsistenz von
+    # unknown_per_thousand gegen das eigene unique_unknown_lemma_count. Die eigentliche
+    # Vereinigungsprobe (mit einer über zwei Kapitel geteilten unbekannten Grundform)
+    # steht in test_assess_book_counts_a_lemma_unknown_in_two_chapters_only_once weiter
+    # unten.
     assert result.unknown_per_thousand == pytest.approx(
-        total_unknown_lemma_count / total_token_count * 1000
+        result.unique_unknown_lemma_count / total_token_count * 1000
     )
 
 
@@ -3140,10 +3183,70 @@ def test_assess_book_raises_for_a_missing_dictionary_file(
         )
 
 
+def test_assess_book_raises_for_a_missing_profile_file_and_creates_none(
+    pipeline_epub: Path, mini_dictionary_db: Path, profile_path: Path, nlp: Language
+) -> None:
+    """Befund 1, Durchsicht c6f3875, Entscheidung Dominiks 23.09.2026: `assess_book`
+    öffnet das Profil nur lesend und legt nie eine Datei an — gegen ein leeres, gerade erst
+    angelegtes Profil käme immer „zu schwer" heraus (`tools/sherlock.epub` ohne Profil:
+    58,4 % Abdeckung, Bericht zu dieser Nachbesserung). `profile_path` (anders als
+    `existing_profile_path`) zeigt hier bewusst auf eine noch nicht vorhandene Datei.
+
+    Verfälschungsprobe (Bericht): die neue Prüfung `if not profile_path.is_file(): raise
+    …` aus `assess_book` entfernt ließ diesen Test rot werden — statt der erwarteten
+    Ausnahme legte `run_chapter` (über `profile.open_profile`) klaglos eine leere
+    Profildatei an, und `pytest.raises` schlug fehl."""
+    assert not profile_path.is_file()
+
+    with pytest.raises(FileNotFoundError, match="Profildatei nicht vorhanden"):
+        pipeline.assess_book(
+            epub_path=pipeline_epub,
+            dictionary_path=mini_dictionary_db,
+            profile_path=profile_path,
+            nlp=nlp,
+        )
+
+    assert not profile_path.is_file(), (
+        "assess_book hat trotz der Ausnahme eine Profildatei angelegt"
+    )
+
+
+def test_assess_book_counts_a_lemma_unknown_in_two_chapters_only_once(
+    pipeline_epub_sharing_a_word: Path,
+    mini_dictionary_db: Path,
+    existing_profile_path: Path,
+    nlp: Language,
+) -> None:
+    """Befund 3, Durchsicht c6f3875: `unique_unknown_lemma_count` ist die Vereinigung der
+    im ganzen Buch unbekannten Grundformen, keine Summe der Kapitelzahlen — eine Grundform,
+    die in zwei Kapiteln unbekannt ist (hier „watch" als Substantiv, `pipeline_epub_sharing
+    _a_word`), zählt fürs Buch nur einmal. Vorher: 16.427 statt 5.919 tatsächlich
+    verschiedener unbekannter Grundformen an `tools/sherlock.epub` ohne Profil (Bericht zu
+    dieser Nachbesserung).
+
+    Verfälschungsprobe (Bericht): `unique_unknown_lemmas` in `assess_book` durch die frühere
+    Summe der Kapitel-`unknown_lemma_count` ersetzt ließ diesen Test rot werden — die
+    Buchzahl war dann 2 statt 1 höher als die tatsächliche Vereinigung."""
+    result = pipeline.assess_book(
+        epub_path=pipeline_epub_sharing_a_word,
+        dictionary_path=mini_dictionary_db,
+        profile_path=existing_profile_path,
+        nlp=nlp,
+    )
+
+    assert len(result.chapters) == 2
+    naive_sum = sum(chapter.unknown_lemma_count for chapter in result.chapters)
+    assert naive_sum - result.unique_unknown_lemma_count == 1, (
+        f"Testvoraussetzung oder Behebung verletzt: naive Summe {naive_sum}, "
+        f"Vereinigung {result.unique_unknown_lemma_count} — erwartet ist genau ein "
+        'kapitelübergreifend geteiltes unbekanntes Wort ("watch").'
+    )
+
+
 def test_assess_book_computes_the_proper_noun_ratio_cache_only_once_per_run(
     pipeline_epub: Path,
     mini_dictionary_db: Path,
-    profile_path: Path,
+    existing_profile_path: Path,
     nlp: Language,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3178,10 +3281,65 @@ def test_assess_book_computes_the_proper_noun_ratio_cache_only_once_per_run(
     result = pipeline.assess_book(
         epub_path=pipeline_epub,
         dictionary_path=mini_dictionary_db,
-        profile_path=profile_path,
+        profile_path=existing_profile_path,
         nlp=nlp,
         cache_dir=cache_dir,
     )
 
     assert len(result.chapters) == 2
     assert calls == 1
+
+
+@pytest.mark.needs_dictionary
+@pytest.mark.needs_epub
+def test_assess_book_against_the_real_dictionary_and_book_shows_higher_coverage_with_a_b1_preset(
+    real_dictionary_path: Path, real_epub_paths: dict[str, Path], tmp_path: Path
+) -> None:
+    """dokumentation.md §5, „Woran geprüft wird": Was über den Inhalt einer Fremdquelle
+    behauptet wird, wird zusätzlich gegen das echte Gegenüber geprüft — bisher liefen alle
+    assess-Tests nur mit leerem Profil (Befund 4, Durchsicht c6f3875). Hier gegen
+    `tools/sherlock.epub` und `tools/en-de.sqlite3`, einmal mit leerem und einmal mit
+    B1-vorbelegtem Profil: Die Vorbelegung muss die Abdeckung sichtbar anheben.
+
+    Rezept (Bericht zu dieser Nachbesserung): `pipeline.assess_book` gegen
+    `tools/sherlock.epub`/`tools/en-de.sqlite3`, `.venv/Scripts/python.exe`, 23.09.2026 —
+    leeres Profil 58,36 % Abdeckung, B1-Profil 87,34 % (13 Kapitel mit Text, Kapitel 14
+    übersprungen). Die Schranken unten liegen großzügig um diese beiden Werte, damit der
+    Test nicht bei jeder Rundungsdifferenz kippt, aber jede grobe Regression (etwa eine
+    vertauschte Vorbelegung) auffängt."""
+    nlp = extraction.load_nlp()
+    cache_dir = tmp_path / "cache"  # geteilt: der buchweite Eigennamenanteil ist vom
+    # Profil unabhängig (technik.md §5) — der zweite Aufruf unten trifft ihn und liest das
+    # Buch kein zweites Mal vollständig ein.
+
+    empty_profile_path = tmp_path / "empty" / "profil.sqlite3"
+    empty_profile_path.parent.mkdir()
+    profile.open_profile(empty_profile_path).close()
+
+    b1_profile_path = tmp_path / "b1" / "profil.sqlite3"
+    b1_profile_path.parent.mkdir()
+    pipeline.write_vocabulary_preset(
+        dictionary_path=real_dictionary_path,
+        profile_path=b1_profile_path,
+        cefr_level=CefrLevel.B1,
+        timestamp=datetime.now(UTC),
+    )
+
+    empty_result = pipeline.assess_book(
+        epub_path=real_epub_paths["sherlock"],
+        dictionary_path=real_dictionary_path,
+        profile_path=empty_profile_path,
+        nlp=nlp,
+        cache_dir=cache_dir,
+    )
+    b1_result = pipeline.assess_book(
+        epub_path=real_epub_paths["sherlock"],
+        dictionary_path=real_dictionary_path,
+        profile_path=b1_profile_path,
+        nlp=nlp,
+        cache_dir=cache_dir,
+    )
+
+    assert b1_result.coverage.share > empty_result.coverage.share
+    assert 0.50 < empty_result.coverage.share < 0.65, empty_result.coverage.share
+    assert 0.80 < b1_result.coverage.share < 0.92, b1_result.coverage.share

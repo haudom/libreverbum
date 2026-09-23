@@ -27,9 +27,12 @@ Am Ende steht eine Bilanz über alle verarbeiteten und übersprungenen Kapitel.
 `--assess` (bauplan-phase2.md AP 7, E12, E3-Ausnahme): Buch-Schwierigkeitscheck statt
 Triage — `pipeline.assess_book` gegen das **vorhandene** Profil (keine interaktive
 Rückfrage, keine Vorbelegung, kein Sprachmodell außer spaCy), Tabelle je Kapitel mit
-Fließtext, eine Zeile fürs Buch, dazu die Einordnung aus `app.difficulty` mit dem Hinweis,
-dass die drei Schwellen eine Vermutung sind. Schließt sich mit `--chapter`/`--chapters`
-aus.
+Fließtext, eine Zeile fürs Buch, dazu die Einordnung aus `app.difficulty` (seit der
+Nachbesserung der Durchsicht c6f3875 nach Abdeckung, nicht mehr nach unbekannten
+Grundformen je 1.000, E12) mit dem Hinweis, dass die drei Schwellen eine Vermutung sind.
+Fehlt das Profil, bricht der Lauf ab, statt eines still anzulegen (Befund 1, Durchsicht
+c6f3875, Entscheidung Dominiks 23.09.2026) — gegen ein leeres Profil käme immer „zu
+schwer" heraus. Schließt sich mit `--chapter`/`--chapters` aus.
 
 Regel 9 (dokumentation.md §4), strukturelle Hälfte: Dieses Kommandozeilenprogramm hat
 keine Ereignisschleife und keinen Oberflächen-Thread, den ein NLP- oder Modellaufruf
@@ -160,6 +163,17 @@ def _format_count(count: int) -> str:
     kleinere Funktion, weil hier nie ein unbekannter Wert vorkommt (anders als beim
     Wortumfang je Kapitel, der `None` kennt)."""
     return f"{count:,}".replace(",", ".")
+
+
+def _format_decimal(value: float, *, ndigits: int = 1) -> str:
+    """Deutsches Dezimalkomma (`164,4`) statt des englischen Dezimalpunkts (Befund 5,
+    Durchsicht c6f3875): `_write_assess_result` schrieb bislang in **einem** Satz einen
+    Punkt als Tausendertrenner (`_format_count`, `1.410`) **und** als Dezimalzeichen
+    (`f"{wert:.1f}"`, `164.4`) — zwei widersprüchliche Lesarten desselben Zeichens
+    nebeneinander. `f"{value:.{ndigits}f}"` trägt selbst keinen Tausendertrenner (die
+    Prozent- und Je-1.000-Werte hier bleiben unter 1.000), das bloße Ersetzen von `.` durch
+    `,` genügt deshalb, ohne `_format_count`s Zweischritt zu brauchen."""
+    return f"{value:.{ndigits}f}".replace(".", ",")
 
 
 def _ask_cefr_level(read_line: ReadLine, write_line: WriteLine) -> CefrLevel | None:
@@ -1002,14 +1016,20 @@ def _run_assess(
     Zwischenspeicher, `pipeline.assess_book`s Docstring), `EXTRACTING_VOCABULARY`/
     `LOOKING_UP_DICTIONARY` dagegen **je Kapitel** statt einmal. Eine feste Textzeile je
     Kapitel wie bei `_run_chapter_with_progress` liefe hier zu einer Zeile je Kapitel auf;
-    stattdessen zählt diese Funktion die bereits begonnenen Kapitel mit und schreibt eine
-    sich fortschreibende Zeile (`safe_print_progress`)."""
+    stattdessen schreibt diese Funktion eine sich fortschreibende Zeile
+    (`safe_print_progress`).
+
+    (Befund 6, Durchsicht c6f3875): „Kapitel wird geprüft: N …" nannte bisher nur die
+    Zahl der bereits begonnenen Kapitel, nicht ihre Gesamtzahl — `assess_book` liefert die
+    Gesamtzahl seit dieser Nachbesserung selbst mit (`progress.total`, umbeschriftet aus
+    dem sonst ungenutzten `done=0, total=0` eines einzelnen `run_chapter`-Aufrufs, siehe
+    `assess_book`s Docstring), diese Funktion zählt sie nicht mehr selbst nach — „Kapitel i
+    von n" ist die Vorstufe, die AP 21 für einen echten Balken braucht."""
     progress_open = False
     last_stage: pipeline.ChapterStage | None = None
-    chapters_started = 0
 
     def _on_progress(progress: pipeline.ChapterProgress) -> None:
-        nonlocal progress_open, last_stage, chapters_started
+        nonlocal progress_open, last_stage
         if progress.stage != last_stage and progress_open:
             finish_progress_line()
             progress_open = False
@@ -1027,8 +1047,7 @@ def _run_assess(
                 )
                 progress_open = True
             case pipeline.ChapterStage.EXTRACTING_VOCABULARY:
-                chapters_started += 1
-                safe_print_progress(f"Kapitel wird geprüft: {chapters_started} …")
+                safe_print_progress(f"Kapitel wird geprüft: {progress.done} von {progress.total} …")
                 progress_open = True
             case pipeline.ChapterStage.LOOKING_UP_DICTIONARY:
                 pass
@@ -1063,25 +1082,39 @@ _DIFFICULTY_LEVEL_LABELS = {
 def _write_assess_result(result: pipeline.BookDifficulty, write_line: WriteLine) -> None:
     """Schreibt die Tabelle je Kapitel und die Buchzeile (bauplan-phase2.md AP 7) —
     übersprungene Kapitel sichtbar mit ihrem Grund (Regel 13, dokumentation.md §4), nicht
-    still weggelassen, wie bei `_write_chapter_range_summary` oben."""
+    still weggelassen, wie bei `_write_chapter_range_summary` oben.
+
+    (Befund 2, Durchsicht c6f3875, E12): Die Einordnung stützt sich seit dieser
+    Nachbesserung auf `result.coverage.share`, nicht mehr auf `result.unknown_per_thousand`
+    — Letzteres hing an der Kapitelteilung des Buchs (`app.difficulty`s Moduldocstring).
+
+    (Befund 3, Durchsicht c6f3875): Die Buchzeile nennt `result.unique_unknown_lemma_count`
+    (Vereinigung, `pipeline.BookDifficulty`s Docstring), nicht mehr `unknown_lemma_count`
+    — das Feld gibt es auf `BookDifficulty` seit dieser Behebung nicht mehr, die frühere
+    Summe wäre ohnehin die falsche Zahl für „so viele Wörter musst du lernen" gewesen.
+
+    (Befund 5, Durchsicht c6f3875): `_format_decimal` statt `f"{…:.1f}"` — sonst trägt
+    derselbe Satz einen Punkt als Tausendertrenner (`_format_count`) und als Dezimalzeichen
+    (`{…:.1f}`) zugleich, zwei widersprüchliche Lesarten nebeneinander."""
     write_line("Schwierigkeitscheck:")
     for chapter in result.chapters:
         write_line(
             f"  Kapitel {chapter.number} ({chapter.title}): "
             f"{_format_count(chapter.token_count)} Wörter, "
             f"{_format_count(chapter.unknown_lemma_count)} unbekannte Grundformen, "
-            f"{chapter.unknown_per_thousand:.1f} je 1.000, "
-            f"Abdeckung {chapter.coverage.share * 100:.1f} %."
+            f"{_format_decimal(chapter.unknown_per_thousand)} je 1.000, "
+            f"Abdeckung {_format_decimal(chapter.coverage.share * 100)} %."
         )
     for listing in result.skipped:
         write_line(f"  Kapitel {listing.number}: übersprungen — {listing.skip_reason}.")
-    level = difficulty.classify_difficulty(result.unknown_per_thousand)
+    level = difficulty.classify_difficulty(result.coverage.share)
     level_label = _DIFFICULTY_LEVEL_LABELS[level]
     write_line(
         f"Buch: {_format_count(result.token_count)} Wörter, "
-        f"{_format_count(result.unknown_lemma_count)} unbekannte Grundformen, "
-        f"{result.unknown_per_thousand:.1f} je 1.000, "
-        f"Abdeckung {result.coverage.share * 100:.1f} % — Einordnung: {level_label}."
+        f"{_format_count(result.unique_unknown_lemma_count)} unbekannte Grundformen, "
+        f"{_format_decimal(result.unknown_per_thousand)} je 1.000, "
+        f"Abdeckung {_format_decimal(result.coverage.share * 100)} % — "
+        f"Einordnung: {level_label}."
     )
 
 
@@ -1138,10 +1171,28 @@ def _run(
     if args.assess:
         # bauplan-phase2.md AP 7, E3-Ausnahme: `--assess` ist ein reiner Lesebericht — kein
         # interaktives Anlegen des Profils, keine Niveaufrage, kein Sprachmodell außer
-        # spaCy. Ein fehlendes Profil öffnet `pipeline.assess_book` (über `run_chapter`)
-        # trotzdem klaglos als leere Profildatei (`profile.open_profile`, „legt beim ersten
-        # Aufruf das vollständige Schema an") — genau der „leeres Profil"-Fall aus der
-        # Prüfung dieses Auftrags, keine gesonderte Behandlung nötig.
+        # spaCy.
+        #
+        # (Befund 1, Durchsicht c6f3875, Entscheidung Dominiks 23.09.2026): Ein fehlendes
+        # Profil bricht ab, statt (wie vor dieser Behebung fälschlich behauptet) klaglos
+        # als leere Profildatei zu laufen. Gegen ein leeres, gerade erst angelegtes Profil
+        # käme immer „zu schwer" heraus (Sherlock leer: 58,4 % Abdeckung statt B1s 87,3 %,
+        # Bericht zu dieser Nachbesserung) — wertlos als Aussage —, und die still angelegte
+        # Datei brächte den nächsten normalen Lauf durcheinander: Der erkennt ein
+        # vorhandenes Profil nur an seiner Dateiexistenz (`profile_is_new` unten) und
+        # fragte dann nie mehr nach Sprachniveau und Vorbelegung. Geprüft **vor** dem
+        # Laden von spaCy (rund eine Sekunde, technik.md §5), damit ein fehlendes Profil
+        # nicht erst nach diesem Umweg auffällt — dasselbe Muster wie der
+        # Wörterbuch-Bezug oben vor jeder anderen Rückfrage. `pipeline.assess_book` prüft
+        # dieselbe Bedingung zusätzlich selbst (Regel 13: der Kern verlässt sich nicht
+        # darauf, dass jeder Aufrufer sie schon geprüft hat) und legt ebenfalls nie eine
+        # Profildatei an.
+        if not cfg.profile_path.is_file():
+            write_line(
+                "Noch kein Profil vorhanden — der Schwierigkeitscheck braucht dein "
+                "Profil. Lege es mit einem normalen Lauf an, dort wählst du dein Niveau."
+            )
+            return 1
         write_line("Sprachmodell wird geladen …")
         nlp = extraction.load_nlp()
         write_line("Sprachmodell geladen.")

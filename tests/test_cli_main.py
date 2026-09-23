@@ -2540,7 +2540,12 @@ def test_assess_reports_a_table_and_a_book_line_without_prompting(
     fragen (`_no_read` wirft, sobald `main` doch eine Eingabe verlangt — insbesondere
     keine Frage nach einem neuen Profil oder einem Sprachniveau, anders als bei einem
     normalen Kapiteldurchlauf), und schreibt eine Zeile je Kapitel mit Fließtext sowie
-    eine Buchzeile mit Einordnung."""
+    eine Buchzeile mit Einordnung.
+
+    Das Profil liegt hier absichtlich **vor** dem Aufruf schon an (Befund 1, Durchsicht
+    c6f3875): Seit dieser Nachbesserung legt `--assess` selbst keine Profildatei mehr an
+    — ein fehlendes Profil bricht stattdessen ab
+    (`test_assess_aborts_with_a_german_message_and_creates_no_profile_when_none_exists`)."""
     data_dir = tmp_path / "data"
     _write_config(
         data_dir,
@@ -2548,6 +2553,7 @@ def test_assess_reports_a_table_and_a_book_line_without_prompting(
         model_name="unerreicht",
         dictionary_path=mini_dictionary_db,
     )
+    profile.open_profile(data_dir / "profil.sqlite3").close()
     written: list[str] = []
 
     exit_code = main(
@@ -2579,7 +2585,11 @@ def test_assess_reports_a_skipped_chapter_without_a_break(
     rot war"): `pipeline.assess_book` auf `if listing.skip_reason is None: continue`
     umgestellt — also genau umgekehrt, das Kapitel **mit** Fließtext übersprungen statt des
     Vorspanns — ließ diesen Test rot werden (`Kapitel 2`/`Kapitel 3` fehlten in der
-    Ausgabe, siehe Bericht)."""
+    Ausgabe, siehe Bericht).
+
+    Das Profil liegt auch hier bewusst schon vor dem Aufruf an (Befund 1, Durchsicht
+    c6f3875) — siehe die Begründung bei
+    `test_assess_reports_a_table_and_a_book_line_without_prompting`."""
     data_dir = tmp_path / "data"
     _write_config(
         data_dir,
@@ -2587,6 +2597,7 @@ def test_assess_reports_a_skipped_chapter_without_a_break(
         model_name="unerreicht",
         dictionary_path=mini_dictionary_db,
     )
+    profile.open_profile(data_dir / "profil.sqlite3").close()
     written: list[str] = []
 
     exit_code = main(
@@ -2606,3 +2617,176 @@ def test_assess_reports_a_skipped_chapter_without_a_break(
     ), "\n".join(written)
     assert any(line.strip().startswith("Kapitel 2") for line in written)
     assert any(line.strip().startswith("Kapitel 3") for line in written)
+
+
+def test_assess_aborts_with_a_german_message_and_creates_no_profile_when_none_exists(
+    tmp_path: Path, two_chapter_book_epub: Path, mini_dictionary_db: Path
+) -> None:
+    """Befund 1, Durchsicht c6f3875, Entscheidung Dominiks 23.09.2026: `--assess` ohne
+    vorhandenes Profil bricht mit einer deutschen Meldung ab und legt **keine** Profildatei
+    an — vor dieser Behebung öffnete `pipeline.assess_book` (über `run_chapter`) das
+    fehlende Profil klaglos und legte eine leere Datei an, die den nächsten normalen Lauf
+    um Rückfrage und Vorbelegung gebracht hätte (`profile_is_new` in `cli._run` erkennt ein
+    Profil nur an seiner Dateiexistenz).
+
+    Verfälschungsprobe (Bericht): Die neue Prüfung `if not cfg.profile_path.is_file(): …`
+    in `cli._run` entfernt ließ diesen Test rot werden — `main` lief dann bis zum echten
+    `pipeline.assess_book`-Aufruf durch, dessen eigene, gleichartige Prüfung
+    (`test_assess_book_raises_for_a_missing_profile_file_and_creates_none` in
+    `tests/test_pipeline.py`) den Lauf zwar ebenfalls abbricht, aber mit der englisch
+    anmutenden Kernmeldung „Profildatei nicht vorhanden: …" statt des hier erwarteten,
+    für Menschen geschriebenen Satzes — dieser Test schlägt dann an der Wortlautprüfung
+    fehl, nicht an `exit_code`."""
+    data_dir = tmp_path / "data"
+    _write_config(
+        data_dir,
+        model_url="http://127.0.0.1:0/v1",
+        model_name="unerreicht",
+        dictionary_path=mini_dictionary_db,
+    )
+    profile_path = data_dir / "profil.sqlite3"
+    assert not profile_path.is_file()
+    written: list[str] = []
+
+    exit_code = main(
+        [str(two_chapter_book_epub), "--assess", "--data-dir", str(data_dir)],
+        read_line=_no_read,
+        write_line=written.append,
+    )
+
+    assert exit_code == 1, "\n".join(written)
+    assert any("Noch kein Profil vorhanden" in line for line in written), "\n".join(written)
+    assert not profile_path.is_file(), "assess hat trotz Abbruch eine Profildatei angelegt"
+
+
+def _crafted_book_difficulty(share: float) -> pipeline.BookDifficulty:
+    """Baut ein `BookDifficulty` mit vorgegebener Abdeckung, ohne einen echten
+    `assess_book`-Lauf — für
+    `test_assess_prints_the_difficulty_label_that_matches_the_measured_coverage`, das nur
+    die Umsetzung der Einordnung in `cli._write_assess_result` prüft, nicht `assess_book`
+    selbst (dafür stehen die Tests in `tests/test_pipeline.py`)."""
+    chapter_coverage = pipeline.Coverage(
+        token_count=100,
+        understood_tokens=round(share * 100),
+        unknown_lemma_count=3,
+        share=share,
+        share_after_learning=share,
+    )
+    chapter = pipeline.ChapterDifficulty(
+        number=1,
+        title="Kapitel eins",
+        token_count=100,
+        unknown_lemma_count=3,
+        unknown_per_thousand=30.0,
+        coverage=chapter_coverage,
+    )
+    return pipeline.BookDifficulty(
+        chapters=[chapter],
+        skipped=[],
+        token_count=100,
+        unique_unknown_lemma_count=3,
+        unknown_per_thousand=30.0,
+        coverage=chapter_coverage,
+    )
+
+
+def test_assess_prints_the_difficulty_label_that_matches_the_measured_coverage(
+    tmp_path: Path, book_epub: Path, mini_dictionary_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Befund 4, Durchsicht c6f3875: Prüft die Einordnung **wörtlich** in der
+    CLI-Ausgabe — bisher bestand keine Zusicherung, die eine vertauschte
+    `_DIFFICULTY_LEVEL_LABELS`-Zuordnung (EASY ↔ HARD, `cli/main.py`) rot werden ließ; die
+    zwölf bestehenden `--assess`-Tests liefen zudem alle nur mit leerem Profil (Befund 4a
+    dazu: `tests/test_pipeline.py`,
+    `test_assess_book_counts_a_lemma_unknown_in_two_chapters_only_once` und die
+    Vorbelegungstests dort).
+
+    `pipeline.assess_book` wird hier durch eine Attrappe mit fest vorgegebener Abdeckung
+    (95 %, eindeutig `EASY`) ersetzt — der Test prüft damit gezielt `cli._write_assess_
+    result`s Umsetzung der Einordnung, nicht `assess_book` selbst.
+
+    Verfälschungsprobe (Bericht): `_DIFFICULTY_LEVEL_LABELS[difficulty.DifficultyLevel.
+    EASY]` und `[...HARD]` in `cli/main.py` vertauscht ließ diesen Test rot werden — die
+    Buchzeile nannte „zu schwer für dich (Vermutung)" statt der erwarteten
+    „leicht (Vermutung)"."""
+    data_dir = tmp_path / "data"
+    _write_config(
+        data_dir,
+        model_url="http://127.0.0.1:0/v1",
+        model_name="unerreicht",
+        dictionary_path=mini_dictionary_db,
+    )
+    profile.open_profile(data_dir / "profil.sqlite3").close()
+    monkeypatch.setattr(pipeline, "assess_book", lambda **_: _crafted_book_difficulty(0.95))
+    written: list[str] = []
+
+    exit_code = main(
+        [str(book_epub), "--assess", "--data-dir", str(data_dir)],
+        read_line=_no_read,
+        write_line=written.append,
+    )
+
+    assert exit_code == 0, "\n".join(written)
+    book_lines = [line for line in written if line.startswith("Buch:")]
+    assert len(book_lines) == 1, "\n".join(written)
+    assert "leicht (Vermutung)" in book_lines[0], book_lines[0]
+    assert "95,0 %" in book_lines[0], book_lines[0]
+
+
+def test_assess_prints_the_chapter_progress_as_i_of_n(
+    tmp_path: Path, book_epub: Path, mini_dictionary_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Befund 6, Durchsicht c6f3875: „Kapitel wird geprüft: N …" nannte bisher nur die Zahl
+    der bereits begonnenen Kapitel, nicht ihre Gesamtzahl (`ChapterProgress.total` blieb
+    bei `EXTRACTING_VOCABULARY` aus einem einzelnen `run_chapter`-Aufruf immer `0`) —
+    `assess_book` liefert seit dieser Nachbesserung „das wievielte Kapitel, von wie
+    vielen" selbst mit (`pipeline.py`, `assess_book`s Docstring, Absatz zu Befund 6), und
+    `_run_assess` zählt nicht mehr selbst nach. Kein Balken hier (der bleibt AP 21
+    vorbehalten), nur die Zahlen, die ein künftiger Balken braucht.
+
+    `pipeline.assess_book` wird durch eine Attrappe ersetzt, die `on_progress` einmal
+    selbst mit `done=2, total=5` aufruft — unabhängig von einem echten Kapitelverlauf, weil
+    dieser Test nur prüft, wie `cli._run_assess` einen solchen Fortschrittswert in Text
+    umsetzt, nicht `assess_book` selbst (dafür stehen die Tests in
+    `tests/test_pipeline.py`).
+
+    Verfälschungsprobe (Bericht): `f"Kapitel wird geprüft: {progress.done} von
+    {progress.total} …"` in `cli._run_assess` auf die frühere, nur mitzählende Fassung
+    (`chapters_started`) zurückgestellt ließ diesen Test rot werden — die Zeile nannte
+    dann „Kapitel wird geprüft: 1 …" statt „Kapitel wird geprüft: 2 von 5 …", weil die
+    Attrappe nie einen ersten, wirklich mitgezählten Aufruf durchläuft."""
+    data_dir = tmp_path / "data"
+    _write_config(
+        data_dir,
+        model_url="http://127.0.0.1:0/v1",
+        model_name="unerreicht",
+        dictionary_path=mini_dictionary_db,
+    )
+    profile.open_profile(data_dir / "profil.sqlite3").close()
+
+    def _fake_assess_book(
+        *, on_progress: Callable[[pipeline.ChapterProgress], None] | None, **_: object
+    ) -> pipeline.BookDifficulty:
+        assert on_progress is not None
+        on_progress(
+            pipeline.ChapterProgress(
+                stage=pipeline.ChapterStage.EXTRACTING_VOCABULARY, done=2, total=5
+            )
+        )
+        return _crafted_book_difficulty(0.95)
+
+    monkeypatch.setattr(pipeline, "assess_book", _fake_assess_book)
+    progress_calls: list[str] = []
+    monkeypatch.setattr(
+        "cli.main.safe_print_progress", lambda text, **_kwargs: progress_calls.append(text)
+    )
+    written: list[str] = []
+
+    exit_code = main(
+        [str(book_epub), "--assess", "--data-dir", str(data_dir)],
+        read_line=_no_read,
+        write_line=written.append,
+    )
+
+    assert exit_code == 0, "\n".join(written)
+    assert "Kapitel wird geprüft: 2 von 5 …" in progress_calls, progress_calls
