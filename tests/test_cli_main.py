@@ -10,6 +10,7 @@ Weg über spaCy, damit sie schnell bleiben.
 from __future__ import annotations
 
 import enum
+import re
 import sqlite3
 import threading
 import zipfile
@@ -676,7 +677,7 @@ def test_acceptance_2_a_later_chapter_does_not_ask_about_a_word_marked_known_ear
     assert any(line.startswith("Kapitel 2:") for line in console.log)
 
 
-def test_chapters_all_skips_a_chapter_without_text_and_reports_a_balance(
+def test_chapters_all_skips_a_chapter_without_text_and_reports_a_literal_balance(
     tmp_path: Path,
     three_chapter_book_epub_with_a_skipped_first_chapter: Path,
     mini_dictionary_db: Path,
@@ -685,7 +686,15 @@ def test_chapters_all_skips_a_chapter_without_text_and_reports_a_balance(
     """bauplan-phase2.md AP 5: `--chapters all` verarbeitet jedes Kapitel des Buchs;
     Kapitel 1 (reiner Vorspann/Impressum, kein Fließtext) wird gemeldet und
     übersprungen, kein Abbruch (`pipeline.list_chapters`, AP 4). Am Ende steht eine
-    Bilanz über verarbeitete und übersprungene Kapitel."""
+    Bilanz über verarbeitete und übersprungene Kapitel — geprüft **wörtlich**, nicht nur
+    auf enthaltene Ziffern: Kapitel 2 und 3 tragen denselben Wortschatz wie
+    `book_epub` (ein Einzelwort "watch", eine Wendung "gave up"), beide werden gelernt,
+    macht zwei Karten je verarbeitetem Kapitel und vier insgesamt.
+
+    (Nachbesserung Durchsicht 1092335, M1): Vor dieser Behebung prüfte dieser Test nur,
+    dass „2“ und „1“ irgendwo in der Gesamtzeile stehen, mit `learn_words=set()` — die
+    Kartenzahl war dadurch immer 0 und blieb ungeprüft. Drei Verfälschungen blieben so
+    grün, siehe Verfälschungsprobe unten."""
     data_dir = tmp_path / "data"
     _write_config(
         data_dir,
@@ -693,8 +702,9 @@ def test_chapters_all_skips_a_chapter_without_text_and_reports_a_balance(
         model_name=model_server_double.model_name,
         dictionary_path=mini_dictionary_db,
     )
+    output_dir = tmp_path / "export"
     model_server_double.choice = 1
-    console = _ScriptedConsole(learn_words=set())
+    console = _ScriptedConsole(learn_words={"watch", "gave up"})
 
     exit_code = main(
         [
@@ -703,6 +713,8 @@ def test_chapters_all_skips_a_chapter_without_text_and_reports_a_balance(
             "all",
             "--data-dir",
             str(data_dir),
+            "--output-dir",
+            str(output_dir),
         ],
         read_line=console.read,
         write_line=console.write,
@@ -716,16 +728,40 @@ def test_chapters_all_skips_a_chapter_without_text_and_reports_a_balance(
     assert any(line.startswith("Kapitel 2:") for line in console.log)
     assert any(line.startswith("Kapitel 3:") for line in console.log)
 
+    # Die Wort-/Wendungszahl je Kapitel steht bereits in der Fortschrittszeile vor der
+    # Triage (`_run_one_chapter`, "Kapitel N: X Wörter, Y Wendungen.") — hier
+    # abgegriffen, statt von Hand nachgezählt, damit dieser Test nicht an der genauen
+    # Wortschatzgröße von `_CHAPTER_TEXT` zerbricht, sollte sich die Extraktion ändern.
+    progress_counts: dict[int, tuple[str, str]] = {}
+    for line in console.log:
+        match = re.fullmatch(r"Kapitel (\d+): (\d+ Wörter), (\d+ Wendungen)\.", line)
+        if match:
+            progress_counts[int(match.group(1))] = (match.group(2), match.group(3))
+    assert set(progress_counts) == {2, 3}, "\n".join(console.log)
+
     balance_start = next(
         index for index, line in enumerate(console.log) if line == "Bilanz über den Kapitelbereich:"
     )
     balance = console.log[balance_start:]
-    assert any("Kapitel 2:" in line for line in balance)
-    assert any("Kapitel 3:" in line for line in balance)
-    assert any("Kapitel 1:" in line and "übersprungen" in line for line in balance)
-    assert any(
-        "2" in line and "verarbeitet" in line and "1" in line and "übersprungen" in line
-        for line in balance
+
+    # Verfälschungsprobe „card_count=len(word_cards)“ (ohne Wendungskarten): Kapitel 2
+    # und 3 lernen je ein Wort **und** eine Wendung — die Zeile nennt wörtlich "2 zum
+    # Lernen gewählt", nicht "1". Verfälschungsprobe „card_count=0“: dieselbe Zeile wäre
+    # "0 zum Lernen gewählt" statt "2".
+    for chapter_number in (2, 3):
+        words, expressions = progress_counts[chapter_number]
+        expected_line = f"  Kapitel {chapter_number}: {words}, {expressions}, 2 zum Lernen gewählt."
+        assert expected_line in balance, "\n".join(balance)
+
+    assert "  Kapitel 1: übersprungen — besteht nur aus Vorspann bzw. Impressum." in balance, (
+        "\n".join(balance)
+    )
+
+    # Verfälschungsprobe „verarbeitet“/„übersprungen“ vertauscht: Die Gesamtzeile wird
+    # hier vollständig, nicht nur auf enthaltene Ziffern geprüft — eine Vertauschung
+    # ergäbe "1 Kapitel verarbeitet, 2 übersprungen, …" und träfe diesen Vergleich nicht.
+    assert (
+        balance[-1] == "Insgesamt 2 Kapitel verarbeitet, 1 übersprungen, 4 zum Lernen gewählt."
     ), "\n".join(balance)
 
 

@@ -466,20 +466,26 @@ def _write_chapter_range_summary(
 ) -> None:
     """Bilanz am Ende eines `--chapters`-Laufs (bauplan-phase2.md AP 5): je verarbeitetem
     Kapitel eine Zeile mit Wort-, Wendungs- und Kartenzahl, je übersprungenem eine mit
-    seinem Grund, zuletzt eine Gesamtzeile."""
+    seinem Grund, zuletzt eine Gesamtzeile.
+
+    (Nachbesserung Durchsicht 1092335, L2): „zum Lernen gewählt“ statt „gelernt“ — an
+    dieser Stelle steht `outcome.card_count`/`total_cards`, die Zahl der in der Triage
+    für „lernen“ entschiedenen und exportierten Karten, nicht, ob Anki sie inzwischen
+    tatsächlich gelernt hat."""
     write_line("Bilanz über den Kapitelbereich:")
     for outcome in outcomes:
         write_line(
             f"  Kapitel {outcome.chapter_number}: {_format_count(outcome.word_count)} Wörter, "
             f"{_format_count(outcome.expression_count)} Wendungen, "
-            f"{_format_count(outcome.card_count)} Karten gelernt."
+            f"{_format_count(outcome.card_count)} zum Lernen gewählt."
         )
     for skip in skipped:
         write_line(f"  Kapitel {skip.number}: übersprungen — {skip.skip_reason}.")
     total_cards = sum(outcome.card_count for outcome in outcomes)
     write_line(
         f"Insgesamt {_format_count(len(outcomes))} Kapitel verarbeitet, "
-        f"{_format_count(len(skipped))} übersprungen, {_format_count(total_cards)} Karten gelernt."
+        f"{_format_count(len(skipped))} übersprungen, "
+        f"{_format_count(total_cards)} zum Lernen gewählt."
     )
 
 
@@ -799,10 +805,16 @@ def _run_one_chapter(
     Herausgelöst aus `_run` (bauplan-phase2.md AP 5), damit `--chapters` diesen Rumpf
     mehrfach durchläuft, ohne das Sprachmodell erneut zu laden oder je Kapitel eine neue
     Profilverbindung zu öffnen — `con` und `nlp` gehören dem Aufrufer und werden hier nur
-    benutzt, nie geschlossen. Genau daran hängt Abnahmekriterium 2 (konzept.md,
-    bauplan-phase2.md, Abschnitt 9): Nur eine **fortbestehende** Profilverbindung auf
-    derselben Datei sieht die „kenne ich"-Buchungen eines früheren Kapitels, bevor sie das
-    nächste nach ihnen filtert.
+    benutzt, nie geschlossen.
+
+    (Nachbesserung Durchsicht 1092335, L1): Abnahmekriterium 2 (konzept.md,
+    bauplan-phase2.md, Abschnitt 9) trägt nicht die fortbestehende Verbindung selbst,
+    sondern dass jede Buchung sofort committet — `profile.record_event`,
+    `interaction.ensure_chapter_row` und `profile.record_card` committen je Aufruf, und
+    `pipeline.run_chapter` öffnet für die Wortschatzermittlung ohnehin eine eigene
+    Verbindung auf **dieselbe** Datei. Eine frische Verbindung je Kapitel auf derselben
+    Datei sähe die „kenne ich"-Buchungen eines früheren Kapitels also ebenso; die eine
+    Verbindung hier spart nur das wiederholte Öffnen.
 
     Scheitert die Triage mitten im Lauf, exportiert diese Funktion die bis dahin
     entschiedenen Karten als Teilexport dieses einen Kapitels und reicht die Ausnahme
@@ -1193,9 +1205,10 @@ def _run(
     get_model_name = model.cached_resolver(cfg.model_url, cfg.model_name)
     output_dir = args.output_dir or Path.cwd()
 
-    # Eine Profilverbindung für den gesamten Kapitelbereich (bauplan-phase2.md AP 5,
-    # Abnahmekriterium 2): Nur so sieht ein späteres Kapitel die „kenne ich"-Buchungen
-    # eines früheren, bevor `_run_one_chapter` seine Auswahlliste bildet.
+    # Eine Profilverbindung für den gesamten Kapitelbereich (bauplan-phase2.md AP 5):
+    # spart nur das wiederholte Öffnen, nicht die Sichtbarkeit der Buchungen — die trägt
+    # der Commit je Aufruf in `profile.record_event`/`record_card` (siehe
+    # `_run_one_chapter` oben, Nachbesserung Durchsicht 1092335, L1).
     con = profile.open_profile(cfg.profile_path)
     outcomes: list[_ChapterRunOutcome] = []
     try:
