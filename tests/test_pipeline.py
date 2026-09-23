@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -582,6 +583,37 @@ def test_run_chapter_marks_every_candidate_unknown_against_a_fresh_profile(
     assert bank.status
     for entry in result.entries:
         assert all(status == profile.VocabularyStatus.UNKNOWN for status in entry.status.values())
+
+
+def test_run_chapter_with_profile_read_only_does_not_create_a_missing_profile(
+    pipeline_epub: Path, mini_dictionary_db: Path, profile_path: Path, nlp: Language
+) -> None:
+    """Nachbesserung Durchsicht 3b1e201, Befund 2: `profile_read_only=True` reicht
+    unverändert an `profile.open_profile(read_only=True)` durch (`run_chapter`s
+    Docstring) — `assess_book` setzt das Flag, weil sein eigener, vorangestellter
+    Lesezugriff die Profildatei schon geprüft hat und der interne `run_chapter`-Aufruf sie
+    nicht zusätzlich schreibend anfassen soll. Ohne Profildatei bricht der Aufruf deshalb
+    ab, statt (wie im Vorgabe-Schreibzugriff) eine neue anzulegen.
+
+    Verfälschungsprobe (Bericht): `profile_read_only=profile_read_only` im internen
+    `profile.open_profile`-Aufruf durch das feste `profile_read_only=False` ersetzt ließ
+    diesen Test rot werden — statt der erwarteten `FileNotFoundError` lief der Aufruf
+    durch und legte die Profildatei klaglos an."""
+    assert not profile_path.is_file()
+
+    with pytest.raises(FileNotFoundError, match="Profildatei nicht vorhanden"):
+        pipeline.run_chapter(
+            epub_path=pipeline_epub,
+            chapter_number=1,
+            dictionary_path=mini_dictionary_db,
+            profile_path=profile_path,
+            nlp=nlp,
+            profile_read_only=True,
+        )
+
+    assert not profile_path.is_file(), (
+        "run_chapter hat trotz profile_read_only=True eine Profildatei angelegt"
+    )
 
 
 def test_run_chapter_reflects_a_known_event_recorded_before_the_run(
@@ -2624,6 +2656,51 @@ def test_write_vocabulary_preset_with_no_answer_writes_nothing(
     assert not profile_path.exists()
 
 
+def test_write_vocabulary_preset_rejects_a_naive_timestamp_before_touching_the_profile(
+    mini_dictionary_db: Path, profile_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Befund 7, Nachbesserung Durchsicht 3b1e201: Ein Zeitstempel ohne Zeitzone bricht ab,
+    **bevor** `profile.open_profile` die Profildatei überhaupt anlegt — sonst bliebe eine
+    leere, aber existierende Profildatei liegen (`profile.open_profile`s Schreibzweig
+    committet das Schema, bevor `record_preset` beginnt), und der nächste normale Lauf
+    erkennt ein vorhandenes Profil nur an seiner Dateiexistenz, fragt also nie wieder nach
+    Niveau und Vorbelegung. Über den einzigen echten Aufrufer
+    (`cli.main._apply_vocabulary_preset`, immer `datetime.now(UTC)`) ist das nicht
+    erreichbar — dieser Test ruft die Funktion direkt auf, wie es ein Messskript ohne
+    diesen Schutz täte (Kaltstart-Hinweis dieser Nachbesserung: `make_profile.py` „braucht
+    einen Zeitstempel mit Zeitzone, sonst bleibt ein leeres Profil liegen").
+
+    Beide Nachschlagewege werden hier durch eine Attrappe ersetzt, die bei jedem Aufruf
+    abbricht — der erwartete `ValueError` tritt nur ein, wenn die Zeitstempelprüfung sie
+    nie erreicht.
+
+    Verfälschungsprobe (Bericht): die neue `if timestamp.tzinfo is None: raise …`-Prüfung
+    aus `write_vocabulary_preset` entfernt ließ diesen Test rot werden — statt der
+    erwarteten Ausnahme lief der Aufruf durch (`profile.record_event`s eigene, spätere
+    Prüfung hätte zwar auch noch abgebrochen, aber erst nach dem Anlegen der Profildatei,
+    siehe oben) und `profile_path.exists()` traf zu."""
+
+    def _must_not_be_called(*args: object, **kwargs: object) -> list[object]:
+        raise AssertionError("nachgeschlagen, bevor der Zeitstempel geprüft war")
+
+    monkeypatch.setattr(dictionary, "pos_variant_lists", _must_not_be_called)
+    monkeypatch.setattr(dictionary, "contiguous_candidates", _must_not_be_called)
+    naive_timestamp = datetime(2026, 9, 23, 12, 0)
+    assert naive_timestamp.tzinfo is None, "Testvoraussetzung: der Zeitstempel ist naiv"
+
+    with pytest.raises(ValueError, match="keine Zeitzone"):
+        pipeline.write_vocabulary_preset(
+            dictionary_path=mini_dictionary_db,
+            profile_path=profile_path,
+            cefr_level=CefrLevel.A1,
+            timestamp=naive_timestamp,
+        )
+
+    assert not profile_path.exists(), (
+        "write_vocabulary_preset hat trotz der Ausnahme eine Profildatei angelegt"
+    )
+
+
 def test_preset_word_count_covers_every_cefr_level() -> None:
     """(Befund a, Durchsicht d8d5954), Regel 13: `write_vocabulary_preset` greift
     ungeschützt auf `PRESET_WORD_COUNT[cefr_level]` zu — fehlte dort ein Niveau, bräche
@@ -3079,11 +3156,6 @@ def test_assess_book_reports_the_same_coverage_as_run_chapter_per_chapter(
         assert chapter.coverage == expected[chapter.number]
         assert chapter.token_count == expected[chapter.number].token_count
         assert chapter.unknown_lemma_count == expected[chapter.number].unknown_lemma_count
-        assert chapter.unknown_per_thousand == pytest.approx(
-            expected[chapter.number].unknown_lemma_count
-            / expected[chapter.number].token_count
-            * 1000
-        )
 
 
 def test_assess_book_skips_a_chapter_without_text_and_reports_it(
@@ -3156,16 +3228,6 @@ def test_assess_book_aggregates_over_word_forms_not_as_average_of_chapter_shares
         "Gewichtung."
     )
 
-    # Befund 3 (Durchsicht c6f3875): die Buchzahl ist seit dieser Nachbesserung die
-    # Vereinigung, keine Summe der Kapitelzahlen mehr — Selbstkonsistenz von
-    # unknown_per_thousand gegen das eigene unique_unknown_lemma_count. Die eigentliche
-    # Vereinigungsprobe (mit einer über zwei Kapitel geteilten unbekannten Grundform)
-    # steht in test_assess_book_counts_a_lemma_unknown_in_two_chapters_only_once weiter
-    # unten.
-    assert result.unknown_per_thousand == pytest.approx(
-        result.unique_unknown_lemma_count / total_token_count * 1000
-    )
-
 
 def test_assess_book_raises_for_a_missing_dictionary_file(
     pipeline_epub: Path, tmp_path: Path, profile_path: Path, nlp: Language
@@ -3209,6 +3271,106 @@ def test_assess_book_raises_for_a_missing_profile_file_and_creates_none(
     assert not profile_path.is_file(), (
         "assess_book hat trotz der Ausnahme eine Profildatei angelegt"
     )
+
+
+def test_assess_book_leaves_a_zero_byte_profile_file_untouched_and_aborts(
+    pipeline_epub: Path, mini_dictionary_db: Path, profile_path: Path, nlp: Language
+) -> None:
+    """Befund 2, Nachbesserung Durchsicht 3b1e201: Eine vorhandene, aber 0 Byte große
+    Profildatei bestand die frühere `profile_path.is_file()`-Prüfung — `assess_book`
+    öffnete das Profil vor dieser Behebung erst beim ersten `run_chapter`-Aufruf, und
+    dessen eigener, schreibender `profile.open_profile`-Zugriff legte gegen `user_version
+    == 0` klaglos das volle Schema an (Bericht zu dieser Nachbesserung: 65.536 Byte,
+    `user_version = 2`, Abdeckung „zu schwer" statt eines Abbruchs). Seit dieser Behebung
+    öffnet `assess_book` das Profil **vor** jedem `run_chapter`-Aufruf selbst, wirklich nur
+    lesend (`profile.open_profile(read_only=True)`) — eine 0-Byte-Datei gilt dabei als
+    dasselbe „kein Profil" wie eine fehlende Datei, und bleibt unangetastet.
+
+    Verfälschungsprobe (Bericht): Die Vorprüfung selbst (`profile.open_profile(profile_
+    path, read_only=True).close()`) durch die frühere `if not profile_path.is_file():
+    raise …` ersetzt ließ diesen Test **grün bleiben** — die Zusicherung war zu schwach:
+    `run_chapter`s eigenes `profile_read_only=True` (siehe unten,
+    `test_run_chapter_with_profile_read_only_does_not_create_a_missing_profile`) schützt
+    dieselbe Datei ein zweites Mal, also bleibt das Endergebnis (Ausnahme, Datei bleibt 0
+    Byte) auch bei entfernter Vorprüfung richtig. Geschärft in
+    `test_assess_book_checks_the_profile_before_calling_run_chapter` unten, die
+    `run_chapter` durch eine Attrappe ersetzt, die bei jedem Aufruf abbricht — nur so wird
+    sichtbar, dass die Vorprüfung selbst greift, nicht erst der zweite, nachgelagerte
+    Schutz."""
+    profile_path.touch()
+    assert profile_path.stat().st_size == 0
+
+    with pytest.raises(FileNotFoundError, match="Profildatei nicht vorhanden"):
+        pipeline.assess_book(
+            epub_path=pipeline_epub,
+            dictionary_path=mini_dictionary_db,
+            profile_path=profile_path,
+            nlp=nlp,
+        )
+
+    assert profile_path.stat().st_size == 0, (
+        "assess_book hat die 0-Byte-Profildatei still mit Schema gefüllt"
+    )
+
+
+def test_assess_book_checks_the_profile_before_calling_run_chapter(
+    pipeline_epub: Path,
+    mini_dictionary_db: Path,
+    profile_path: Path,
+    nlp: Language,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Befund 2, Nachbesserung Durchsicht 3b1e201: `assess_book`s eigener Lesezugriff
+    prüft das Profil, **bevor** `list_chapters`/`run_chapter` überhaupt aufgerufen werden
+    (`assess_book`s Docstring: „vor jedem Aufruf von list_chapters/run_chapter"). Isoliert
+    die Vorprüfung von `run_chapter`s eigenem, nachgelagertem Schutz (siehe die schärfere
+    Verfälschungsprobe bei `test_assess_book_leaves_a_zero_byte_profile_file_untouched_
+    and_aborts` oben) — `run_chapter` wird hier durch eine Attrappe ersetzt, die bei jedem
+    Aufruf abbricht.
+
+    Verfälschungsprobe (Bericht): Die Vorprüfung durch `if not profile_path.is_file():
+    raise …` ersetzt ließ diesen Test rot werden — statt der erwarteten
+    `FileNotFoundError` (aus der Vorprüfung) griff die Attrappe, weil `assess_book` bis zum
+    ersten `run_chapter`-Aufruf durchlief."""
+    profile_path.touch()
+
+    def _must_not_be_called(**kwargs: object) -> None:
+        raise AssertionError("run_chapter aufgerufen, bevor das Profil geprüft war")
+
+    monkeypatch.setattr(pipeline, "run_chapter", _must_not_be_called)
+
+    with pytest.raises(FileNotFoundError, match="Profildatei nicht vorhanden"):
+        pipeline.assess_book(
+            epub_path=pipeline_epub,
+            dictionary_path=mini_dictionary_db,
+            profile_path=profile_path,
+            nlp=nlp,
+        )
+
+
+def test_assess_book_does_not_modify_an_existing_valid_profile_file(
+    pipeline_epub: Path, mini_dictionary_db: Path, existing_profile_path: Path, nlp: Language
+) -> None:
+    """Befund 2, Nachbesserung Durchsicht 3b1e201: `assess_book` öffnet ein bestehendes,
+    gültiges Profil ebenfalls nur lesend — bytegleich vor und nach dem Lauf, keine
+    `-journal`/`-wal`-Datei daneben. Ergänzt den 0-Byte-Test oben: Der dort geprüfte
+    Randfall (Version 0, keine Tabelle) ist nicht derselbe Codepfad wie der hier geprüfte
+    Regelfall (Version 2, alle Tabellen vorhanden) — `_check_existing_schema_version`
+    (`libreverbum/profile.py`) läuft für Letzteren, für Ersteren gerade nicht."""
+    before_hash = hashlib.sha256(existing_profile_path.read_bytes()).hexdigest()
+
+    pipeline.assess_book(
+        epub_path=pipeline_epub,
+        dictionary_path=mini_dictionary_db,
+        profile_path=existing_profile_path,
+        nlp=nlp,
+    )
+
+    after_hash = hashlib.sha256(existing_profile_path.read_bytes()).hexdigest()
+    assert after_hash == before_hash, "assess_book hat ein bestehendes Profil verändert"
+    sibling_names = {p.name for p in existing_profile_path.parent.iterdir()}
+    assert f"{existing_profile_path.name}-journal" not in sibling_names
+    assert f"{existing_profile_path.name}-wal" not in sibling_names
 
 
 def test_assess_book_counts_a_lemma_unknown_in_two_chapters_only_once(

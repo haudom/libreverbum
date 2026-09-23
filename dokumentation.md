@@ -151,10 +151,11 @@ Verbindlich, damit nicht „Grundform", „Lemma" und „Basisform" nebeneinande
 | Kapitelübersicht für die Kapitelauswahl (Nummer, Titel, Wortumfang, `skip_reason`, ohne spaCy) | `ChapterListing` (`pipeline.list_chapters`, bauplan-phase2.md AP 4) |
 | Schwierigkeitscheck-Ergebnis für ein Kapitel mit Fließtext (Zeile der Kapiteltabelle) | `ChapterDifficulty` (`pipeline.assess_book`, bauplan-phase2.md AP 7) |
 | Schwierigkeitscheck-Ergebnis fürs ganze Buch (`assess_book`, je Kapitel eine `ChapterDifficulty`, dazu dieselben Größen aggregiert) | `BookDifficulty` |
-| Nebenangabe des Schwierigkeitschecks, je Kapitel und fürs Buch (`unknown_lemma_count / token_count * 1000`) — fürs Buch seit der Nachbesserung der Durchsicht c6f3875 (Befund 3) aus der Vereinigung berechnet, nicht mehr von der Kapitelteilung abhängig | `unknown_per_thousand` |
 | Vereinigung der im ganzen Buch unbekannten Grundformen (`assess_book`, `BookDifficulty`, Befund 3, Durchsicht c6f3875) — ersetzt die vorherige, fehlerhafte Summe der Kapitelzahlen unter demselben Namen | `unique_unknown_lemma_count` |
-| Grundlage der Einordnung des Schwierigkeitschecks (E12; seit der Nachbesserung der Durchsicht c6f3875, Befund 2, die Abdeckung `coverage.share`, nicht mehr `unknown_per_thousand` — Letzteres hing an der Kapitelteilung des Buchs) | `Coverage.share` |
-| Einordnung des Schwierigkeitschecks in eine von drei Stufen (Schwellenworte, ausdrücklich als Vermutung markiert, E12, liegt in `app/`, nicht im Kern) | `DifficultyLevel`, `classify_difficulty` (`app.difficulty`) |
+| Grundlage der Einordnung des Schwierigkeitschecks (E12; seit der Nachbesserung der Durchsicht c6f3875, Befund 2, die Abdeckung `coverage.share`, nicht mehr die frühere Dichte „je 1.000") | `Coverage.share` |
+| Einordnung des Schwierigkeitschecks in eine von drei Stufen (Schwellenworte, ausdrücklich als Vermutung markiert, E12, liegt in `app/`, nicht im Kern; Schwellen seit der Nachbesserung der Durchsicht 3b1e201, Entscheidung A, 92 %/86 % statt 90 %/75 %) | `DifficultyLevel`, `classify_difficulty` (`app.difficulty`) |
+| Nebenangabe des Schwierigkeitschecks — unbekannte Wörter je Seite, Anzeige, nicht Kern, aus der Abdeckung abgeleitet: `(1 − share) × Seitenlänge` (E12, Entscheidung B, Nachbesserung der Durchsicht 3b1e201, 23.09.2026) — ersetzt `unknown_per_thousand`: Das Feld gibt es auf `ChapterDifficulty`/`BookDifficulty` seit dieser Behebung nicht mehr, weil die Dichte „je 1.000" sowohl an der Kapitelteilung (Befund 2, Durchsicht c6f3875) als auch an der Buchlänge (mittel-Befund 1, Durchsicht 3b1e201) hing — `coverage.share` (E5) hängt an keinem von beidem | `unknown_words_per_page` (`app.difficulty`) |
+| Seitenlänge in Wortformen — Vermutung zur Umrechnung, nicht gemessen (E12, Entscheidung B) | `_GUESSED_PAGE_LENGTH_WORD_FORMS = 300` (`app.difficulty`) |
 
 Neue Begriffe kommen hierher, **bevor** der erste Bezeichner damit entsteht.
 

@@ -254,9 +254,25 @@ _TABLE_NAMES = frozenset(
 )
 
 
-def open_profile(path: Path) -> sqlite3.Connection:
+def open_profile(path: Path, *, read_only: bool = False) -> sqlite3.Connection:
     """Öffnet die Profildatei, legt beim ersten Aufruf das vollständige Schema an
     (technik.md §4, „Tabellen im Überblick") und setzt `PRAGMA user_version` (Regel 5).
+
+    `read_only=True` (Nachbesserung Durchsicht 3b1e201, Befund 2, E12, Entscheidung
+    Dominiks 23.09.2026): öffnet tatsächlich nur lesend, über die sqlite-URI
+    `file:…?mode=ro` (`Path.resolve().as_uri()`, korrekt kodiert auch unter Windows mit
+    Laufwerksbuchstaben und Leerzeichen) — kein Anlegen des Schemas mehr möglich, selbst
+    gegen eine gerade erst angelegte, leere Datei. Anlass: `assess_book` öffnete das
+    Profil zwar selbst nie schreibend, rief aber `run_chapter` auf, das über den
+    Schreibzweig unten weiterhin `profile.open_profile` aufrief — gegen eine 0-Byte-Datei
+    (dieselbe `user_version == 0`-Lage wie bei einer echten neuen Profildatei) legte genau
+    dieser Weg klaglos das Schema an, obwohl `assess_book`s eigener Docstring „öffnet das
+    Profil nur lesend und legt nie eine Datei an" versprach. Eine leere oder schemalose
+    Datei (`user_version == 0` ohne Tabellen) gilt in diesem Modus deshalb als **kein**
+    Profil und bricht mit derselben `FileNotFoundError`-Meldung ab wie eine fehlende
+    Datei — nicht mit dem Anlegeverhalten des Schreibzweigs unten. Eine fremde Datei mit
+    Inhalt, aber Schemaversion 0 (etwa eine Kopie von `en-de.sqlite3`), bleibt weiterhin
+    ein `ValueError`, wie im Schreibzugriff auch.
 
     Eine bestehende Datei mit unpassender Schemaversion bricht sichtbar ab (Regel 13)
     statt sie unbemerkt weiterzuverwenden.
@@ -288,6 +304,26 @@ def open_profile(path: Path) -> sqlite3.Connection:
     seit dem 21.08.2026 nach und schließt beim Anlegen die Vorbelegung des
     Grundwortschatzes an (technik.md §11).
     """
+    if read_only:
+        if not path.is_file():
+            raise FileNotFoundError(f"Profildatei nicht vorhanden: {path}")
+        uri = f"{path.resolve().as_uri()}?mode=ro"
+        con = sqlite3.connect(uri, uri=True)
+        con.execute("PRAGMA foreign_keys = ON")
+        version = con.execute("PRAGMA user_version").fetchone()[0]
+        existing_tables = {
+            row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        }
+        if version == 0 and not existing_tables:
+            con.close()
+            raise FileNotFoundError(f"Profildatei nicht vorhanden: {path}")
+        try:
+            _check_existing_schema_version(path, version, existing_tables)
+        except ValueError:
+            con.close()
+            raise
+        return con
+
     if not path.parent.is_dir():
         raise ValueError(
             f"Profilverzeichnis {path.parent} existiert nicht — Verzeichnis anlegen, "
@@ -303,29 +339,43 @@ def open_profile(path: Path) -> sqlite3.Connection:
     # (Befund 2, Review T8): version == 0 wird bei SQLite nie geschrieben, sondern ist der
     # Ausgangswert jeder neuen Datei — eine fremde SQLite-Datei trägt ihn also ebenso wie
     # eine echte, leere Profildatei. Nur die Tabellenmenge unterscheidet beide Fälle.
-    if version == 0:
-        if existing_tables:
-            con.close()
-            raise ValueError(
-                f"Profildatei {path} hat Schemaversion 0, enthält aber bereits die "
-                f"Tabelle(n) {', '.join(sorted(existing_tables))} — vermutlich keine leere "
-                "Profildatei, sondern eine fremde oder vorversionierte SQLite-Datei. "
-                "Abbruch, statt sie zu überschreiben."
-            )
+    if version == 0 and not existing_tables:
         con.executescript(_SCHEMA)
         con.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         con.commit()
-    elif version == SCHEMA_VERSION:
+        return con
+    try:
+        _check_existing_schema_version(path, version, existing_tables)
+    except ValueError:
+        con.close()
+        raise
+    return con
+
+
+def _check_existing_schema_version(path: Path, version: int, existing_tables: set[str]) -> None:
+    """Gemeinsamer Prüfkern von `open_profile` für Lese- und Schreibzugriff (Nachbesserung
+    Durchsicht 3b1e201, Befund 2): die drei Fälle, in denen beide Zugriffsarten gleich
+    urteilen — Schemaversion 0 mit bereits vorhandenem Inhalt (eine fremde Datei, keine
+    leere Profildatei), eine zu alte und eine zu neue Fassung. Den vierten Fall
+    (Version 0, keine einzige Tabelle) behandeln die Aufrufer verschieden — Schema anlegen
+    im Schreibzugriff, `FileNotFoundError` („kein Profil") im Lesezugriff — und rufen diese
+    Funktion für ihn deshalb gar nicht erst auf."""
+    if version == 0:
+        raise ValueError(
+            f"Profildatei {path} hat Schemaversion 0, enthält aber bereits die "
+            f"Tabelle(n) {', '.join(sorted(existing_tables))} — vermutlich keine leere "
+            "Profildatei, sondern eine fremde oder vorversionierte SQLite-Datei. "
+            "Abbruch, statt sie zu überschreiben."
+        )
+    if version == SCHEMA_VERSION:
         missing_tables = _TABLE_NAMES - existing_tables
         if missing_tables:
-            con.close()
             raise ValueError(
                 f"Profildatei {path} hat Schemaversion {version}, es fehlen aber die "
                 f"Tabelle(n) {', '.join(sorted(missing_tables))} — vermutlich eine fremde "
                 "Datei mit zufällig passender Versionsnummer."
             )
     elif version < SCHEMA_VERSION:
-        con.close()
         raise ValueError(
             f"Profildatei {path} hat Schemaversion {version}, erwartet {SCHEMA_VERSION} — "
             "eine ältere Profilfassung wird nicht stillschweigend weiterverwendet. Dieses "
@@ -333,12 +383,10 @@ def open_profile(path: Path) -> sqlite3.Connection:
             "wer den Inhalt übernehmen will, liest ihn mit der alten Programmfassung aus."
         )
     else:
-        con.close()
         raise ValueError(
             f"Profildatei {path} hat Schemaversion {version}, erwartet {SCHEMA_VERSION} — "
             "neuer als von dieser Programmfassung erwartet."
         )
-    return con
 
 
 def _ensure_book(con: sqlite3.Connection, book: Book) -> int:

@@ -12,6 +12,8 @@ from __future__ import annotations
 import enum
 import re
 import sqlite3
+import subprocess
+import sys
 import threading
 import zipfile
 from pathlib import Path
@@ -39,6 +41,8 @@ if TYPE_CHECKING:
 
     from conftest import ModelServerDouble
     from spacy.language import Language
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Ein Kapitel, das nur als Rückgabewert einer `pipeline.run_chapter`-Attrappe dient
 # (`test_run_chapter_with_progress_*` unten) — die Attrappe rechnet nichts, sie meldet nur
@@ -2568,7 +2572,8 @@ def test_assess_reports_a_table_and_a_book_line_without_prompting(
     assert any(line.strip().startswith("Kapitel 2") for line in written)
     book_lines = [line for line in written if line.startswith("Buch:")]
     assert len(book_lines) == 1, "\n".join(written)
-    assert "je 1.000" in book_lines[0]
+    assert "je Seite" in book_lines[0]
+    assert "Wörter zu lernen" in book_lines[0]
     assert "Einordnung:" in book_lines[0]
 
 
@@ -2659,13 +2664,29 @@ def test_assess_aborts_with_a_german_message_and_creates_no_profile_when_none_ex
     assert not profile_path.is_file(), "assess hat trotz Abbruch eine Profildatei angelegt"
 
 
-def _crafted_book_difficulty(share: float) -> pipeline.BookDifficulty:
+def _crafted_book_difficulty(
+    share: float, *, chapter_share: float = 0.5
+) -> pipeline.BookDifficulty:
     """Baut ein `BookDifficulty` mit vorgegebener Abdeckung, ohne einen echten
     `assess_book`-Lauf — für
     `test_assess_prints_the_difficulty_label_that_matches_the_measured_coverage`, das nur
     die Umsetzung der Einordnung in `cli._write_assess_result` prüft, nicht `assess_book`
-    selbst (dafür stehen die Tests in `tests/test_pipeline.py`)."""
+    selbst (dafür stehen die Tests in `tests/test_pipeline.py`).
+
+    `chapter_share` (Vorgabe `0.5`, Befund 3, Nachbesserung Durchsicht 3b1e201): Vor dieser
+    Behebung trugen Kapitel- und Buchzeile hier dasselbe `Coverage`-Objekt — eine
+    Einordnung, die versehentlich `chapters[0].coverage.share` statt der Buchabdeckung
+    einsetzte, wäre unbemerkt geblieben, weil beide Werte identisch waren. Die Vorgabe
+    (0.5, `HARD`) liegt bei den in diesem Modul verwendeten Buchabdeckungen (0.95, `EASY`)
+    absichtlich in einer anderen `DifficultyLevel`-Stufe."""
     chapter_coverage = pipeline.Coverage(
+        token_count=100,
+        understood_tokens=round(chapter_share * 100),
+        unknown_lemma_count=3,
+        share=chapter_share,
+        share_after_learning=chapter_share,
+    )
+    book_coverage = pipeline.Coverage(
         token_count=100,
         understood_tokens=round(share * 100),
         unknown_lemma_count=3,
@@ -2677,7 +2698,6 @@ def _crafted_book_difficulty(share: float) -> pipeline.BookDifficulty:
         title="Kapitel eins",
         token_count=100,
         unknown_lemma_count=3,
-        unknown_per_thousand=30.0,
         coverage=chapter_coverage,
     )
     return pipeline.BookDifficulty(
@@ -2685,8 +2705,7 @@ def _crafted_book_difficulty(share: float) -> pipeline.BookDifficulty:
         skipped=[],
         token_count=100,
         unique_unknown_lemma_count=3,
-        unknown_per_thousand=30.0,
-        coverage=chapter_coverage,
+        coverage=book_coverage,
     )
 
 
@@ -2731,6 +2750,32 @@ def test_assess_prints_the_difficulty_label_that_matches_the_measured_coverage(
     assert len(book_lines) == 1, "\n".join(written)
     assert "leicht (Vermutung)" in book_lines[0], book_lines[0]
     assert "95,0 %" in book_lines[0], book_lines[0]
+
+
+def test_python_dash_m_cli_main_actually_runs_main() -> None:
+    """Befund 6, Nachbesserung Durchsicht 3b1e201: `cli/main.py` hatte keinen
+    `__main__`-Block — `python -m cli.main` endete lautlos mit Exit 0, ohne dass `main()`
+    je lief, und das hat einen Durchsehenden schon getäuscht (Bericht zu dieser
+    Nachbesserung: „läuft, keine Ausgabe" bei einer 0-Byte-Profildatei gehalten).
+    `python -m cli` (`cli/__main__.py`, „dünner Aufruf von cli.main") bleibt der
+    vorgesehene Weg — dieser Test prüft nur, dass der direkte Modulaufruf seither
+    sichtbar etwas tut, mit `--help`, damit kein Datenverzeichnis und kein Profil nötig
+    sind.
+
+    Verfälschungsprobe (Bericht): den `if __name__ == "__main__": sys.exit(main())`-Block
+    am Ende von `cli/main.py` wieder entfernt ließ diesen Test rot werden — `--help`
+    lieferte dann weder Ausgabe noch das von `argparse` bei `--help` erwartete Verhalten,
+    das Modul endete lautlos mit Exit 0."""
+    result = subprocess.run(
+        [sys.executable, "-m", "cli.main", "--help"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "usage" in result.stdout.lower(), (result.stdout, result.stderr)
 
 
 def test_assess_prints_the_chapter_progress_as_i_of_n(

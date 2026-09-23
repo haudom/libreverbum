@@ -223,6 +223,15 @@ Wortliste).
 
 ### E12 — Schwierigkeitscheck: welche Maßzahl, welche Worte?
 
+> **Entschieden 23.09.2026 (zweimal nachgebessert):** Die Vorgabe unten — „unbekannte
+> Grundformen je 1.000 Wortformen" als Maßzahl, „22 bis 29 s" Laufzeit — ist durch zwei
+> Nachbesserungen überholt. Die Maßzahl der Einordnung ist seit der Nachbesserung der
+> Durchsicht `c6f3875` die Abdeckung (`Coverage.share`); die Anzeige „je 1.000" ist seit
+> der Nachbesserung der Durchsicht `3b1e201` durch „unbekannte Wörter je Seite" ersetzt,
+> die Schwellen liegen seither bei 92 %/86 % statt 90 %/75 %, und die gemessene Laufzeit
+> liegt bei rund 85 bis 169 s. Gültiger Stand und Begründung: technik.md §14, „E12 —
+> Schwierigkeitscheck: Maßzahl und Profilzugriff".
+
 „Ca. 14 unbekannte Wörter pro Seite" setzt eine Seite voraus, die es im EPUB nicht gibt.
 **Vorgabe:** gemessen werden **unbekannte Grundformen je 1.000 Wortformen** und die
 Abdeckung nach E5, je Kapitel und fürs Buch; der Kern liefert Zahlen, die Oberfläche die
@@ -434,6 +443,9 @@ und Zähler vertauscht → rot. **nach** AP 4 (beide `pipeline.py`).
 **Ziel.** `pipeline.assess_book(*, epub_path, dictionary_path, profile_path, nlp,
 cache_dir, on_progress) -> BookDifficulty` — je Kapitel mit Text: `token_count`,
 `unknown_lemma_count`, `unknown_per_thousand`, `coverage`; fürs Buch dasselbe aggregiert.
+(`unknown_per_thousand` entfiel wieder in der Nachbesserung der Durchsicht `3b1e201`,
+Entscheidung B — „unbekannte Wörter je Seite" wird seither aus `coverage.share` in
+`app.difficulty` berechnet, nicht mehr im Kern mitgeführt; technik.md §14, E12.)
 Läuft Extraktion und Wörterbuchabgleich je Kapitel (nutzt den Zwischenspeicher aus
 technik.md §5), meldet Fortschritt wie `run_chapter`, kein Modellaufruf. Die Kommandozeile
 bekommt `--assess` (E3-Ausnahme): Tabelle je Kapitel, eine Zeile fürs Buch, drei
@@ -680,7 +692,8 @@ ersten wirken im zweiten (Abnahmekriterium 2). **nach** AP 19, AP 4.
 #### AP 21 — Schwierigkeitscheck-Ansicht · M · `gui/`, `app/` (Schwellen), Tests
 
 **Ziel.** Vom Startbildschirm ohne Kapitelwahl erreichbar („Buch prüfen"): Fortschritt,
-dann je Kapitel ein Balken (unbekannte je 1.000) und die Buchzeile mit Einordnung nach E12.
+dann je Kapitel ein Balken (unbekannte Wörter je Seite, `app.difficulty.
+unknown_words_per_page`, Entscheidung B) und die Buchzeile mit Einordnung nach E12.
 **Prüfung.** Schwellenworte aus einer Tabelle in `app/`, mit Test je Grenze. Screenshot mit
 `tools/dorian_gray.epub`. **nach** AP 20, AP 7.
 
@@ -863,7 +876,8 @@ Die Phase ist abgenommen, wenn an echten, DRM-freien EPUBs gelingt:
 3. **Abdeckung** wird angezeigt und stimmt an einem Kapitel mit einer Handrechnung nach E5
    überein
 4. **Schwierigkeitscheck** ordnet zwei Bücher in der Reihenfolge, die das eigene Lesen
-   bestätigt; die Zahl je 1.000 Wortformen steht mit Rezept in technik.md
+   bestätigt; die Zahl unbekannter Wörter je Seite (Entscheidung B, technik.md §14, E12)
+   steht mit Rezept in technik.md
 5. **PDF** entsteht ohne Handgriff und hat dieselbe Blattzahl wie der Browserdruck derselben
    Datei
 6. **Lesezeichen** gedruckt, geschnitten, ins Buch gelegt — lesbar

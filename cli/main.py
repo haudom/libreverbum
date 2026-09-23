@@ -54,6 +54,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import sys
 import threading
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -1085,24 +1086,34 @@ def _write_assess_result(result: pipeline.BookDifficulty, write_line: WriteLine)
     still weggelassen, wie bei `_write_chapter_range_summary` oben.
 
     (Befund 2, Durchsicht c6f3875, E12): Die Einordnung stützt sich seit dieser
-    Nachbesserung auf `result.coverage.share`, nicht mehr auf `result.unknown_per_thousand`
-    — Letzteres hing an der Kapitelteilung des Buchs (`app.difficulty`s Moduldocstring).
+    Nachbesserung auf `result.coverage.share`, nicht mehr auf die frühere Dichte „je 1.000"
+    — Letztere hing an der Kapitelteilung des Buchs (`app.difficulty`s Moduldocstring).
 
     (Befund 3, Durchsicht c6f3875): Die Buchzeile nennt `result.unique_unknown_lemma_count`
-    (Vereinigung, `pipeline.BookDifficulty`s Docstring), nicht mehr `unknown_lemma_count`
-    — das Feld gibt es auf `BookDifficulty` seit dieser Behebung nicht mehr, die frühere
-    Summe wäre ohnehin die falsche Zahl für „so viele Wörter musst du lernen" gewesen.
+    (Vereinigung, `pipeline.BookDifficulty`s Docstring), nicht `unknown_lemma_count` — das
+    Feld gibt es auf `BookDifficulty` nicht, die frühere Summe wäre ohnehin die falsche
+    Zahl für „so viele Wörter musst du lernen" gewesen.
 
     (Befund 5, Durchsicht c6f3875): `_format_decimal` statt `f"{…:.1f}"` — sonst trägt
     derselbe Satz einen Punkt als Tausendertrenner (`_format_count`) und als Dezimalzeichen
-    (`{…:.1f}`) zugleich, zwei widersprüchliche Lesarten nebeneinander."""
+    (`{…:.1f}`) zugleich, zwei widersprüchliche Lesarten nebeneinander.
+
+    **„je Seite" statt „je 1.000 Wortformen"** (Entscheidung B, E12, Nachbesserung der
+    Durchsicht 3b1e201): Beide Zeilen — Kapitel wie Buch — rechnen jetzt über `app.
+    difficulty.unknown_words_per_page` aus der jeweiligen `coverage.share` um, statt das
+    inzwischen entfallene `unknown_per_thousand` (`pipeline.ChapterDifficulty`/
+    `BookDifficulty`) anzuzeigen — einheitlich statt zweier Maßzahlen nebeneinander
+    (Auftragstext). Die Buchzeile nennt `unique_unknown_lemma_count` seither als „Wörter zu
+    lernen" statt als „unbekannte Grundformen" — dieselbe Zahl, aber die Bezeichnung, unter
+    der sie tatsächlich benutzt wird (Entscheidung B)."""
     write_line("Schwierigkeitscheck:")
     for chapter in result.chapters:
         write_line(
             f"  Kapitel {chapter.number} ({chapter.title}): "
             f"{_format_count(chapter.token_count)} Wörter, "
             f"{_format_count(chapter.unknown_lemma_count)} unbekannte Grundformen, "
-            f"{_format_decimal(chapter.unknown_per_thousand)} je 1.000, "
+            f"{_format_decimal(difficulty.unknown_words_per_page(chapter.coverage.share))} "
+            "je Seite, "
             f"Abdeckung {_format_decimal(chapter.coverage.share * 100)} %."
         )
     for listing in result.skipped:
@@ -1111,8 +1122,9 @@ def _write_assess_result(result: pipeline.BookDifficulty, write_line: WriteLine)
     level_label = _DIFFICULTY_LEVEL_LABELS[level]
     write_line(
         f"Buch: {_format_count(result.token_count)} Wörter, "
-        f"{_format_count(result.unique_unknown_lemma_count)} unbekannte Grundformen, "
-        f"{_format_decimal(result.unknown_per_thousand)} je 1.000, "
+        f"{_format_count(result.unique_unknown_lemma_count)} Wörter zu lernen, "
+        f"{_format_decimal(difficulty.unknown_words_per_page(result.coverage.share))} "
+        "je Seite, "
         f"Abdeckung {_format_decimal(result.coverage.share * 100)} % — "
         f"Einordnung: {level_label}."
     )
@@ -1341,3 +1353,12 @@ def main(
         # unabgefangen und zeigt ihren vollen Verlauf.
         write_line(f"Fehler: {error}")
         return 1
+
+
+if __name__ == "__main__":
+    # (Befund 6, Nachbesserung Durchsicht 3b1e201): `python -m cli.main` rief bisher nur
+    # das Modul auf, ohne `main()` je auszuführen — stiller Exit 0 ohne jede Wirkung, ein
+    # Durchsehender hatte das schon für einen erfolgreichen Lauf gehalten. `python -m cli`
+    # (`cli/__main__.py`, „dünner Aufruf von cli.main") bleibt der vorgesehene Weg; dieser
+    # Block macht den direkten Modulaufruf nur nicht mehr lautlos wirkungslos.
+    sys.exit(main())

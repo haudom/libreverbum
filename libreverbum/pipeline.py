@@ -33,9 +33,10 @@ ValueError bei Vorspann-Kapiteln").
 
 Dazu, seit AP 7 (bauplan-phase2.md), `assess_book`: der Buch-Schwierigkeitscheck (E12) —
 ruft `run_chapter` für jedes Kapitel mit Fließtext auf und errechnet mit `coverage` je
-Kapitel und fürs ganze Buch `unknown_per_thousand` und die Abdeckung, kein Modellaufruf.
-Die drei Schwellenworte, die daraus eine Einordnung „zu schwer für dich" machen, liegen in
-`app.difficulty`, nicht hier (E12, technik.md §14, E4).
+Kapitel und fürs ganze Buch die Abdeckung (E5), kein Modellaufruf. Die drei Schwellenworte,
+die daraus eine Einordnung „zu schwer für dich" machen, liegen in `app.difficulty`, nicht
+hier (E12, technik.md §14, E4) — ebenso die Umrechnung der Abdeckung in „unbekannte Wörter
+je Seite" (Entscheidung B, E12, Nachbesserung der Durchsicht 3b1e201).
 
 Voraussetzungen
 ---------------
@@ -483,6 +484,7 @@ def run_chapter(
     nlp: Language,
     cache_dir: Path | None = None,
     on_progress: Callable[[ChapterProgress], None] | None = None,
+    profile_read_only: bool = False,
 ) -> ChapterVocabulary:
     """Ein Durchlauf für ein Kapitel (bauplan.md T15): Wörterbuchdatei vorab prüfen (Befund
     3, Review T15), EPUB-Struktur lesen, das Kapitel mit `chapter_number` auswählen und
@@ -522,7 +524,17 @@ def run_chapter(
     in den Zwischenspeicher, wie es der Aufrufer (der Pfad kommt von außen, technik.md §9)
     über `cache_dir` vorgesehen hat. `cache_dir` bleibt wie jeder andere Pfad Sache des
     Aufrufers — der Kern kennt auch hier keine Vorgabe (`cli` setzt ihn auf
-    `<data_dir>/cache`)."""
+    `<data_dir>/cache`).
+
+    `profile_read_only` (Vorgabe `False`, Nachbesserung Durchsicht 3b1e201, Befund 2):
+    gereicht unverändert an `profile.open_profile` durch. `compare_chapter_vocabulary`
+    unten ist ohnehin „ein reiner Lesezugriff" (dessen eigener Docstring) — für den
+    normalen Aufruf aus `cli._run` bleibt es beim Schreibzugriff, der bei fehlender
+    Profildatei wortlos das Schema anlegt (siehe oben, gewolltes Verhalten dort).
+    `assess_book` setzt das Flag auf `True`: Es hat die Profildatei bereits selbst nur
+    lesend geprüft und will nicht, dass dieser zweite, interne Aufruf hier noch einmal
+    unbemerkt schreibend öffnen könnte, sollte `compare_chapter_vocabulary` sich einmal
+    ändern."""
     if not dictionary_path.is_file():
         raise FileNotFoundError(f"Wörterbuch nicht lesbar: {dictionary_path}")
 
@@ -683,7 +695,7 @@ def run_chapter(
         sense for _, matches in expression_pairs for sense in matches
     ]
 
-    con = profile.open_profile(profile_path)
+    con = profile.open_profile(profile_path, read_only=profile_read_only)
     try:
         status_by_sense = profile.compare_chapter_vocabulary(con, all_candidates)
     finally:
@@ -834,22 +846,27 @@ class ChapterDifficulty:
     """Schwierigkeit eines einzelnen Kapitels **mit** Fließtext, eine Zeile von
     `BookDifficulty.chapters` (bauplan-phase2.md AP 7, E12): „unbekannte Grundformen je
     1.000 Wortformen" statt einer Seite, die es im EPUB nicht gibt (E12, „Schwierigkeitscheck:
-    welche Maßzahl, welche Worte?").
+    welche Maßzahl, welche Worte?") — inzwischen selbst durch „unbekannte Wörter je Seite"
+    abgelöst, siehe unten.
 
     `token_count` und `unknown_lemma_count` sind dieselben Werte wie in `coverage` — als
     eigene Felder hier, weil `cli.main --assess` (E3-Ausnahme) sie unmittelbar für die
     Kapitelzeile der Tabelle braucht, ohne durch `coverage` hindurchzugreifen; die Form ist
-    laut Auftragstext fest so genannt. `unknown_per_thousand` ist `unknown_lemma_count /
-    token_count * 1000`, `0.0` für den praktisch unerreichbaren Fall `token_count == 0`
-    (dieselbe Randfallbehandlung wie `coverage`; `assess_book` schließt ein solches Kapitel
-    aber ohnehin vorher als übersprungen aus, `epub.read_chapter` bricht dafür mit
-    `ChapterWithoutTextError` ab)."""
+    laut Auftragstext fest so genannt.
+
+    **Kein `unknown_per_thousand`-Feld mehr** (Nachbesserung der Durchsicht 3b1e201,
+    Entscheidung B, E12, 23.09.2026): Die Oberfläche zeigt seither „unbekannte Wörter je
+    Seite" statt „je 1.000 Wortformen" — eine Vermutung über die Seitenlänge, reine
+    Anzeige, gehört deshalb nach `app.difficulty.unknown_words_per_page` und rechnet
+    direkt aus `coverage.share` (E5), nicht aus einem zweiten, im Kern mitgeführten Feld
+    (Regel 14: kein zweiter Anwendungsfall für `unknown_per_thousand`, seit „je Seite" auch
+    die Kapitelzeile bedient — zwei nebeneinander geführte Maßzahlen für dieselbe Sache
+    wären die Abstraktion ohne zweiten Anwendungsfall, nicht deren Fehlen)."""
 
     number: int
     title: str
     token_count: int
     unknown_lemma_count: int
-    unknown_per_thousand: float
     coverage: Coverage
 
 
@@ -892,18 +909,27 @@ class BookDifficulty:
     ebenso wenig von der Kapitelteilung abhängig wie `token_count` selbst (anders als die
     frühere Summe, siehe Befund 2 unten).
 
-    **`unknown_per_thousand` fürs Buch bleibt als Nebenangabe, weil sie das jetzt sein
-    darf** (Befund 3: „fürs Buch nur, wenn sie nicht mehr von der Teilung abhängt — sonst
-    weg"): `unique_unknown_lemma_count / token_count * 1000` — beide Operanden sind
-    Eigenschaften des ganzen Buchs, keine Summe über Kapitelgrenzen mehr, und ändern sich
-    deshalb nicht mehr danach, wie viele Kapitel das EPUB deklariert (siehe `assess_book`s
-    Docstring, Befund 2)."""
+    **Kein `unknown_per_thousand`-Feld mehr fürs Buch** (Nachbesserung der Durchsicht
+    3b1e201, mittel-Befund 1): Die vorherige Fassung dieses Docstrings behauptete, die
+    Buchzahl sei „teilungsunabhängig", weil `unique_unknown_lemma_count / token_count *
+    1000` keine Summe über Kapitelgrenzen mehr sei — das stimmte wörtlich, verschwieg aber
+    die eigentliche Abhängigkeit: Kumulativ an `tools/sherlock.epub` mit B1-Vorbelegung
+    gemessen (Kapitel 1 bis 13, Bericht zu dieser Nachbesserung) fällt der Wert von 88,2
+    über 77,0, 69,8 … auf 41,9 — er hängt an der **Buchlänge**, weil die Vereinigung
+    unbekannter Grundformen mit jedem weiteren Kapitel unterproportional wächst (Zipfsches
+    Gesetz: spätere Kapitel wiederholen überwiegend schon gesehene Grundformen), während
+    `token_count` linear wächst. Zwei unterschiedlich lange Bücher mit sonst gleicher
+    Abdeckung ergäben also verschiedene „je 1.000"-Werte — genau die Verwechslung, die
+    schon die Kapitelteilung (Befund 2, Durchsicht c6f3875) unbrauchbar gemacht hatte, nur
+    an einer anderen Stelle. `unique_unknown_lemma_count` bleibt (siehe oben) — nur die
+    daraus abgeleitete Dichte „je 1.000" ist mit dieser Behebung ganz entfallen, zugunsten
+    von `app.difficulty.unknown_words_per_page(coverage.share)` (Entscheidung B, E12): Die
+    Abdeckung selbst ist weder von der Kapitelteilung noch von der Buchlänge abhängig."""
 
     chapters: list[ChapterDifficulty]
     skipped: list[ChapterListing]
     token_count: int
     unique_unknown_lemma_count: int
-    unknown_per_thousand: float
     coverage: Coverage
 
 
@@ -919,8 +945,12 @@ def assess_book(
     """Buch-Schwierigkeitscheck (bauplan-phase2.md AP 7, E12): ganzes Buch gegen das Profil
     halten — „ca. 14 unbekannte Wörter pro Seite, zu schwer für dich" (konzept.md, „Phase
     2"), hier als Abdeckung nach E5 (Grundlage der Einordnung seit der Nachbesserung der
-    Durchsicht c6f3875, Befund 2, `app.difficulty`) und daneben `unknown_per_thousand` je
-    Kapitel und fürs Buch.
+    Durchsicht c6f3875, Befund 2, `app.difficulty`). Die Umrechnung in „unbekannte Wörter
+    je Seite" ist seit der Nachbesserung der Durchsicht 3b1e201 (Entscheidung B, E12)
+    Anzeige, nicht Kern — `Coverage.share` (Kapitel wie Buch) reicht dafür, siehe
+    `app.difficulty.unknown_words_per_page`; `unknown_per_thousand` gibt es auf
+    `ChapterDifficulty`/`BookDifficulty` seit dieser Behebung nicht mehr (Regel 14, kein
+    zweiter Anwendungsfall mehr, siehe deren Docstrings).
 
     Ruft `run_chapter` für jedes Kapitel **mit** Fließtext auf (`list_chapters` liefert die
     Kapitelliste samt `skip_reason`, dieselbe Unterscheidung wie bei `cli.main --chapters`,
@@ -970,29 +1000,44 @@ def assess_book(
     einziges erkanntes Vorkommen riefe das Wörterbuch sonst nie auf und ein fehlendes
     Wörterbuch bliebe hinter einem leeren, aber scheinbar erfolgreichen Ergebnis unbemerkt.
 
-    **Bricht ebenso sichtbar ab, wenn `profile_path` keine lesbare Datei ist — und legt
-    selbst nie eine an** (Befund 1, Durchsicht c6f3875, Entscheidung Dominiks 23.09.2026).
-    Anders als `run_chapter`, das eine fehlende Profildatei bewusst wortlos anlegt
-    (`profile.open_profile`s Docstring: „legt beim ersten Aufruf das vollständige Schema
-    an"), ist das für `assess_book` falsch: Gegen ein leeres, gerade erst angelegtes Profil
-    käme immer „zu schwer" heraus (`tools/sherlock.epub` ohne Profil: 58,4 % Abdeckung,
-    Bericht zu dieser Nachbesserung), die Aussage wäre wertlos, und die still angelegte
-    Datei brächte den nächsten normalen Lauf durcheinander — `cli._run` fragt beim Anlegen
-    eines neuen Profils nach dem Sprachniveau und trägt die Vorbelegung ein
-    (`_apply_vocabulary_preset`), erkennt ein bereits *vorhandenes* Profil aber nur an
-    dessen Dateiexistenz (`profile_is_new = not cfg.profile_path.is_file()`) und fragt
-    dann nie wieder — die Vorbelegung bliebe für immer aus. Der Schutz sitzt deshalb hier
-    im Kern, vor jedem Aufruf von `list_chapters`/`run_chapter`, nicht nur in der
-    Kommandozeile: Ein künftiger zweiter Aufrufer (etwa `gui/`) bekäme sonst dieselbe
-    Falle ungeprüft mit. Was die Ausnahme daraus macht — die deutsche Meldung „Noch kein
-    Profil vorhanden …" —, ist Sache des Aufrufers (technik.md §7, der Kern gibt selbst
-    keinen deutschen Oberflächentext aus); `cli.main._run` prüft dieselbe Bedingung
-    zusätzlich selbst, vor dem Laden von spaCy, um bei fehlendem Profil nicht erst den
-    rund einsekündigen Modell-Ladevorgang zu verschwenden (dasselbe Muster wie der
-    Wörterbuch-Bezug vor jeder anderen Rückfrage).
+    **Bricht ebenso sichtbar ab, wenn `profile_path` kein lesbares Profil ist — und öffnet
+    es dafür wirklich nur lesend, legt selbst nie eine Datei an** (Befund 1, Durchsicht
+    c6f3875, Entscheidung Dominiks 23.09.2026; verschärft in der Nachbesserung der
+    Durchsicht 3b1e201, Befund 2, siehe unten). Anders als `run_chapter`, das eine
+    fehlende Profildatei bewusst wortlos anlegt (`profile.open_profile`s Docstring: „legt
+    beim ersten Aufruf das vollständige Schema an"), ist das für `assess_book` falsch:
+    Gegen ein leeres, gerade erst angelegtes Profil käme immer „zu schwer" heraus
+    (`tools/sherlock.epub` ohne Profil: 58,4 % Abdeckung, Bericht zur Nachbesserung der
+    Durchsicht c6f3875), die Aussage wäre wertlos, und die still angelegte Datei brächte
+    den nächsten normalen Lauf durcheinander — `cli._run` fragt beim Anlegen eines neuen
+    Profils nach dem Sprachniveau und trägt die Vorbelegung ein (`_apply_vocabulary_
+    preset`), erkennt ein bereits *vorhandenes* Profil aber nur an dessen Dateiexistenz
+    (`profile_is_new = not cfg.profile_path.is_file()`) und fragt dann nie wieder — die
+    Vorbelegung bliebe für immer aus. Der Schutz sitzt deshalb hier im Kern, vor jedem
+    Aufruf von `list_chapters`/`run_chapter`, nicht nur in der Kommandozeile: Ein
+    künftiger zweiter Aufrufer (etwa `gui/`) bekäme sonst dieselbe Falle ungeprüft mit.
+    Was die Ausnahme daraus macht — die deutsche Meldung „Noch kein Profil vorhanden …" —,
+    ist Sache des Aufrufers (technik.md §7, der Kern gibt selbst keinen deutschen
+    Oberflächentext aus); `cli.main._run` prüft dieselbe Bedingung zusätzlich selbst, vor
+    dem Laden von spaCy, um bei fehlendem Profil nicht erst den rund einsekündigen
+    Modell-Ladevorgang zu verschwenden (dasselbe Muster wie der Wörterbuch-Bezug vor jeder
+    anderen Rückfrage).
+
+    **Nur `path.is_file()` reichte nicht** (Befund 2, Durchsicht 3b1e201): Gegen eine
+    vorhandene, aber 0 Byte große Profildatei kam die Prüfung oben durch, und der
+    anschließende erste `run_chapter`-Aufruf legte über seinen eigenen, schreibenden
+    `profile.open_profile`-Zugriff klaglos das Schema an — derselbe stille Fehlschlag wie
+    ohne die Prüfung, nur einen Aufruf später. Die Prüfung öffnet die Datei deshalb jetzt
+    tatsächlich (`profile.open_profile(profile_path, read_only=True)`, sqlite-URI
+    `file:…?mode=ro`) und schließt sie sofort wieder — eine leere oder schemalose Datei
+    wirft dabei dieselbe `FileNotFoundError` wie eine ganz fehlende (siehe deren
+    Docstring); jeder nachfolgende `run_chapter`-Aufruf dieser Funktion bekommt zusätzlich
+    `profile_read_only=True` mit, damit auch er keine schreibende Verbindung mehr öffnet,
+    selbst wenn `compare_chapter_vocabulary` sich künftig ändern sollte.
 
     Jeder andere Fehlschlag (ungültige EPUB-Datei, eine Profildatei mit falschem Schema)
-    reicht aus `list_chapters` beziehungsweise `run_chapter` unverändert durch.
+    reicht unverändert durch — seit dieser Behebung schon aus der Prüfung oben, nicht erst
+    aus `list_chapters`/`run_chapter`.
 
     Ein reiner Lesezugriff aufs Profil — jetzt auch im Sinne von Regel 4
     (dokumentation.md §4: „Profil und Wörterbuch in getrennten Dateien"), nicht nur im
@@ -1006,10 +1051,10 @@ def assess_book(
     auf die AP 5s Abnahmekriterium 2 abzielt."""
     if not dictionary_path.is_file():
         raise FileNotFoundError(f"Wörterbuch nicht lesbar: {dictionary_path}")
-    if not profile_path.is_file():
-        # (Befund 1, Durchsicht c6f3875, siehe oben): kein `profile.open_profile`-Aufruf
-        # vor dieser Zeile — sonst legte schon die Prüfung selbst die Datei an.
-        raise FileNotFoundError(f"Profildatei nicht vorhanden: {profile_path}")
+    # (Befund 2, Durchsicht 3b1e201, siehe oben): ein wirklich nur lesender Zugriff über
+    # die sqlite-URI file:…?mode=ro — eine 0-Byte-Datei schreibt hier nichts mehr still,
+    # sondern gilt als dieselbe Randbedingung wie eine ganz fehlende Datei.
+    profile.open_profile(profile_path, read_only=True).close()
 
     listings = list_chapters(epub_path)
     total_chapters_with_text = sum(1 for listing in listings if listing.skip_reason is None)
@@ -1053,20 +1098,15 @@ def assess_book(
             nlp=nlp,
             cache_dir=cache_dir,
             on_progress=_relabel_progress if on_progress is not None else None,
+            profile_read_only=True,
         )
         chapter_coverage = coverage(vocabulary)
-        unknown_per_thousand = (
-            chapter_coverage.unknown_lemma_count / chapter_coverage.token_count * 1000
-            if chapter_coverage.token_count
-            else 0.0
-        )
         chapters.append(
             ChapterDifficulty(
                 number=listing.number,
                 title=listing.title,
                 token_count=chapter_coverage.token_count,
                 unknown_lemma_count=chapter_coverage.unknown_lemma_count,
-                unknown_per_thousand=unknown_per_thousand,
                 coverage=chapter_coverage,
             )
         )
@@ -1083,15 +1123,11 @@ def assess_book(
     total_understood_tokens = sum(chapter.coverage.understood_tokens for chapter in chapters)
     total_unique_unknown_lemma_count = len(unique_unknown_lemmas)
     book_share = total_understood_tokens / total_token_count if total_token_count else 1.0
-    book_unknown_per_thousand = (
-        total_unique_unknown_lemma_count / total_token_count * 1000 if total_token_count else 0.0
-    )
     return BookDifficulty(
         chapters=chapters,
         skipped=skipped,
         token_count=total_token_count,
         unique_unknown_lemma_count=total_unique_unknown_lemma_count,
-        unknown_per_thousand=book_unknown_per_thousand,
         coverage=Coverage(
             token_count=total_token_count,
             understood_tokens=total_understood_tokens,
@@ -1622,9 +1658,35 @@ def write_vocabulary_preset(
     `preset`-Ereignis. Dass es beim einen Aufruf bleibt, stellt der Aufrufer sicher.
 
     Schreibt über `profile.record_preset` in einer einzigen Transaktion (ganz oder gar
-    nicht) und liefert `PresetResult` mit allen vier Zählungen."""
+    nicht) und liefert `PresetResult` mit allen vier Zählungen.
+
+    **`timestamp` ohne Zeitzone wird abgelehnt, bevor `profile.open_profile` die
+    Profildatei überhaupt anlegt** (Befund 7, Nachbesserung Durchsicht 3b1e201): `profile.
+    record_event` (aufgerufen aus `profile.record_preset` unten) prüft `timestamp.tzinfo`
+    zwar ebenfalls, aber `profile.open_profile` legt bei einer noch nicht vorhandenen
+    Profildatei das volle Schema an und **committet es**, bevor `record_preset` überhaupt
+    beginnt (`profile.open_profile`s Docstring, Schreibzweig) — ein danach scheiternder
+    Aufruf ließe sonst eine leere, aber existierende Profildatei zurück, und `cli._run`
+    erkennt ein vorhandenes Profil allein an seiner Dateiexistenz (`profile_is_new = not
+    cfg.profile_path.is_file()`), fragte also nie wieder nach Niveau und Vorbelegung. Über
+    den einzigen echten Aufrufer (`cli.main._apply_vocabulary_preset`, immer `datetime.
+    now(UTC)`) ist das nicht erreichbar — dort räumt zusätzlich ein eigenes `except`
+    dieselbe Falle für jeden anderen Fehlschlag auf (dessen Docstring, Befund mittel 1,
+    Durchsicht ee34796). Ein direkter Aufruf dieser Funktion mit einem naiven Zeitstempel
+    (etwa aus einem Messskript) bliebe ohne diese Prüfung trotzdem ungeschützt — die
+    Vorbedingung gehört deshalb hierher, nicht nur zum einen bekannten Aufrufer."""
     if cefr_level is None:
         return PresetResult(lemma_pos_pairs=0, senses=0, covered_lemmas=0, total_lemmas=0)
+
+    if timestamp.tzinfo is None:
+        # (Befund 7, Nachbesserung Durchsicht 3b1e201, siehe oben): dieselbe Vorbedingung
+        # wie profile.record_event (dessen Meldung im Wortlaut), hier vor jedem
+        # Dateizugriff geprüft statt erst nach dem Anlegen des Schemas.
+        raise ValueError(
+            f"Zeitstempel {timestamp.isoformat()!r} hat keine Zeitzone — erwartet wird ein "
+            "zeitzonenbehafteter Zeitstempel (UTC), siehe "
+            'entities.Event, „timestamp ist zeitzonenbehaftet".'
+        )
 
     # (Befund b, Durchsicht d8d5954): Die billige Prüfung vor die teure Arbeit — dasselbe
     # Muster wie in `run_chapter` für die Wörterbuchdatei (Befund 3, Review T15). Ohne sie

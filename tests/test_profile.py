@@ -219,6 +219,103 @@ def test_a_versioned_file_missing_a_single_profile_table_is_rejected(
         profile.open_profile(path)
 
 
+def test_open_profile_read_only_rejects_a_missing_file(tmp_path: Path) -> None:
+    """Nachbesserung Durchsicht 3b1e201, Befund 2: `read_only=True` legt nie eine Datei
+    an — eine fehlende Profildatei bricht mit derselben `FileNotFoundError` ab wie im
+    Schreibzugriff, statt über die sqlite-URI eine neue Datei zu öffnen (SQLite legt eine
+    fehlende Datei sonst anstandslos an, auch schreibgeschützt geöffnet)."""
+    missing = tmp_path / "profil.sqlite3"
+
+    with pytest.raises(FileNotFoundError, match="Profildatei nicht vorhanden"):
+        profile.open_profile(missing, read_only=True)
+
+    assert not missing.exists()
+
+
+def test_open_profile_read_only_treats_an_empty_file_as_no_profile_and_leaves_it_untouched(
+    tmp_path: Path,
+) -> None:
+    """Nachbesserung Durchsicht 3b1e201, Befund 2: Eine vorhandene, aber 0 Byte große
+    Datei — dieselbe `user_version == 0`-Lage wie eine echte neue Profildatei — gilt im
+    Lesezugriff als „kein Profil" (`FileNotFoundError`), statt wie im Schreibzugriff das
+    Schema angelegt zu bekommen. Die Datei bleibt dabei unverändert 0 Byte groß.
+
+    Verfälschungsprobe (Bericht): `read_only`s Zweig in `open_profile` entfernt (jeder
+    Aufruf läuft über den Schreibzweig) ließ diesen Test rot werden — die Datei wuchs auf
+    65.536 Byte, und es kam keine Ausnahme."""
+    path = tmp_path / "profil.sqlite3"
+    path.touch()
+    assert path.stat().st_size == 0
+
+    with pytest.raises(FileNotFoundError, match="Profildatei nicht vorhanden"):
+        profile.open_profile(path, read_only=True)
+
+    assert path.stat().st_size == 0
+
+
+def test_open_profile_read_only_rejects_a_zero_version_file_with_foreign_content(
+    tmp_path: Path,
+) -> None:
+    """Nachbesserung Durchsicht 3b1e201, Befund 2: Eine fremde Datei mit eigenen Tabellen,
+    aber Schemaversion 0 (etwa eine Kopie von `en-de.sqlite3`) ist weder „leer" noch ein
+    gültiges Profil — dieselbe Unterscheidung wie im Schreibzugriff
+    (`test_a_foreign_sqlite_file_is_rejected_instead_of_being_overwritten`), hier als
+    `ValueError`, nicht als `FileNotFoundError`, weil die Datei ja nicht fehlt."""
+    path = tmp_path / "fremd.sqlite3"
+    con = sqlite3.connect(path)
+    con.execute("CREATE TABLE translation (id INTEGER PRIMARY KEY, written_rep TEXT)")
+    con.commit()
+    con.close()
+
+    with pytest.raises(ValueError, match="fremde"):
+        profile.open_profile(path, read_only=True)
+
+
+def test_open_profile_read_only_returns_a_connection_that_rejects_writes(tmp_path: Path) -> None:
+    """Nachbesserung Durchsicht 3b1e201, Befund 2: `read_only=True` öffnet über die
+    sqlite-URI `file:…?mode=ro` — ein Schreibversuch auf der zurückgegebenen Verbindung
+    scheitert an SQLite selbst (`sqlite3.OperationalError`), nicht nur an einer
+    Programmkonvention. Das unterscheidet diesen Zugriff von einer gewöhnlichen, im
+    Schreibmodus geöffneten Verbindung, die schlicht nichts schreibt."""
+    path = tmp_path / "profil.sqlite3"
+    profile.open_profile(path).close()
+
+    con = profile.open_profile(path, read_only=True)
+    try:
+        with pytest.raises(sqlite3.OperationalError):
+            con.execute("INSERT INTO learner (id) VALUES (1)")
+    finally:
+        con.close()
+
+
+def test_open_profile_read_only_handles_a_directory_with_spaces_and_a_drive_letter(
+    tmp_path: Path,
+) -> None:
+    """Nachbesserung Durchsicht 3b1e201, Befund 2: Die sqlite-URI (`Path.resolve().
+    as_uri()`) muss auch unter Windows mit Laufwerksbuchstaben und Leerzeichen im Pfad
+    korrekt kodiert sein — `tmp_path` liegt unter Windows bereits unter einem Laufwerk
+    (`C:\\…`), dieser Test legt zusätzlich ein Verzeichnis mit einem Leerzeichen im Namen
+    an.
+
+    Keine Verfälschungsprobe: Eine naive `f"file:{path}?mode=ro"`-Zusammensetzung ohne
+    `Path.resolve().as_uri()` (der naheliegendste Stolperstein) besteht diesen Test unter
+    Windows/SQLite ebenfalls — `sqlite3` nimmt Rückstriche und unkodierte Leerzeichen
+    hier klaglos an, auch als relativer Pfad. Eine echte Unterscheidung bräuchte einen
+    Pfad mit einem URI-Sonderzeichen (`?`, `#`), das ein Profilpfad in der Praxis nicht
+    trägt — dieser Test bleibt deshalb ein reiner Regressionstest für die gewählte
+    Bauweise, keine rot geprüfte Zusicherung (dokumentation.md §5)."""
+    directory = tmp_path / "Verzeichnis mit Leerzeichen"
+    directory.mkdir()
+    path = directory / "profil.sqlite3"
+    profile.open_profile(path).close()
+
+    con = profile.open_profile(path, read_only=True)
+    try:
+        assert con.execute("PRAGMA user_version").fetchone()[0] == profile.SCHEMA_VERSION
+    finally:
+        con.close()
+
+
 def test_rule_4_profile_access_never_opens_the_dictionary_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

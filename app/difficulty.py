@@ -1,23 +1,32 @@
-"""Einordnung des Buch-Schwierigkeitschecks — die drei Schwellenworte aus E12.
+"""Einordnung des Buch-Schwierigkeitschecks — die drei Schwellenworte aus E12, dazu die
+Umrechnung der Abdeckung in „unbekannte Wörter je Seite" (Entscheidung B, E12).
 
 Aufgabe
 -------
-`libreverbum.pipeline.assess_book` liefert Zahlen (`unknown_per_thousand`, `coverage`),
-keine Worte — „ca. 14 unbekannte Wörter pro Seite, zu schwer für dich" (konzept.md, „Phase
-2") ist eine Einordnung, keine Messung, und liegt deshalb hier statt im Kern
-(bauplan-phase2.md AP 7: „Schwellen liegen in `app/`, nicht im Kern"; technik.md §14, E4:
-was der Kern nicht kennen darf, aber beide Oberflächen brauchen, gehört nach `app/`).
+`libreverbum.pipeline.assess_book` liefert Zahlen (`coverage`), keine Worte — „ca. 14
+unbekannte Wörter pro Seite, zu schwer für dich" (konzept.md, „Phase 2") ist eine
+Einordnung und eine Umrechnung für die Anzeige, keine Messung, und liegt deshalb hier statt
+im Kern (bauplan-phase2.md AP 7: „Schwellen liegen in `app/`, nicht im Kern"; technik.md
+§14, E4: was der Kern nicht kennen darf, aber beide Oberflächen brauchen, gehört nach
+`app/`).
 
 **Die Maßzahl der Einordnung ist die Abdeckung, nicht mehr „unbekannte Grundformen je
 1.000"** (Nachbesserung der Durchsicht c6f3875, Befund 2, Entscheidung Dominiks
-23.09.2026, E12): `unknown_per_thousand` fürs Buch ist eine Dichte über die Summe der
-Kapitel-Token, `token_count` schwankt aber mit der Kapitelteilung desselben Buchs — kürzere
-Kapitel drücken über die frühere Summenbildung die Buchzahl nach oben, ohne dass sich am
-Buch selbst etwas ändert (`Dorian Gray` auf Sherlock-Kapitelgröße gebracht: 102,4 → 88,2 je
-1.000; `Dune`, drei sehr lange Kapitel, kam mit 53,2 „angemessen" heraus, obwohl seine
-Abdeckung mit 84,1 % unter Sherlocks 87,3 % liegt — Bericht zu dieser Nachbesserung).
-`coverage.share` (E5, tokenbasiert) ist dagegen unabhängig davon, wie das Buch in Kapitel
-geteilt ist, und deshalb die Grundlage seit dieser Behebung.
+23.09.2026, E12): Die frühere Dichte war eine Rechnung über die Summe der Kapitel-Token
+und schwankte deshalb mit der Kapitelteilung desselben Buchs — kürzere Kapitel drückten
+über die frühere Summenbildung die Buchzahl nach oben, ohne dass sich am Buch selbst etwas
+änderte (`Dorian Gray` auf Sherlock-Kapitelgröße gebracht: 102,4 → 88,2 je 1.000; `Dune`,
+drei sehr lange Kapitel, kam mit 53,2 „angemessen" heraus, obwohl seine Abdeckung mit
+84,1 % unter Sherlocks 87,3 % liegt — Bericht zur Nachbesserung der Durchsicht c6f3875).
+Eine zweite, unabhängige Abhängigkeit derselben Dichte — diesmal von der **Buchlänge**,
+nicht von der Kapitelteilung — fiel erst in der folgenden Durchsicht auf (mittel-Befund 1,
+Durchsicht 3b1e201): Kumulativ an `tools/sherlock.epub` gemessen (B1-Vorbelegung, Bericht
+zu dieser Nachbesserung) fällt der Wert von 88,2 (nach dem ersten Kapitel mit Text) über
+77,0, 69,8 … auf 41,9 (nach allen 13); die Vereinigung unbekannter Grundformen wächst mit
+jedem weiteren Kapitel unterproportional (spätere Kapitel wiederholen überwiegend schon
+gesehene Grundformen), `token_count` dagegen linear. `coverage.share` (E5, tokenbasiert)
+ist von beidem unabhängig und deshalb die Grundlage seit der ersten dieser beiden
+Behebungen.
 
 **Die drei Schwellen sind weiterhin eine Vermutung, keine Messung** (bauplan-phase2.md,
 E12): „Für die Einordnung … werden vorläufig drei Schwellen gesetzt und als Vermutung
@@ -25,6 +34,7 @@ markiert — belastbar wird die Skala erst, wenn sie an drei gelesenen Büchern 
 eigene Empfinden gehalten wurde." Dieses Modul markiert sie entsprechend im Namen
 (`_GUESSED_...`) und im `DifficultyLevel`-Docstring, nicht mit der REGEL-Marke aus
 dokumentation.md §4 — die ist den fünfzehn Regeln vorbehalten, hier gilt keine von ihnen.
+Dieselbe Markierung trägt die Seitenlänge unten, aus demselben Grund.
 
 Voraussetzungen
 ---------------
@@ -35,9 +45,12 @@ Wortformen, nicht die Dichte unverstandener Grundformen.
 Liefert
 -------
 `classify_difficulty` ordnet eine solche Abdeckung einer von drei `DifficultyLevel`-Stufen
-zu. Wie die Stufe im Deutschen heißt, ist Sache der Oberfläche (`cli.main`, künftig
-`gui/`), nicht dieses Moduls — `app/` liefert fertige Werte, keinen Oberflächentext
-(Paket-Docstring, `app/__init__.py`, „Liefert").
+zu. `unknown_words_per_page` rechnet dieselbe Abdeckung in eine Anzeigezahl um — „ca. N
+unbekannte Wörter je Seite" (konzept.md, „Phase 2"), an einer geschätzten Seitenlänge
+gemessen, nicht an einer echten EPUB-Seite (die es dort nicht gibt, E12, „Schwierigkeitscheck:
+welche Maßzahl, welche Worte?"). Wie die Stufe und die Umrechnung im Deutschen heißen, ist
+Sache der Oberfläche (`cli.main`, künftig `gui/`), nicht dieses Moduls — `app/` liefert
+fertige Werte, keinen Oberflächentext (Paket-Docstring, `app/__init__.py`, „Liefert").
 """
 
 from __future__ import annotations
@@ -49,9 +62,13 @@ class DifficultyLevel(enum.Enum):
     """Die drei Einordnungsstufen des Schwierigkeitschecks (bauplan-phase2.md AP 7, E12) —
     Vermutung, nicht gemessen, siehe Moduldocstring. `EASY`: die Abdeckung ist hoch, das
     Buch liest sich weitgehend ohne Nachschlagen. `MODERATE`: spürbar Lücken, aber mit
-    Vorbereitung machbar — der Regelfall, für den LibreVerbum gebaut ist, und der Bereich,
-    in dem die drei gemessenen Bücher mit einer B1-Vorbelegung tatsächlich liegen (siehe
-    unten). `HARD`: „zu schwer für dich" im Wortlaut von E12."""
+    Vorbereitung machbar — der Regelfall, für den LibreVerbum gebaut ist. `HARD`: „zu
+    schwer für dich" im Wortlaut von E12.
+
+    Mit den Schnittpunkten unten (92 %/86 %, seit der Nachbesserung der Durchsicht
+    3b1e201, Entscheidung A) liegt von den drei gemessenen Büchern nur Sherlock mit einer
+    B1-Vorbelegung in `MODERATE` (87,34 %) — Dorian Gray (85,89 %) und Dune (84,10 %)
+    fallen knapp darunter in `HARD` (siehe unten, „Warum 90 %/75 % nicht taugte")."""
 
     EASY = "easy"
     MODERATE = "moderate"
@@ -59,12 +76,12 @@ class DifficultyLevel(enum.Enum):
 
 
 # Vermutung, nicht gemessen (E12, siehe Moduldocstring) — ein Schnittpunkt für „leicht"
-# oberhalb, einer für „zu schwer" darunter der gemessenen B1-Bandbreite, drei Stufen.
+# oberhalb, einer für „zu schwer" darunter, drei Stufen.
 #
 # Rezept: pipeline.assess_book gegen tools/sherlock.epub, tools/dorian_gray.epub und
-# tools/dune.epub, je einmal mit leerem und einmal mit B1-vorbelegtem Profil
-# (pipeline.write_vocabulary_preset(cefr_level=CefrLevel.B1)), .venv/Scripts/python.exe,
-# 22./23.09.2026, Bericht zur Nachbesserung der Durchsicht c6f3875.
+# tools/dune.epub, je einmal mit leerem und einmal mit vorbelegtem Profil
+# (pipeline.write_vocabulary_preset), .venv/Scripts/python.exe, 22./23.09.2026 und
+# 23.09.2026 (Nachbesserung Durchsicht 3b1e201), Berichte zu beiden Nachbesserungen.
 #
 # Gemessene Abdeckung (coverage.share) mit B1-Vorbelegung: Sherlock 87,34 %, Dorian Gray
 # 85,89 %, Dune 84,10 % — drei ganz verschiedene Bücher (Kapitelzahl 13/22/4, mittlere
@@ -79,30 +96,47 @@ class DifficultyLevel(enum.Enum):
 # fortlaufenden Text rund 95 % Abdeckung als „mit Hilfe lesbar" und rund 98 % als
 # „flüssig/ohne Hilfe". Wörtlich übernommen wären diese Schwellen für LibreVerbum
 # **praktisch nie erreichbar**: Jedes Buch trägt einen festen Boden an Wortformen ohne
-# Wörterbucheintrag (Platzhalter, `uncertain`) — an den drei genannten Büchern 1.179 bis
-# 1.876 verschiedene Grundformen, die kein Profil je als „bekannt" ausweisen kann, weil es
-# keine Bedeutung gibt, die gebucht werden könnte. Eigens dafür gemessen (rein
-# wörterbuchbedingte Deckenwerte, unabhängig vom Profil, `floor_check.py`, Bericht zu
-# dieser Nachbesserung): Sherlock 98,07 %, Dorian Gray 97,64 % — selbst ein Leser, der
-# **jedes** Wort mit Wörterbucheintrag kennt, käme über diese Werte nicht hinaus, und liegt
-# damit knapp unter der „flüssig"-Schwelle der Literatur. Ein B1-Leser (84 bis 87 %) ist von
-# dieser Decke so weit entfernt wie von den 95 %/98 % der Literatur selbst entfernt wäre —
-# mit den wörtlichen Literaturschwellen fielen alle drei gemessenen Bücher, obwohl
-# LibreVerbum genau für diesen Fall gebaut ist (`DifficultyLevel.MODERATE`s Dokstring:
-# „der Regelfall"), unter „zu schwer". Die Einordnung wäre dann für den einzigen bisher
-# gemessenen Anwendungsfall bedeutungslos.
+# Wörterbucheintrag (Platzhalter, `uncertain`) — Vereinigung, nicht Summe über Kapitel
+# (Befund 5, Nachbesserung Durchsicht 3b1e201; die frühere Zahl „1.179 bis 1.876" war eine
+# fehlerhafte Kapitelsumme derselben Fehlerfamilie wie Befund 3, Durchsicht c6f3875):
+# Sherlock 742, Dorian Gray 714, Dune 1.593 verschiedene Grundformen, die kein Profil je
+# als „bekannt" ausweisen kann, weil es keine Bedeutung gibt, die gebucht werden könnte.
+# Eigens dafür gemessen (rein wörterbuchbedingte Deckenwerte, unabhängig vom Profil,
+# Bericht zur Nachbesserung der Durchsicht 3b1e201): Sherlock 98,07 %, Dorian Gray 97,64 %,
+# Dune 97,43 % — selbst ein Leser, der **jedes** Wort mit Wörterbucheintrag kennt, käme
+# über diese Werte nicht hinaus, und liegt damit knapp unter der „flüssig"-Schwelle der
+# Literatur. Ein B1-Leser (84 bis 87 %) ist von dieser Decke so weit entfernt wie von den
+# 95 %/98 % der Literatur selbst entfernt wäre — mit den wörtlichen Literaturschwellen
+# fielen alle drei gemessenen Bücher, obwohl LibreVerbum genau für diesen Fall gebaut ist
+# (`DifficultyLevel.MODERATE`s Dokstring: „der Regelfall"), unter „zu schwer". Die
+# Einordnung wäre dann für den einzigen bisher gemessenen Anwendungsfall bedeutungslos.
 #
-# Die beiden Schnittpunkte unten sind deshalb bewusst niedriger als 95 %/98 % gesetzt —
-# nicht an die drei gemessenen Werte selbst angepasst (kein stilles Fitten an die
-# Testdaten): Beide Werte sind runde Zehnprozentschritte, die (a) die gesamte gemessene
-# B1-Bandbreite (84,1 bis 87,3 %) in die Mitte von MODERATE legen, statt sie an einen ihrer
-# Ränder zu drängen, (b) unterhalb der wörterbuchbedingten Deckenwerte (97,6/98,1 %) noch
-# echten Spielraum für EASY lassen, und (c) den Kalibrierwert ohne Profil (58,4 %) klar in
-# HARD einordnen. Ob sie zutreffen, bleibt offen, bis sie an drei **gelesenen** Büchern
-# gegen das eigene Empfinden gehalten wurden (E12) — mit drei nur *gemessenen*, nicht
-# gelesenen Büchern ist das hier nicht zu leisten.
-_GUESSED_EASY_MIN_COVERAGE = 0.90
-_GUESSED_MODERATE_MIN_COVERAGE = 0.75
+# Warum 90 %/75 % nicht taugte (Entscheidung Dominiks 23.09.2026, Nachbesserung der
+# Durchsicht 3b1e201): Mit diesen Schwellen unterschied die Einordnung das **Profil**, nicht
+# das **Buch** — alle drei gemessenen Bücher (87,34 %/85,89 %/84,10 %) fielen bei einer
+# B1-Vorbelegung unter `MODERATE`, weil B1 selbst so viel Boden mitbringt, dass jedes der
+# drei Bücher komfortabel darüberlag; ein Nutzer hätte aus der Einordnung also gelernt,
+# welches Sprachniveau er sich vorbelegt hat, nicht, ob das konkrete Buch für ihn angemessen
+# ist. Zur Probe wurde Sherlock zusätzlich mit den vier übrigen Vorbelegungsstufen gemessen
+# (Rezept oben): A1 77,58 %, A2 82,18 %, B1 87,34 %, B2 90,80 %, C1 92,52 % — eine
+# Einordnung, die selbst diese Spannweite eines einzigen Buchs nicht in mehr als eine Stufe
+# auflöst, sagt wenig über das Buch.
+#
+# Die Schnittpunkte unten (92 %/86 %) sind bewusst so gewählt, dass sie diese Spannweite
+# auflösen — nicht an die drei Buchmessungen selbst gefittet, sondern an Sherlocks eigener
+# Stufenleiter über die fünf Vorbelegungen: 86 % liegt zwischen Sherlocks A2 (82,18 %) und
+# B1 (87,34 %), 92 % zwischen dessen B1 und C1 (92,52 %), sodass B1 (der für LibreVerbum
+# namengebende Regelfall) knapp in `MODERATE` fällt, B2 (90,80 %) ebenfalls, C1 dagegen in
+# `EASY` kippt. Damit ergibt sich an den drei gemessenen Büchern mit B1-Vorbelegung: nur
+# Sherlock `MODERATE`, Dorian Gray und Dune `HARD` — ein Ergebnis, das zwischen den drei
+# Büchern unterscheidet, wo 90 %/75 % es nicht tat. Ob die Schwellen selbst zutreffen,
+# bleibt offen, bis sie an drei **gelesenen** Büchern gegen das eigene Empfinden gehalten
+# wurden (E12) — mit nur *gemessenen*, nicht gelesenen Büchern ist das hier nicht zu
+# leisten; die Schwellen werden deshalb ausdrücklich nicht an diese Messung selbst
+# angepasst (siehe Bericht zu dieser Nachbesserung, „Passe die Schwellen nicht an die
+# Messung an").
+_GUESSED_EASY_MIN_COVERAGE = 0.92
+_GUESSED_MODERATE_MIN_COVERAGE = 0.86
 
 
 def classify_difficulty(share: float) -> DifficultyLevel:
@@ -117,3 +151,34 @@ def classify_difficulty(share: float) -> DifficultyLevel:
     if share >= _GUESSED_MODERATE_MIN_COVERAGE:
         return DifficultyLevel.MODERATE
     return DifficultyLevel.HARD
+
+
+# Vermutung zur Seitengröße, nicht gemessen (E12, Entscheidung B, Nachbesserung der
+# Durchsicht 3b1e201, 23.09.2026) — eine Normseite (Manuskriptseite) trägt grob 250 bis
+# 300 Wörter; das EPUB kennt keine Seite (E12, „Schwierigkeitscheck: welche Maßzahl, welche
+# Worte?"), diese Zahl ist deshalb eine Umrechnungsgröße für die Anzeige, keine Messung an
+# einem echten Layout — dieselbe Lage wie bei den beiden Schwellen oben, dieselbe
+# REGEL-lose Markierung im Namen statt der REGEL-Marke aus dokumentation.md §4.
+_GUESSED_PAGE_LENGTH_WORD_FORMS = 300
+
+
+def unknown_words_per_page(share: float) -> float:
+    """Rechnet eine Abdeckung (`pipeline.Coverage.share`, E5 — Kapitel wie Buch) in
+    „unbekannte Wörter je Seite" um: `(1 − share) × _GUESSED_PAGE_LENGTH_WORD_FORMS`
+    (Entscheidung B, E12, Nachbesserung der Durchsicht 3b1e201) — ersetzt die vorherige
+    Maßzahl „unbekannte Grundformen je 1.000 Wortformen"
+    (`pipeline.ChapterDifficulty`/`BookDifficulty`, früher `unknown_per_thousand`), die
+    sowohl an der Kapitelteilung (Befund 2, Durchsicht c6f3875) als auch an der Buchlänge
+    (mittel-Befund 1, Durchsicht 3b1e201) hing. `share` selbst hängt an keinem von beidem
+    (`Coverage`s Docstring, E5), die Umrechnung erbt diese Eigenschaft, weil sie nur mit
+    einer Konstante multipliziert.
+
+    Bei Sherlock mit B1-Vorbelegung (87,34 % Abdeckung, Bericht zu dieser Nachbesserung)
+    ergibt das rund 38 unbekannte Wörter je Seite — dieselbe Größenordnung wie die im
+    Konzept genannten „ca. 14 unbekannte Wörter pro Seite" (konzept.md, „Phase 2"), auf
+    derselben geschätzten Seitenlänge, nicht auf einer gemessenen.
+
+    Kapitel und Buch benutzen dieselbe Umrechnung (Auftragstext: „Einheitlich ist besser
+    als zwei Maßzahlen nebeneinander") — der Aufrufer übergibt `chapter.coverage.share`
+    beziehungsweise `book.coverage.share`, diese Funktion unterscheidet beide nicht."""
+    return (1 - share) * _GUESSED_PAGE_LENGTH_WORD_FORMS

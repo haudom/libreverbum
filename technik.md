@@ -3718,31 +3718,73 @@ bei 2,41:1 — bei gleichzeitiger Meldung „0 Paare unter 4,5:1" durch das dama
 ### E12 — Schwierigkeitscheck: Maßzahl und Profilzugriff — entschieden 23.09.2026
 
 Zwei Entscheidungen Dominiks aus der Nachbesserung einer Durchsicht von AP 7
-(bauplan-phase2.md AP 7, Durchsicht `c6f3875`, Befunde 1 und 2).
+(bauplan-phase2.md AP 7, Durchsicht `c6f3875`, Befunde 1 und 2), berichtigt und ergänzt
+durch zwei weitere Entscheidungen aus der Nachbesserung der folgenden Durchsicht
+(`3b1e201`, Befunde 1, 2 und 5).
 
 **Maßzahl der Einordnung ist die Abdeckung** (`Coverage.share`, Abschnitt 2 dieses
 Dokuments gilt sinngemäß, E5), nicht mehr „unbekannte Grundformen je 1.000": Letztere
 summierte über Kapitel und hing damit an der Kapitelteilung desselben Buchs — Dune (drei
 Riesenkapitel) kam auf 53,2 „angemessen", obwohl seine Abdeckung (84,1 %) unter Sherlocks
-(87,3 %) liegt. Die drei Schwellen in `app.difficulty` bleiben Vermutung, jetzt auf der
-Abdeckung: `EASY` ab 90 %, `MODERATE` ab 75 %, darunter `HARD` — niedriger als die
-Leseforschung (Hu & Nation 2000, zusammengefasst in Nation 2006: rund 95 %/98 %), weil ein
-fester Boden an Wortformen ohne Wörterbucheintrag (1.179 bis 1.876 je gemessenem Buch) die
-Decke selbst auf rund 97,6 bis 98,1 % begrenzt und ein B1-Leser realistisch bei 84 bis 87 %
-liegt. Rezept: `pipeline.assess_book` gegen `tools/sherlock.epub`, `tools/dorian_gray.epub`,
-`tools/dune.epub`, `.venv/Scripts/python.exe`, je einmal mit `pipeline.
-write_vocabulary_preset(cefr_level=CefrLevel.B1)`, 23.09.2026 — Abdeckung 87,34 %/
-85,89 %/84,10 %, alle `MODERATE`; Laufzeit 65 bis 156 s (statt der zuvor angenommenen 22
-bis 29 s), weil `run_chapter` je Kapitel drei spaCy-Läufe kostet (Einzelwörter,
-Verb-Partikel- und n-Gramm-Kandidaten), nicht einen.
+(87,3 %) liegt. Dieselbe Dichte hing zusätzlich an der **Buchlänge** (mittel-Befund 1,
+Durchsicht `3b1e201`): Kumulativ an Sherlock gemessen fällt sie von 88,2 (erstes Kapitel)
+auf 41,9 (alle 13) — die Vereinigung unbekannter Grundformen wächst mit jedem Kapitel
+unterproportional, `token_count` linear. `Coverage.share` hängt an keinem von beidem.
 
-**`assess_book` öffnet das Profil nur lesend und legt nie eine Datei an** — gegen ein
-leeres, gerade erst angelegtes Profil käme immer „zu schwer" heraus (Sherlock leer: 58,4 %
-Abdeckung). Fehlt die Profildatei, bricht `assess_book` mit `FileNotFoundError` ab;
+**Die drei Schwellen in `app.difficulty` bleiben Vermutung, jetzt auf der Abdeckung: `EASY`
+ab 92 %, `MODERATE` ab 86 %, darunter `HARD`** (Entscheidung A, Nachbesserung der
+Durchsicht `3b1e201`, 23.09.2026; ersetzt die zunächst gesetzten 90 %/75 %) — niedriger als
+die Leseforschung (Hu & Nation 2000, zusammengefasst in Nation 2006: rund 95 %/98 %), weil
+ein fester Boden an Wortformen ohne Wörterbucheintrag (742 bis 1.593 je gemessenem Buch,
+als Vereinigung gezählt — Befund 5, Durchsicht `3b1e201`, siehe unten) die Decke selbst auf
+rund 97,4 bis 98,1 % begrenzt und ein B1-Leser realistisch bei 84 bis 87 % liegt. **Warum
+90 %/75 % nicht taugte:** Damit fielen alle drei mit B1 vorbelegten Bücher unter
+`MODERATE` — die Einordnung unterschied das **Profil**, nicht das **Buch**. Zur Probe
+Sherlock über alle fünf Vorbelegungsstufen gemessen: A1 77,6 %, A2 82,2 %, B1 87,3 %, B2
+90,8 %, C1 92,5 % — mit 92 %/86 % liegt B1 knapp in `MODERATE`, B2 ebenfalls, C1 kippt nach
+`EASY`; von den drei gemessenen Büchern bleibt bei B1-Vorbelegung nur Sherlock `MODERATE`,
+Dorian Gray (85,9 %) und Dune (84,1 %) fallen knapp darunter in `HARD`. Rezept:
+`pipeline.assess_book` gegen `tools/sherlock.epub`, `tools/dorian_gray.epub`,
+`tools/dune.epub`, `.venv/Scripts/python.exe`, je einmal mit `pipeline.
+write_vocabulary_preset(cefr_level=CefrLevel.B1)` beziehungsweise den vier übrigen Stufen
+für Sherlock, 22./23.09.2026 — Laufzeit rund 85 bis 169 s (statt der zuvor angenommenen 22
+bis 29 s, Wanduhrzeit einschließlich Modell-Laden), weil `run_chapter` je Kapitel drei
+spaCy-Läufe kostet (Einzelwörter, Verb-Partikel- und n-Gramm-Kandidaten), nicht einen.
+
+**„Unbekannte Wörter je Seite" ersetzt die Anzeige „je 1.000 Wortformen", einheitlich für
+Kapitel- und Buchzeile** (Entscheidung B, Nachbesserung der Durchsicht `3b1e201`,
+23.09.2026): `app.difficulty.unknown_words_per_page(share) = (1 − share) ×
+_GUESSED_PAGE_LENGTH_WORD_FORMS` (Seitenlänge 300 Wortformen, als Vermutung markiert) —
+Anzeige, nicht Kern, weil das EPUB keine Seite kennt (siehe unten, „Schwierigkeitscheck:
+welche Maßzahl, welche Worte?"). `pipeline.ChapterDifficulty`/`BookDifficulty` führen das
+Feld `unknown_per_thousand` seither nicht mehr (Regel 14: kein zweiter Anwendungsfall,
+seit „je Seite" beide Zeilen bedient). Die Buchzeile nennt zusätzlich
+`unique_unknown_lemma_count` als „N Wörter zu lernen" statt als „unbekannte Grundformen"
+— bei Sherlock B1 rund 38 unbekannte Wörter je Seite, 4.383 Wörter zu lernen.
+
+**Befund 5 (Durchsicht `3b1e201`): die Deckenwerte waren als Kapitelsumme, nicht als
+Vereinigung gezählt.** Die zunächst genannte Spanne „1.179 bis 1.876 verschiedene
+Grundformen ohne Eintrag" verwechselte an einer Stelle sogar die Wortform-Häufigkeit
+(`floor_deficit`, korrekt) mit einer Grundformenzahl. Als Vereinigung nachgezählt (Bericht
+zu dieser Nachbesserung): Sherlock 742 (Deckenwert 98,07 %, bestätigt: 2.024 von 104.713
+Wortformen ohne Eintrag), Dorian Gray 714 (97,64 %), Dune 1.593 (97,43 %, erstmals
+gemessen).
+
+**`assess_book` öffnet das Profil wirklich nur lesend und legt nie eine Datei an** — gegen
+ein leeres, gerade erst angelegtes Profil käme immer „zu schwer" heraus (Sherlock leer:
+58,4 % Abdeckung). Fehlt die Profildatei, bricht `assess_book` mit `FileNotFoundError` ab;
 `cli.main` prüft dieselbe Bedingung zusätzlich selbst und meldet vor dem Laden von spaCy
 „Noch kein Profil vorhanden — der Schwierigkeitscheck braucht dein Profil. Lege es mit
 einem normalen Lauf an, dort wählst du dein Niveau." (Exit-Code 1) — am echten Lauf
-geprüft, keine Profildatei entsteht dabei.
+geprüft, keine Profildatei entsteht dabei. **Verschärft in der Nachbesserung der Durchsicht
+`3b1e201` (Befund 2):** Die ursprüngliche Prüfung testete nur `profile_path.is_file()` —
+gegen eine vorhandene, aber 0 Byte große Profildatei kam sie durch, und der folgende
+`run_chapter`-Aufruf legte über seinen eigenen, schreibenden `profile.open_profile`-Zugriff
+klaglos das Schema an (65.536 Byte, `user_version = 2`, „zu schwer" statt eines Abbruchs).
+`assess_book` öffnet das Profil seither tatsächlich über eine sqlite-URI
+(`profile.open_profile(profile_path, read_only=True)`, `file:…?mode=ro`) — eine leere oder
+schemalose Datei gilt dabei als dasselbe „kein Profil" wie eine fehlende, und jeder
+`run_chapter`-Aufruf aus `assess_book` bekommt `profile_read_only=True` mit.
 
 ### Offene Punkte
 - **Ob Qt Quick für Desktop-Anwendungen bei Sonnet tatsächlich mehr Durchsichtsrunden
