@@ -169,16 +169,18 @@ def test_cli_does_not_import_gui() -> None:
 
 def test_gui_does_not_import_cli() -> None:
     """CLAUDE.md, „Architektur": „cli/ und gui/ importieren sich nicht gegenseitig" — hier
-    die gui-Hälfte. Python bekommt `gui/` erst mit AP 15; bis dahin überspringt sich dieser
-    Test **sichtbar** mit Begründung, genau wie zuvor
-    `test_rule_9_app_package_does_not_import_the_interfaces` vor AP 3 oben.
+    die gui-Hälfte. Seit AP 15 (`gui/app.py`, `gui/workers.py`) hat `gui/` sein erstes
+    Python-Modul und dieser Test prüft echt; der `pytest.skip()` unten greift seither
+    nicht mehr (Befund B12, Durchsicht d993e3e — diese Zeile behauptete nach AP 15 noch
+    das Gegenteil).
 
-    Seit AP 14 (`gui/qml/Theme.qml`, `gui/fonts/`) **gibt es das Verzeichnis**, aber kein
-    Modul darin. `GUI.is_dir()` allein reicht deshalb nicht mehr als Bedingung: Der
+    Seit AP 14 (`gui/qml/Theme.qml`, `gui/fonts/`) gab es das Verzeichnis schon, aber kein
+    Modul darin. `GUI.is_dir()` allein hätte deshalb nicht als Bedingung gereicht: Der
     anschließende `assert modules` wäre rot geworden, obwohl nichts falsch ist — ein
     Fehlschlag, der auf das Anlegen eines Ordners zeigt statt auf einen verbotenen Import
-    (dieselbe Verwechslung wie bei `app/` zwischen AP 1 und AP 3). Geprüft wird deshalb
-    auf das erste Python-Modul, nicht auf das Verzeichnis."""
+    (dieselbe Verwechslung wie bei `app/` zwischen AP 1 und AP 3). Geprüft wird deshalb auf
+    das erste Python-Modul, nicht auf das Verzeichnis — der `skip()` unten bleibt deshalb
+    stehen, für ein künftiges, wieder leeres `gui/`."""
     modules = sorted(GUI.rglob("*.py"))
     if not modules:
         pytest.skip(

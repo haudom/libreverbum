@@ -27,6 +27,12 @@ einer Fläche, und es gibt dafür bewusst kein Token. Es steht deshalb als **ges
 Ausnahme in `ALLOWED_COLOR_WORDS` — unter anderem an zwei bedingten Ausdrücken
 (`ActionButton.qml`, `MessageBox.qml`), die der Test erst seit dieser Fassung überhaupt
 sieht.
+
+**`tests/qml_fixtures/` bleibt ausgeklammert** (Befund B7, Durchsicht d993e3e): Die
+Angriffsvorlagen für `tests/test_gui_screenshot.py` brauchen absichtlich blasse
+Literalfarben — genau das, was diese Regel für `gui/qml/` verbietet. Sie rendern isoliert
+gegen einen eigenen `--qml-dir`, nie gegen `Theme.qml` oder den echten Bestand, und sind
+deshalb kein Verstoß gegen die Regel, die sie hier gar nicht berührt.
 """
 
 from __future__ import annotations
@@ -101,10 +107,15 @@ def qml_without_comments(path: Path) -> list[tuple[int, str]]:
     return lines
 
 
+def _excluded(path: Path) -> bool:
+    """`.venv/` (Fremdcode) und `tests/qml_fixtures/` (Befund B7 — s. Modulkopf)."""
+    return ".venv" in path.parts or "qml_fixtures" in path.parts
+
+
 def test_no_colour_outside_the_theme_file() -> None:
     """technik.md §14: keine Hex-Farbe außerhalb `Theme.qml` — und keine im Bauteil
     gemischte Tönung, kein Farbname."""
-    files = sorted(p for p in REPO.rglob("*.qml") if p != THEME and ".venv" not in p.parts)
+    files = sorted(p for p in REPO.rglob("*.qml") if p != THEME and not _excluded(p))
     assert files, "Keine QML-Datei außerhalb von Theme.qml gefunden — dieser Test prüfte nichts."
     assert THEME.is_file(), f"{THEME} fehlt — die Quelle, gegen die hier geprüft wird."
 
@@ -131,7 +142,7 @@ def test_no_colour_outside_the_theme_file() -> None:
 def test_no_font_family_outside_the_theme_file() -> None:
     """technik.md §14: kein `font.family` außerhalb `Theme.qml` — gemeint ist der Wert.
     Eine Schriftfamilie wird nie benannt, sie kommt aus `Theme.fonts`."""
-    files = sorted(p for p in REPO.rglob("*.qml") if p != THEME and ".venv" not in p.parts)
+    files = sorted(p for p in REPO.rglob("*.qml") if p != THEME and not _excluded(p))
     assert files, "Keine QML-Datei außerhalb von Theme.qml gefunden — dieser Test prüfte nichts."
 
     seen = 0

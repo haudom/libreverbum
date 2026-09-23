@@ -1,9 +1,12 @@
 """Prüft `gui.app.build_engine`: `Main.qml` lädt ohne QML-Warnung (bauplan-phase2.md AP 15
-— „eine falsche Bindung ist sonst der stille Fehlschlag aus Regel 13").
+— „eine falsche Bindung ist sonst der stille Fehlschlag aus Regel 13"), und `gui.app.
+load_fonts`: eine fehlende Schrift bricht ab statt eine Ersatzschrift lautlos hinzunehmen
+(Befund B4, Durchsicht d993e3e).
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -12,6 +15,8 @@ if TYPE_CHECKING:
     from PySide6.QtGui import QGuiApplication
 
 pytestmark = pytest.mark.needs_gui
+
+FONTS = Path(__file__).resolve().parent.parent / "gui" / "fonts"
 
 
 def test_main_qml_loads_without_a_qml_warning(qt_gui_app: QGuiApplication) -> None:
@@ -42,3 +47,80 @@ def test_main_qml_loads_without_a_qml_warning(qt_gui_app: QGuiApplication) -> No
         # hinein — ein liegengebliebener Handler wäre selbst der stille Fehlschlag, gegen
         # den dieser Test antritt.
         qInstallMessageHandler(None)
+
+
+def test_late_qml_warning_reaches_stderr(
+    qt_gui_app: QGuiApplication, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Befund B5 (Durchsicht d993e3e): `main()` liest `warnings` bisher nur ein einziges
+    Mal, bevor `app.exec()` startet — eine Warnung, die erst während der Ereignisschleife
+    auftritt (etwa `console.warn` aus einem späten Rückruf, hier nachgebildet über einen
+    verzögerten `qWarning()`-Aufruf), verschwand bisher spurlos, auch von stderr.
+
+    Verfälschung: die Zeile `print(message, file=sys.stderr)` im Meldungs-Handler von
+    `build_engine` entfernen → `capsys` läse hier nichts, die Zusicherung unten wird rot."""
+    del qt_gui_app
+    from PySide6.QtCore import QEventLoop, QTimer, qInstallMessageHandler, qWarning
+
+    from gui.app import build_engine
+
+    _app, engine, _warnings = build_engine([])
+    try:
+        capsys.readouterr()  # Warnungen aus dem Laden selbst nicht mitzählen
+
+        loop = QEventLoop()
+        QTimer.singleShot(50, lambda: qWarning("spaete Warnung nach dem Laden"))
+        QTimer.singleShot(500, loop.quit)
+        loop.exec()
+
+        captured = capsys.readouterr()
+        assert "spaete Warnung nach dem Laden" in captured.err
+    finally:
+        from PySide6.QtQuick import QQuickWindow
+
+        for root in engine.rootObjects():
+            if isinstance(root, QQuickWindow):
+                root.setVisible(False)
+        qInstallMessageHandler(None)
+
+
+def test_load_fonts_fails_on_an_empty_font_directory(
+    qt_gui_app: QGuiApplication, tmp_path: Path
+) -> None:
+    """Befund B4 (Durchsicht d993e3e): Ein leeres Schriftverzeichnis lief bisher klaglos
+    durch — die Ladeschleife fand keine `*.ttf`-Datei, meldete das nicht, und die
+    Oberfläche zeigte erst am ersten Text ein Ersatzkästchen.
+
+    Verfälschung: `if not families: raise RuntimeError(...)` aus `gui.app.load_fonts`
+    entfernen → dieser Test bekäme keine Ausnahme und würde rot."""
+    del qt_gui_app  # QFontDatabase braucht eine bestehende QGuiApplication
+    from gui.app import load_fonts
+
+    leer = tmp_path / "leer"
+    leer.mkdir()
+
+    with pytest.raises(RuntimeError, match="Keine Schrift"):
+        load_fonts(leer)
+
+
+def test_load_fonts_fails_when_a_theme_font_family_is_missing(
+    qt_gui_app: QGuiApplication, tmp_path: Path
+) -> None:
+    """Befund B4, zweiter Fall: Eine geladene Schriftdatei allein genügt nicht — fehlt eine
+    der beiden von `Theme.qml` genannten Familien (`fonts.book` = Literata, `fonts.ui` =
+    Inter), bricht `load_fonts` jetzt ab, statt mit einer Ersatzschrift lautlos
+    weiterzumachen. Kopiert wird absichtlich nur die echte `Inter`-Datei — die Familie
+    kommt aus dem inneren Namensfeld der Schriftdatei, nicht aus dem Dateinamen.
+
+    Verfälschung: die Prüfung `if fehlend: raise RuntimeError(...)` entfernen → dieser
+    Test bekäme keine Ausnahme und würde rot."""
+    del qt_gui_app
+    from gui.app import load_fonts
+
+    inter_font = next(FONTS.glob("Inter*.ttf"))
+    ohne_literata = tmp_path / "ohne-literata"
+    ohne_literata.mkdir()
+    (ohne_literata / inter_font.name).write_bytes(inter_font.read_bytes())
+
+    with pytest.raises(RuntimeError, match=r"Theme\.fonts nennt"):
+        load_fonts(ohne_literata)

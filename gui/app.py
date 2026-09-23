@@ -31,7 +31,16 @@ Unter `QT_QPA_PLATFORM=offscreen` kennt der Offscreen-Treiber unter Windows von 
 keine einzige Schriftfamilie und meldet das als eigene `QFontDatabase`-Warnung — unabhängig
 davon, ob `load_fonts` erfolgreich war (am Bestand nachgemessen: ohne `QT_QPA_FONTDIR`
 blieb die Warnung auch mit geladenen Schriften stehen). Vorbild `tools/design_mockup/
-shot.py`: `QT_QPA_FONTDIR` zeigt in diesem Fall auf `gui/fonts/`.
+shot.py`: `QT_QPA_FONTDIR` zeigt in diesem Fall auf `gui/fonts/`. Das gilt nur fuer den
+Offscreen-Treiber selbst (`QQuickWindow`, `platform theme`) — `QFontDatabase.addApplicationFont`
+in `load_fonts` unten ist davon unabhaengig und laeuft in jedem Treiber gleich.
+
+# (Befund B4, Durchsicht d993e3e): Ein leeres `gui/fonts/` lief bisher klaglos durch —
+# die Schleife in `load_fonts` fand keine `*.ttf`-Datei und meldete das nicht, die
+# Oberflaeche zeigte erst am ersten Text ein Ersatzkaestchen (Tofu) oder unter
+# `QT_QPA_PLATFORM=offscreen` sogar gar nichts Auffaelliges. `load_fonts` bricht deshalb
+# jetzt ab, wenn keine einzige Schriftfamilie geladen wurde oder eine der beiden von
+# `Theme.qml` (`fonts.book`, `fonts.ui`) genannten Familien nicht darunter ist — Regel 13.
 """
 
 from __future__ import annotations
@@ -56,7 +65,13 @@ def load_fonts(font_dir: Path = FONTS_DIR) -> list[str]:
 
     Muss vor dem Laden von QML laufen (bauplan-phase2.md, Abschnitt 8). Der Rückgabewert
     `-1` ist ein Fehlschlag und wird nicht verschluckt (Regel 13): eine fehlende Schrift
-    bräche sonst erst beim ersten sichtbaren Textfeld auf, ohne erkennbare Ursache."""
+    bräche sonst erst beim ersten sichtbaren Textfeld auf, ohne erkennbare Ursache.
+
+    # REGEL (Befund B4, Durchsicht d993e3e): Zwei weitere stille Fehlschläge derselben
+    # Familie — ein leeres `font_dir` (keine `*.ttf`-Datei, also auch kein `handle < 0`,
+    # die Schleife oben lief einfach klaglos durch) und eine Familie, die `Theme.qml`
+    # nennt (`fonts.book`, `fonts.ui`), aber die keine der geladenen Dateien mitbringt —
+    # beide brechen hier ab statt eine Ersatzschrift lautlos hinzunehmen."""
     from PySide6.QtGui import QFontDatabase
 
     families: list[str] = []
@@ -65,16 +80,54 @@ def load_fonts(font_dir: Path = FONTS_DIR) -> list[str]:
         if handle < 0:
             raise RuntimeError(f"Schrift nicht geladen: {font_path}")
         families.extend(QFontDatabase.applicationFontFamilies(handle))
+
+    if not families:
+        raise RuntimeError(f"Keine Schrift aus {font_dir} geladen (Verzeichnis leer?)")
+
+    fehlend = sorted(name for name in _expected_font_families() if name not in families)
+    if fehlend:
+        raise RuntimeError(
+            f"Theme.fonts nennt {fehlend}, geladen sind nur {sorted(set(families))} aus {font_dir}"
+        )
     return families
+
+
+def _expected_font_families() -> list[str]:
+    """`Theme.fonts.book` und `Theme.fonts.ui` (`gui/qml/Theme.qml`) — die einzigen zwei
+    Familien, die eine Textstelle dieser Richtung je benennt (dokumentation.md §2,
+    „Schriftrolle"). Gelesen wird aus einer eigenen, kurzlebigen `QQmlEngine`, nie aus der
+    laufenden Singleton-Instanz: `load_fonts` läuft vor `engine.load(Main.qml)` (Regel
+    dieses Moduls, siehe Kopf), zu dem Zeitpunkt existiert noch keine."""
+    from PySide6.QtCore import QUrl
+    from PySide6.QtQml import QQmlComponent, QQmlEngine, QQmlProperty
+
+    probe_engine = QQmlEngine()
+    component = QQmlComponent(probe_engine, QUrl.fromLocalFile(str(QML_DIR / "Theme.qml")))
+    theme = component.create()
+    if theme is None:
+        print(f"Theme.qml nicht lesbar: {component.errorString()}", file=sys.stderr)
+        return []
+    return [
+        str(QQmlProperty(theme, "fonts.book").read()),
+        str(QQmlProperty(theme, "fonts.ui").read()),
+    ]
 
 
 def build_engine(
     argv: list[str] | None = None,
+    *,
+    font_dir: Path = FONTS_DIR,
+    context_properties: dict[str, object] | None = None,
 ) -> tuple[QGuiApplication, QQmlApplicationEngine, list[str]]:
     """Baut Anwendung, Schriften und Engine auf und lädt `Main.qml` — ohne `app.exec()`.
 
     Getrennt von `main()`, damit ein Test das Ergebnis (Warnungen, geladene Wurzelobjekte)
-    prüfen kann, ohne eine echte Ereignisschleife laufen zu lassen."""
+    prüfen kann, ohne eine echte Ereignisschleife laufen zu lassen. `context_properties`
+    ist für `tools/gui_screenshot.py` da (bauplan-phase2.md, Befund B6, Durchsicht
+    d993e3e): Das Werkzeug rendert seither über **diese** Aufbaufunktion statt über einen
+    zweiten, eigenen Aufbau — Fenster, Loader und Mindestgröße aus `Main.qml` laufen damit
+    tatsächlich durch die Prüfung. Die Kontexteigenschaften (`appDark`, `appCase`,
+    `appAnimate`) müssen **vor** `engine.load` gesetzt sein, wie beim Mockup-Vorbild."""
     from typing import cast
 
     from PySide6.QtCore import QtMsgType, QUrl, qInstallMessageHandler
@@ -103,13 +156,31 @@ def build_engine(
         del context
         if msg_type in (QtMsgType.QtWarningMsg, QtMsgType.QtCriticalMsg, QtMsgType.QtFatalMsg):
             warnings.append(message)
+            # REGEL (Befund B5, Durchsicht d993e3e): main() liest `warnings` nur ein
+            # einziges Mal, bevor `app.exec()` startet — jede Warnung, die erst während
+            # der Ereignisschleife auftritt (etwa `console.warn` aus einem späten
+            # Rückruf), verschwand bisher spurlos, auch von stderr. Die Zusicherung „QML-
+            # Warnungen gehen nach stderr" (bauplan-phase2.md AP 15) gilt deshalb hier,
+            # sofort bei jeder Meldung, nicht erst über die Liste weiter unten.
+            print(message, file=sys.stderr)
 
     qInstallMessageHandler(on_qt_message)
 
-    load_fonts()
+    load_fonts(font_dir)
 
     engine = QQmlApplicationEngine()
-    engine.warnings.connect(lambda errors: warnings.extend(str(error) for error in errors))
+
+    def on_engine_warnings(errors: list[object]) -> None:
+        for error in errors:
+            text = str(error)
+            warnings.append(text)
+            print(text, file=sys.stderr)  # REGEL (Befund B5, wie oben)
+
+    engine.warnings.connect(on_engine_warnings)
+
+    for name, value in (context_properties or {}).items():
+        engine.rootContext().setContextProperty(name, value)
+
     engine.load(QUrl.fromLocalFile(str(MAIN_QML)))
 
     return app, engine, warnings

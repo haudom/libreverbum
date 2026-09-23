@@ -3610,6 +3610,16 @@ Ein Bildschirm ohne eine einzige Textstelle bestand zuvor alle drei mit „0 War
 beschreibt (Befund B4). Ein Werkzeug, das nichts angesehen hat, meldet das jetzt, statt
 grün zu sein.
 
+#### Falle: `QT_QPA_FONTDIR` unter Offscreen/Windows
+
+`QT_QPA_PLATFORM=offscreen` kennt unter Windows von sich aus keine einzige Schriftfamilie,
+unabhängig davon, ob `QFontDatabase.addApplicationFont` zuvor erfolgreich lief — ohne
+`QT_QPA_FONTDIR` (Zeigt auf `gui/fonts/`) bleibt die Warnung auch mit geladenen Schriften
+stehen, und jede Kontrastmessung träfe eine Ersatzschrift statt Literata/Inter. Betrifft
+jeden Aufrufer, der offscreen rendert: `tools/design_mockup/shot.py` (Vorbild),
+`gui/app.py` (`build_engine`) und `tools/gui_screenshot.py`. Muss **vor** dem ersten
+Qt-Import gesetzt sein (Umgebungsvariable, nicht Funktionsargument).
+
 #### Der Mockup rendert gegen den Bestand
 
 `tools/design_mockup/` hält vier Bildschirme, fünfzehn Bauteile, die Vorführdaten und die

@@ -82,20 +82,23 @@ Item {
             font.pixelSize: Theme.size.small
         }
 
-        // Kein `required property` am Delegaten (anders als in
-        // tools/design_mockup/qml/Setup.qml): Zusätzliche Eigenschaften auf einem
-        // eingebetteten `Text`-Delegaten erzeugen einen eigenen QML-Untertyp, dessen
-        // `metaObject().className()` nicht mehr `"QQuickText"` heißt — genau das Muster,
-        // gegen das `layout_check.py`/`contrast_check.py` prüfen (am Bestand geprüft: mit
-        // `required property` blieben die sieben Zeilen hier ungemessen). `index` und
-        // `modelData` stehen als Kontexteigenschaften auch ohne Deklaration zur
-        // Verfügung, solange diese Datei kein `pragma ComponentBehavior: Bound` setzt.
+        // `required property` am Delegaten ist seit der Nachbesserung von Befund B1
+        // (Durchsicht d993e3e) wieder unbedenklich: `tools/gui_screenshot.py` erkennt
+        // eine Textstelle über `inherits("QQuickText")`, nicht mehr über den wörtlichen
+        // Vergleich `className() == "QQuickText"` — ein `required property`-Delegat
+        // erzeugt zwar einen eigenen QML-Untertyp mit einem anderen Metaobjektnamen,
+        // bleibt aber ein Nachkomme von `QQuickText` und wird deshalb weiter gemessen
+        // (am Bestand geprüft, siehe tests/test_gui_screenshot.py).
         Repeater {
             model: screen.upcomingScreens
 
             delegate: Text {
+                id: upcomingDelegate
+                required property int index
+                required property string modelData
+
                 objectName: "upcomingItem"
-                text: (index + 1) + "  " + modelData
+                text: (upcomingDelegate.index + 1) + "  " + upcomingDelegate.modelData
                 color: Theme.inkFaint
                 font.family: Theme.fonts.ui
                 font.pixelSize: Theme.size.normal
