@@ -66,6 +66,35 @@ def test_classify_difficulty_returns_hard_below_the_second_threshold() -> None:
     assert difficulty.classify_difficulty(0.0) is difficulty.DifficultyLevel.HARD
 
 
+def test_classify_difficulty_matches_the_rounded_percentage_shown_to_the_user() -> None:
+    """Befund D5, Nachbesserung Durchsicht 79b4479, 24.09.2026: Anzeige und Einordnung
+    dürfen sich an der Schwelle nicht widersprechen. `cli._format_decimal(share * 100,
+    ndigits=1)` rundet auf ein Zehntelprozent — 0,85996 erscheint dort als „86,0 %".
+    Ungerundet läge dieser Wert unter `_GUESSED_MODERATE_MIN_COVERAGE` (0,86) und ergäbe
+    `HARD`: „86,0 % — zu schwer für dich" auf derselben Zeile. `classify_difficulty`
+    rundet seit dieser Behebung selbst auf dieselbe Stelle, bevor es einordnet, und liefert
+    hier `MODERATE`, passend zur angezeigten Zahl.
+
+    Verfälschungsprobe (Bericht): Die Rundung in `classify_difficulty` entfernt (Vergleich
+    wieder gegen den rohen `share`) ließ diesen Test rot werden — `classify_difficulty`
+    lieferte dann `HARD` statt des erwarteten `MODERATE`."""
+    share = 0.85996
+    assert f"{share * 100:.1f}" == "86.0", (
+        f"Testvoraussetzung verletzt: {share} rundet nicht auf 86,0 % — "
+        "der Test prüft dann nicht den behaupteten Widerspruch."
+    )
+    assert difficulty.classify_difficulty(share) is difficulty.DifficultyLevel.MODERATE
+
+
+def test_classify_difficulty_stays_hard_when_rounding_misses_the_threshold() -> None:
+    """Gegenprobe zum Test oben: Ein Wert, der auch gerundet unter der Schwelle bleibt
+    (85,9 % statt 86,0 %), bleibt `HARD` — die Rundung darf die Schwelle selbst nicht
+    aufweichen, nur den Widerspruch zur angezeigten Stelle beseitigen."""
+    share = 0.8589
+    assert f"{share * 100:.1f}" == "85.9"
+    assert difficulty.classify_difficulty(share) is difficulty.DifficultyLevel.HARD
+
+
 def test_classify_difficulty_is_monotonic_non_increasing() -> None:
     """Keine Regel behauptet das ausdrücklich, aber eine Einordnung, die bei sinkender
     Abdeckung in eine leichtere Stufe zurückfiele, wäre für eine Anzeige („zu schwer für

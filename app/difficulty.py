@@ -99,8 +99,33 @@ class DifficultyLevel(enum.Enum):
 # Wörterbucheintrag (Platzhalter, `uncertain`) — Vereinigung, nicht Summe über Kapitel
 # (Befund 5, Nachbesserung Durchsicht 3b1e201; die frühere Zahl „1.179 bis 1.876" war eine
 # fehlerhafte Kapitelsumme derselben Fehlerfamilie wie Befund 3, Durchsicht c6f3875):
-# Sherlock 742, Dorian Gray 714, Dune 1.593 verschiedene Grundformen, die kein Profil je
-# als „bekannt" ausweisen kann, weil es keine Bedeutung gibt, die gebucht werden könnte.
+# Sherlock 742, Dorian Gray 714, Dune 1.593 verschiedene Grundformen, die keine Vorbelegung
+# je als „bekannt" ausweisen kann — `pipeline.write_vocabulary_preset` bucht nur echte
+# Wörterbuchbedeutungen, nie den `uncertain`-Platzhalter (dessen eigener Docstring: „ein
+# uncertain-Eintrag darf nie als bekannt gebucht werden").
+#
+# Nachtrag 24.09.2026 (Nachbesserung Durchsicht 79b4479, Befund D2, dokumentation.md §7 —
+# die vorige Fassung dieses Absatzes behauptete das allgemeiner: "die kein Profil je als
+# 'bekannt' ausweisen kann". Das stimmt nur für die Vorbelegung, nicht fürs Profil
+# insgesamt, und wurde deshalb oben schon berichtigt statt nur ergänzt (dokumentation.md §7:
+# "der gültige Stand steht immer oben"). Über die Triage ist es anders: `pipeline.
+# _resolve_sense` liefert für einen Eintrag, dessen `candidates` nur aus dem Platzhalter
+# besteht, genau diesen Platzhalter als "aufgelöste" Bedeutung zurück, ohne Modellaufruf
+# (`_resolve_sense`s Docstring); markiert der Nutzer ihn in der Triage als "kenne ich",
+# bucht `cli.interaction` (`ensure_chapter_row`/`_record`, `Origin.TRIAGE`) ihn wie jede
+# andere Bedeutung — derselbe Vorfilter (`_all_candidates_known`) erkennt ihn danach als
+# bekannt, wie `run_chapter`s Moduldocstring, letzter Absatz, es für genau diesen Fall
+# vorsieht. Die Deckenwerte unten (98,07 % usw.) gelten deshalb nur für ein Profil ohne
+# jede Triage-Buchung dieser Platzhalter, nicht für ein gelesenes Buch: Gemessen an
+# Sherlock Kapitel 2 (Bericht zu dieser Nachbesserung) hebt das Buchen aller dort
+# auftretenden Platzhalter als "kenne ich" die Abdeckung von 86,86 % auf 89,09 %, die
+# unbekannten Grundformen sinken von 763 auf 644 — nach einigen Triage-Durchläufen wächst
+# die Abdeckung jedes gemessenen Buchs um rund zwei Prozentpunkte (Dorian Gray kippt damit
+# von `HARD` nach `MODERATE`). Die Schwellen unten bleiben trotzdem unverändert
+# (Entscheidung Dominiks, Nachbesserung Durchsicht 79b4479): Sie sind Vermutung und werden
+# erst an gelesenen, nicht nur gemessenen Büchern kalibriert — diese künftige Kalibrierung
+# muss die Triage-Verschiebung mit einrechnen, nicht die hier genannten Werte selbst.
+#
 # Eigens dafür gemessen (rein wörterbuchbedingte Deckenwerte, unabhängig vom Profil,
 # Bericht zur Nachbesserung der Durchsicht 3b1e201): Sherlock 98,07 %, Dorian Gray 97,64 %,
 # Dune 97,43 % — selbst ein Leser, der **jedes** Wort mit Wörterbucheintrag kennt, käme
@@ -145,10 +170,21 @@ def classify_difficulty(share: float) -> DifficultyLevel:
     oben. `>=` an beiden Schnittpunkten: Ein Buch genau auf der Schwelle zählt zur
     leichteren der beiden angrenzenden Stufen, nicht zur schwereren — dieselbe Richtung wie
     zuvor bei der je-1.000-Maßzahl (dort `<=`), hier gespiegelt, weil eine hohe Abdeckung
-    „leicht" bedeutet, eine hohe Dichte unbekannter Grundformen dagegen „schwer"."""
-    if share >= _GUESSED_EASY_MIN_COVERAGE:
+    „leicht" bedeutet, eine hohe Dichte unbekannter Grundformen dagegen „schwer".
+
+    **Gerundet auf dieselbe Stelle wie die Anzeige, bevor eingeordnet wird** (Befund D5,
+    Nachbesserung Durchsicht 79b4479, 24.09.2026): Ohne diese Rundung widersprechen sich
+    Anzeige und Einordnung an der Schwelle — `cli._format_decimal(share * 100, ndigits=1)`
+    zeigt 0,85996 als „86,0 %", `classify_difficulty` ordnete den ungerundeten Wert bisher
+    aber unter `_GUESSED_MODERATE_MIN_COVERAGE` (0,86) als `HARD` ein: „86,0 % — zu schwer
+    für dich" auf derselben Zeile. Gerundet wird auf ein Zehntelprozent (`round(share * 100,
+    1) / 100`), exakt die Stelle, auf die `_format_decimal` rundet — nicht auf die Schwelle
+    selbst, die ihre volle Genauigkeit behält, und nicht in der Anzeige (die bleibt
+    unverändert), sondern hier, einmal, bevor verglichen wird."""
+    rounded_share = round(share * 100, 1) / 100
+    if rounded_share >= _GUESSED_EASY_MIN_COVERAGE:
         return DifficultyLevel.EASY
-    if share >= _GUESSED_MODERATE_MIN_COVERAGE:
+    if rounded_share >= _GUESSED_MODERATE_MIN_COVERAGE:
         return DifficultyLevel.MODERATE
     return DifficultyLevel.HARD
 

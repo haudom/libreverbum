@@ -778,16 +778,35 @@ class Coverage:
     Einzelwort-Vorkommen zusätzlich, sobald es nach `_UNDERSTOOD_VOCABULARY_STATUSES` als
     verstanden gilt (E5 Festlegung 2). `unknown_lemma_count`: wie viele Grundformen aus
     `entries` dabei **nicht** verstanden sind — anders als `token_count -
-    understood_tokens`, das eine Häufigkeit zählt, keine Grundformenzahl. `share`:
-    `understood_tokens / token_count`. `share_after_learning`: dieselbe Rechnung, nachdem
-    jede in `learned` enthaltene, bisher nicht verstandene Grundform zusätzlich als
-    verstanden gälte (E5 Festlegung 3)."""
+    understood_tokens`, das eine Häufigkeit zählt, keine Grundformenzahl.
+    `unknown_lemma_count_without_dictionary_entry`: davon, wie viele **keinen einzigen**
+    Wörterbucheintrag tragen — `entry.candidates` besteht nur aus dem `uncertain`-
+    Platzhalter (`run_chapter`s Moduldocstring, letzter Absatz), es gibt für diese
+    Grundform also **keine** Bedeutung, die je gebucht werden könnte (Befund D1,
+    Nachbesserung Durchsicht 79b4479, 24.09.2026 — vorher zählte `unknown_lemma_count`
+    beide Fälle ungekennzeichnet zusammen, und in `cli._write_assess_result` erschienen sie
+    beide als „Wörter zu lernen", obwohl ein Teil davon kein Lernstoff ist). Eine Teilmenge
+    von `unknown_lemma_count`, niemals größer. `share`: `understood_tokens / token_count`.
+    `share_after_learning`: dieselbe Rechnung, nachdem jede in `learned` enthaltene, bisher
+    nicht verstandene Grundform zusätzlich als verstanden gälte (E5 Festlegung 3)."""
 
     token_count: int
     understood_tokens: int
     unknown_lemma_count: int
+    unknown_lemma_count_without_dictionary_entry: int
     share: float
     share_after_learning: float
+
+
+def _is_without_dictionary_entry(entry: VocabularyEntry) -> bool:
+    """Wahr, wenn `entry` keinen einzigen echten Wörterbucheintrag trägt — `candidates`
+    besteht dann nur aus dem `uncertain`-Platzhalter, denselben, den `run_chapter` für eine
+    leere Auswahlliste einsetzt (Moduldocstring, letzter Absatz) und den `_resolve_sense`
+    unverändert als „aufgelöste" Bedeutung zurückgibt (Zeile dort: „Besteht `entry.
+    candidates` **nur** aus dem Platzhalter … gibt es nichts zu wählen"). Dieselbe Prüfung
+    wie dort, hier für `coverage`/`assess_book` (Befund D1, Nachbesserung Durchsicht
+    79b4479, 24.09.2026)."""
+    return len(entry.candidates) == 1 and entry.candidates[0].uncertain
 
 
 def coverage(vocabulary: ChapterVocabulary, learned: Collection[Lemma] = ()) -> Coverage:
@@ -839,6 +858,7 @@ def coverage(vocabulary: ChapterVocabulary, learned: Collection[Lemma] = ()) -> 
             token_count=0,
             understood_tokens=0,
             unknown_lemma_count=0,
+            unknown_lemma_count_without_dictionary_entry=0,
             share=1.0,
             share_after_learning=1.0,
         )
@@ -846,12 +866,15 @@ def coverage(vocabulary: ChapterVocabulary, learned: Collection[Lemma] = ()) -> 
     understood_tokens = token_count
     understood_after_learning = token_count
     unknown_lemma_count = 0
+    unknown_lemma_count_without_dictionary_entry = 0
     for entry in vocabulary.entries:
         if any(status in _UNDERSTOOD_VOCABULARY_STATUSES for status in entry.status.values()):
             continue
         understood_tokens -= entry.occurrence.frequency
         understood_after_learning -= entry.occurrence.frequency
         unknown_lemma_count += 1
+        if _is_without_dictionary_entry(entry):
+            unknown_lemma_count_without_dictionary_entry += 1
         if entry.occurrence.lemma in learned:
             understood_after_learning += entry.occurrence.frequency
 
@@ -859,6 +882,7 @@ def coverage(vocabulary: ChapterVocabulary, learned: Collection[Lemma] = ()) -> 
         token_count=token_count,
         understood_tokens=understood_tokens,
         unknown_lemma_count=unknown_lemma_count,
+        unknown_lemma_count_without_dictionary_entry=unknown_lemma_count_without_dictionary_entry,
         share=understood_tokens / token_count,
         share_after_learning=understood_after_learning / token_count,
     )
@@ -875,7 +899,11 @@ class ChapterDifficulty:
     `token_count` und `unknown_lemma_count` sind dieselben Werte wie in `coverage` — als
     eigene Felder hier, weil `cli.main --assess` (E3-Ausnahme) sie unmittelbar für die
     Kapitelzeile der Tabelle braucht, ohne durch `coverage` hindurchzugreifen; die Form ist
-    laut Auftragstext fest so genannt.
+    laut Auftragstext fest so genannt. `unknown_lemma_count_without_dictionary_entry`
+    ebenso — Befund D1, Nachbesserung Durchsicht 79b4479, 24.09.2026 (siehe `Coverage`s
+    Docstring): eine Teilmenge von `unknown_lemma_count`, die Grundformen ohne jeden
+    Wörterbucheintrag, damit die Kapitelzeile beide Zahlen getrennt nennen kann statt sie
+    ungekennzeichnet zu vermengen.
 
     **Kein `unknown_per_thousand`-Feld mehr** (Nachbesserung der Durchsicht 3b1e201,
     Entscheidung B, E12, 23.09.2026): Die Oberfläche zeigt seither „unbekannte Wörter je
@@ -890,6 +918,7 @@ class ChapterDifficulty:
     title: str
     token_count: int
     unknown_lemma_count: int
+    unknown_lemma_count_without_dictionary_entry: int
     coverage: Coverage
 
 
@@ -947,12 +976,24 @@ class BookDifficulty:
     an einer anderen Stelle. `unique_unknown_lemma_count` bleibt (siehe oben) — nur die
     daraus abgeleitete Dichte „je 1.000" ist mit dieser Behebung ganz entfallen, zugunsten
     von `app.difficulty.unknown_words_per_page(coverage.share)` (Entscheidung B, E12): Die
-    Abdeckung selbst ist weder von der Kapitelteilung noch von der Buchlänge abhängig."""
+    Abdeckung selbst ist weder von der Kapitelteilung noch von der Buchlänge abhängig.
+
+    **`unique_unknown_lemma_count_without_dictionary_entry` ist dieselbe Vereinigung wie
+    `unique_unknown_lemma_count`, nur über die Grundformen ohne jeden Wörterbucheintrag**
+    (Befund D1, Nachbesserung Durchsicht 79b4479, 24.09.2026): `set.union` über
+    `Coverage.unknown_lemma_count_without_dictionary_entry`s Auswahlbedingung
+    (`_is_without_dictionary_entry`), nicht über deren bloße Summe — aus demselben Grund
+    wie bei `unique_unknown_lemma_count` selbst (derselbe Kenntnisstand für dieselbe
+    Grundform in jedem Kapitel, in dem sie auftritt). `cli._write_assess_result` nennt
+    diese Zahl neben `unique_unknown_lemma_count`, damit „Wörter zu lernen" nicht länger
+    unmarkiert Grundformen mitzählt, für die es gar keine Bedeutung gibt, die man lernen
+    könnte."""
 
     chapters: list[ChapterDifficulty]
     skipped: list[ChapterListing]
     token_count: int
     unique_unknown_lemma_count: int
+    unique_unknown_lemma_count_without_dictionary_entry: int
     coverage: Coverage
 
 
@@ -1084,6 +1125,7 @@ def assess_book(
     chapters: list[ChapterDifficulty] = []
     skipped: list[ChapterListing] = []
     unique_unknown_lemmas: set[Lemma] = set()
+    unique_unknown_lemmas_without_dictionary_entry: set[Lemma] = set()
     for listing in listings:
         if listing.skip_reason is not None:
             skipped.append(listing)
@@ -1130,31 +1172,48 @@ def assess_book(
                 title=listing.title,
                 token_count=chapter_coverage.token_count,
                 unknown_lemma_count=chapter_coverage.unknown_lemma_count,
+                unknown_lemma_count_without_dictionary_entry=(
+                    chapter_coverage.unknown_lemma_count_without_dictionary_entry
+                ),
                 coverage=chapter_coverage,
             )
         )
         # Befund 3 (Durchsicht c6f3875): Vereinigung statt Summe, siehe BookDifficulty-
         # Docstring — derselbe Kenntnisstand für dieselbe Grundform in jedem Kapitel, in
         # dem sie vorkommt, macht set.union über alle Kapitel zur ehrlichen Buchzahl.
+        # (Befund D1, Nachbesserung Durchsicht 79b4479): dieselbe Vereinigung zusätzlich
+        # für die Teilmenge ohne jeden Wörterbucheintrag, über dieselbe Prüfung wie
+        # `coverage` (`_is_without_dictionary_entry`).
         for entry in vocabulary.entries:
             if not any(
                 status in _UNDERSTOOD_VOCABULARY_STATUSES for status in entry.status.values()
             ):
                 unique_unknown_lemmas.add(entry.occurrence.lemma)
+                if _is_without_dictionary_entry(entry):
+                    unique_unknown_lemmas_without_dictionary_entry.add(entry.occurrence.lemma)
 
     total_token_count = sum(chapter.token_count for chapter in chapters)
     total_understood_tokens = sum(chapter.coverage.understood_tokens for chapter in chapters)
     total_unique_unknown_lemma_count = len(unique_unknown_lemmas)
+    total_unique_unknown_lemma_count_without_dictionary_entry = len(
+        unique_unknown_lemmas_without_dictionary_entry
+    )
     book_share = total_understood_tokens / total_token_count if total_token_count else 1.0
     return BookDifficulty(
         chapters=chapters,
         skipped=skipped,
         token_count=total_token_count,
         unique_unknown_lemma_count=total_unique_unknown_lemma_count,
+        unique_unknown_lemma_count_without_dictionary_entry=(
+            total_unique_unknown_lemma_count_without_dictionary_entry
+        ),
         coverage=Coverage(
             token_count=total_token_count,
             understood_tokens=total_understood_tokens,
             unknown_lemma_count=total_unique_unknown_lemma_count,
+            unknown_lemma_count_without_dictionary_entry=(
+                total_unique_unknown_lemma_count_without_dictionary_entry
+            ),
             share=book_share,
             share_after_learning=book_share,
         ),

@@ -3822,6 +3822,36 @@ klaglos das Schema an (65.536 Byte, `user_version = 2`, „zu schwer" statt eine
 schemalose Datei gilt dabei als dasselbe „kein Profil" wie eine fehlende, und jeder
 `run_chapter`-Aufruf aus `assess_book` bekommt `profile_read_only=True` mit.
 
+**Nachtrag 24.09.2026 (Nachbesserung Durchsicht `79b4479`, Befund D2): Der feste Boden aus
+742 bis 1.593 Grundformen ohne Wörterbucheintrag gilt nur für die Vorbelegung, nicht für
+ein Profil nach Triage-Durchläufen.** `app/difficulty.py` begründete die Schwellen bisher
+mit dem Satz, diese Grundformen könne „kein Profil je als bekannt ausweisen, weil es keine
+Bedeutung gibt, die gebucht werden könnte" — das gilt für `pipeline.
+write_vocabulary_preset` (bucht nur echte Wörterbuchbedeutungen, nie den
+`uncertain`-Platzhalter), nicht aber für die Triage: `pipeline._resolve_sense` liefert für
+einen Eintrag, dessen `candidates` nur aus dem Platzhalter besteht, genau diesen
+Platzhalter als „aufgelöste" Bedeutung, ohne Modellaufruf; markiert der Nutzer ihn dort als
+„kenne ich", bucht `cli.interaction` (`Origin.TRIAGE`) ihn wie jede andere Bedeutung, und
+derselbe Vorfilter (`pipeline._all_candidates_known`) erkennt ihn danach als bekannt.
+Gemessen an Sherlock Kapitel 2 (Bericht zu dieser Nachbesserung): Das Buchen aller dort
+auftretenden Platzhalter als „kenne ich" hebt die Abdeckung von 86,86 % auf 89,09 %, die
+unbekannten Grundformen sinken von 763 auf 644 — nach einigen Triage-Durchläufen wächst die
+Abdeckung jedes gemessenen Buchs um rund zwei Prozentpunkte (Dorian Gray kippt damit von
+`HARD` nach `MODERATE`). Die drei Schwellen (92 %/86 %) bleiben trotzdem unverändert
+(Entscheidung Dominiks, Nachbesserung Durchsicht `79b4479`): Sie sind weiterhin Vermutung
+und werden erst an gelesenen, nicht nur gemessenen Büchern kalibriert — diese künftige
+Kalibrierung muss die Triage-Verschiebung mit einrechnen. `app/difficulty.py`s Kommentar
+ist entsprechend berichtigt (dokumentation.md §7: der gültige Stand steht oben, nicht nur
+als Nachtrag daneben).
+
+Dieselbe Nachbesserung trennt die Anzeige „Wörter zu lernen" jetzt sichtbar: `Coverage`,
+`ChapterDifficulty` und `BookDifficulty` führen seither zusätzlich
+`unknown_lemma_count_without_dictionary_entry` beziehungsweise
+`unique_unknown_lemma_count_without_dictionary_entry` (dokumentation.md §2) — eine
+Teilmenge der unbekannten Grundformen ohne jeden Wörterbucheintrag, in `cli.
+_write_assess_result` als „davon N ohne Wörterbucheintrag" neben der Gesamtzahl genannt
+(Befund D1), statt sie unmarkiert mitzuzählen.
+
 ### Offene Punkte
 - **Ob Qt Quick für Desktop-Anwendungen bei Sonnet tatsächlich mehr Durchsichtsrunden
   braucht** als ein Web-Stack, ist eine Vermutung der Recherche, nicht an diesem Bestand

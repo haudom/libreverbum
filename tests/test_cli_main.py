@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 
+from app import difficulty
 from cli import display
 from cli import main as cli_main
 from cli.main import _build_parser, main
@@ -1202,6 +1203,47 @@ def test_apply_vocabulary_preset_removes_a_newly_created_profile_file_when_the_p
         )
 
     assert not profile_path.exists()
+
+
+def test_apply_vocabulary_preset_removes_a_newly_created_profile_file_on_keyboard_interrupt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Befund R2, Nachbesserung Durchsicht 79b4479, 24.09.2026: Der Fehlschlag oben
+    (Befund mittel 1, Durchsicht ee34796) ist auch über einen `KeyboardInterrupt`
+    erreichbar — bricht der Nutzer die Vorbelegung mit Strg+C ab, nachdem `profile.
+    open_profile` die Datei bereits angelegt, aber `record_preset` noch kein Ereignis
+    geschrieben hat, blieb bislang dieselbe leere Profildatei zurück wie beim
+    `ValueError`-Fall oben — `_apply_vocabulary_preset` fing bis zu dieser Behebung nur
+    `Exception`, nicht `BaseException`, und `KeyboardInterrupt` erbt nicht von `Exception`.
+
+    Verfälschungsprobe (Bericht): `except BaseException:` in `_apply_vocabulary_preset`
+    auf `except Exception:` zurückgestellt ließ diesen Test rot werden — die
+    Attrappen-Datei blieb dann bestehen."""
+    profile_path = tmp_path / "profil.sqlite3"
+
+    def _interrupted_but_creates_the_file(
+        *, profile_path: Path, **_kwargs: object
+    ) -> pipeline.PresetResult:
+        profile_path.write_bytes(b"")
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(
+        "cli.main.pipeline.write_vocabulary_preset", _interrupted_but_creates_the_file
+    )
+    answers = iter(["a1"])
+
+    with pytest.raises(KeyboardInterrupt):
+        cli_main._apply_vocabulary_preset(
+            dictionary_path=tmp_path / "en-de.sqlite3",
+            profile_path=profile_path,
+            read_line=lambda _prompt: next(answers),
+            write_line=lambda _text: None,
+        )
+
+    assert not profile_path.exists(), (
+        "eine leere Profildatei blieb nach dem KeyboardInterrupt liegen — der nächste "
+        "Lauf hätte nie wieder nach Sprachniveau und Vorbelegung gefragt"
+    )
 
 
 def test_apply_vocabulary_preset_keeps_a_pre_existing_profile_file_when_the_preset_fails(
@@ -2578,8 +2620,10 @@ def test_assess_reports_a_table_and_a_book_line_without_prompting(
     book_lines = [line for line in written if line.startswith("Buch:")]
     assert len(book_lines) == 1, "\n".join(written)
     assert "je Seite" in book_lines[0]
-    assert "Wörter zu lernen" in book_lines[0]
+    assert "unbekannte Grundformen zu lernen" in book_lines[0]
+    assert "ohne Wörterbucheintrag" in book_lines[0]
     assert "Einordnung:" in book_lines[0]
+    assert any("Seitenlänge eine Vermutung" in line for line in written), "\n".join(written)
 
 
 def test_assess_reports_a_skipped_chapter_without_a_break(
@@ -2669,6 +2713,59 @@ def test_assess_aborts_with_a_german_message_and_creates_no_profile_when_none_ex
     assert not profile_path.is_file(), "assess hat trotz Abbruch eine Profildatei angelegt"
 
 
+def test_assess_aborts_before_loading_spacy_for_a_zero_byte_profile_file(
+    tmp_path: Path,
+    two_chapter_book_epub: Path,
+    mini_dictionary_db: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Befund R1, Nachbesserung Durchsicht 79b4479, 24.09.2026: Eine vorhandene, aber
+    0 Byte große Profildatei bestand bisher `cfg.profile_path.is_file()` — `_run` lud dann
+    erst spaCy (rund eine Sekunde) und scheiterte erst danach an `pipeline.assess_book`s
+    eigener Prüfung, mit deren Kernmeldung „Profildatei nicht vorhanden: …", obwohl die
+    Datei sehr wohl vorhanden, nur leer war. `extraction.load_nlp` wird hier durch eine
+    Attrappe ersetzt, die bei jedem Aufruf abbricht — nur so wird sichtbar, dass die neue
+    Prüfung wirklich *vor* dem Laden greift, nicht erst der nachgelagerte Fang um den
+    späteren `assess_book`-Aufruf.
+
+    Verfälschungsprobe (Bericht): Die neue `profile.open_profile(cfg.profile_path,
+    read_only=True)`-Prüfung in `cli._run` durch die frühere reine `is_file()`-Prüfung
+    ersetzt ließ diesen Test rot werden — die Attrappe für `load_nlp` griff dann
+    (`AssertionError`), weil `_run` bis zum Laden von spaCy durchlief."""
+    data_dir = tmp_path / "data"
+    _write_config(
+        data_dir,
+        model_url="http://127.0.0.1:0/v1",
+        model_name="unerreicht",
+        dictionary_path=mini_dictionary_db,
+    )
+    profile_path = data_dir / "profil.sqlite3"
+    profile_path.touch()
+    assert profile_path.stat().st_size == 0
+
+    def _must_not_be_called() -> object:
+        raise AssertionError("load_nlp aufgerufen, bevor das Profil geprüft war")
+
+    monkeypatch.setattr("cli.main.extraction.load_nlp", _must_not_be_called)
+    written: list[str] = []
+
+    exit_code = main(
+        [str(two_chapter_book_epub), "--assess", "--data-dir", str(data_dir)],
+        read_line=_no_read,
+        write_line=written.append,
+    )
+
+    assert exit_code == 1, "\n".join(written)
+    assert any("leer oder ohne Schema" in line and "Profildatei" in line for line in written), (
+        "\n".join(written)
+    )
+    assert not any("Noch kein Profil vorhanden" in line for line in written), (
+        "die 0-Byte-Datei sollte nicht wie eine ganz fehlende Datei gemeldet werden: "
+        + "\n".join(written)
+    )
+    assert profile_path.stat().st_size == 0, "assess hat die 0-Byte-Profildatei verändert"
+
+
 def _crafted_book_difficulty(
     share: float, *, chapter_share: float = 0.5
 ) -> pipeline.BookDifficulty:
@@ -2688,6 +2785,7 @@ def _crafted_book_difficulty(
         token_count=100,
         understood_tokens=round(chapter_share * 100),
         unknown_lemma_count=3,
+        unknown_lemma_count_without_dictionary_entry=1,
         share=chapter_share,
         share_after_learning=chapter_share,
     )
@@ -2695,6 +2793,7 @@ def _crafted_book_difficulty(
         token_count=100,
         understood_tokens=round(share * 100),
         unknown_lemma_count=3,
+        unknown_lemma_count_without_dictionary_entry=1,
         share=share,
         share_after_learning=share,
     )
@@ -2703,6 +2802,7 @@ def _crafted_book_difficulty(
         title="Kapitel eins",
         token_count=100,
         unknown_lemma_count=3,
+        unknown_lemma_count_without_dictionary_entry=1,
         coverage=chapter_coverage,
     )
     return pipeline.BookDifficulty(
@@ -2710,6 +2810,7 @@ def _crafted_book_difficulty(
         skipped=[],
         token_count=100,
         unique_unknown_lemma_count=3,
+        unique_unknown_lemma_count_without_dictionary_entry=1,
         coverage=book_coverage,
     )
 
@@ -2755,6 +2856,57 @@ def test_assess_prints_the_difficulty_label_that_matches_the_measured_coverage(
     assert len(book_lines) == 1, "\n".join(written)
     assert "leicht (Vermutung)" in book_lines[0], book_lines[0]
     assert "95,0 %" in book_lines[0], book_lines[0]
+
+
+def test_assess_book_line_uses_the_books_own_coverage_not_the_first_chapters(
+    tmp_path: Path, book_epub: Path, mini_dictionary_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Befund D4 (b), Nachbesserung Durchsicht 79b4479, 24.09.2026: Keine bisherige
+    Zusicherung unterschied, ob die "je Seite"-Zahl der Buchzeile aus `result.coverage.
+    share` (dem Buch) oder aus `result.chapters[0].coverage.share` (nur dem ersten
+    Kapitel) errechnet wird — `_crafted_book_difficulty` trägt mit `chapter_share`
+    absichtlich einen anderen Wert als die Buchabdeckung, extra dafür angelegt (siehe
+    dessen Docstring, Befund 3, Nachbesserung Durchsicht 3b1e201).
+
+    Verfälschungsprobe (Bericht): In `cli._write_assess_result` die Buchzeile probeweise
+    mit `difficulty.unknown_words_per_page(result.chapters[0].coverage.share)` statt
+    `result.coverage.share` gerechnet ließ diesen Test rot werden — die Buchzeile nannte
+    dann `150,0` (aus `chapter_share=0.5`) statt der erwarteten `15,0` (aus
+    `share=0.95`)."""
+    data_dir = tmp_path / "data"
+    _write_config(
+        data_dir,
+        model_url="http://127.0.0.1:0/v1",
+        model_name="unerreicht",
+        dictionary_path=mini_dictionary_db,
+    )
+    profile.open_profile(data_dir / "profil.sqlite3").close()
+    book_share = 0.95
+    chapter_share = 0.5
+    monkeypatch.setattr(
+        pipeline,
+        "assess_book",
+        lambda **_: _crafted_book_difficulty(book_share, chapter_share=chapter_share),
+    )
+    written: list[str] = []
+
+    exit_code = main(
+        [str(book_epub), "--assess", "--data-dir", str(data_dir)],
+        read_line=_no_read,
+        write_line=written.append,
+    )
+
+    assert exit_code == 0, "\n".join(written)
+    book_lines = [line for line in written if line.startswith("Buch:")]
+    assert len(book_lines) == 1, "\n".join(written)
+    expected = cli_main._format_decimal(difficulty.unknown_words_per_page(book_share))
+    wrong = cli_main._format_decimal(difficulty.unknown_words_per_page(chapter_share))
+    assert expected != wrong, (
+        "Testvoraussetzung verletzt: Buch- und Kapitelabdeckung ergeben denselben "
+        "Anzeigewert — der Test unterschiede dann die beiden Quellen nicht."
+    )
+    assert expected in book_lines[0], book_lines[0]
+    assert wrong not in book_lines[0], book_lines[0]
 
 
 def test_python_dash_m_cli_main_actually_runs_main() -> None:

@@ -257,7 +257,22 @@ def _apply_vocabulary_preset(
     selbst angelegt hat.
 
     Bei „keine Angabe" bleibt es bei der Frage selbst — `write_vocabulary_preset` öffnet
-    die Profildatei dann nicht einmal, also gibt es nichts zu melden."""
+    die Profildatei dann nicht einmal, also gibt es nichts zu melden.
+
+    **Gefangen wird `BaseException`, nicht `Exception`** (Befund R2, Nachbesserung
+    Durchsicht 79b4479, 24.09.2026) — anders als beim `except Exception` in `_run_chapter`
+    weiter unten (dessen eigene Begründung: „Ein `KeyboardInterrupt` ist der Nutzer, der
+    sofort heraus will, kein Fehlschlag, der einen Teilexport verdient"). Hier räumt das
+    `except` keinen Fehlschlag auf, sondern eine **Nebenwirkung**, die unabhängig vom Grund
+    des Abbruchs stehen bliebe: Bricht die Vorbelegung mit Strg+C ab, während `profile.
+    open_profile` die Datei bereits angelegt, aber `record_preset` noch kein Ereignis
+    geschrieben hat, bliebe ohne diese Erweiterung eine leere Profildatei (0 Ereignisse)
+    liegen — `_run` erkennt ein vorhandenes Profil beim nächsten Lauf nur an seiner
+    Dateiexistenz (`profile_is_new` oben) und fragt dann nie wieder nach Sprachniveau und
+    Vorbelegung, genau die Falle, die dieser Absatz schon für `Exception` beschreibt, nur
+    über einen `KeyboardInterrupt` statt einer echten Ausnahme erreicht. Die Ausnahme läuft
+    danach unverändert weiter (`raise` ohne Argument) — kein `except`, das protokolliert
+    und weiterläuft (Regel 13)."""
     cefr_level = _ask_cefr_level(read_line, write_line)
     profile_existed_before = profile_path.is_file()
     try:
@@ -267,12 +282,13 @@ def _apply_vocabulary_preset(
             cefr_level=cefr_level,
             timestamp=datetime.now(UTC),
         )
-    except Exception:
+    except BaseException:
         # REGEL (dokumentation.md §4 Regel 13, „Kein except, das nur protokolliert und
         # weiterläuft"): Räumt nur die gerade erst angelegte Profildatei weg und läuft mit
         # `raise` unverändert weiter — es meldet nichts selbst und bricht den Lauf nicht
         # selbst ab, das bleibt `main`s eigenem Fang überlassen (Befund 3, Durchsicht
-        # b91a56e).
+        # b91a56e). `BaseException` statt `Exception` seit Befund R2 (siehe Docstring oben)
+        # — dieselbe Aufräumarbeit gehört auch bei einem `KeyboardInterrupt` erledigt.
         if not profile_existed_before and profile_path.is_file():
             profile_path.unlink()
         raise
@@ -1089,11 +1105,6 @@ def _write_assess_result(result: pipeline.BookDifficulty, write_line: WriteLine)
     Nachbesserung auf `result.coverage.share`, nicht mehr auf die frühere Dichte „je 1.000"
     — Letztere hing an der Kapitelteilung des Buchs (`app.difficulty`s Moduldocstring).
 
-    (Befund 3, Durchsicht c6f3875): Die Buchzeile nennt `result.unique_unknown_lemma_count`
-    (Vereinigung, `pipeline.BookDifficulty`s Docstring), nicht `unknown_lemma_count` — das
-    Feld gibt es auf `BookDifficulty` nicht, die frühere Summe wäre ohnehin die falsche
-    Zahl für „so viele Wörter musst du lernen" gewesen.
-
     (Befund 5, Durchsicht c6f3875): `_format_decimal` statt `f"{…:.1f}"` — sonst trägt
     derselbe Satz einen Punkt als Tausendertrenner (`_format_count`) und als Dezimalzeichen
     (`{…:.1f}`) zugleich, zwei widersprüchliche Lesarten nebeneinander.
@@ -1103,17 +1114,37 @@ def _write_assess_result(result: pipeline.BookDifficulty, write_line: WriteLine)
     difficulty.unknown_words_per_page` aus der jeweiligen `coverage.share` um, statt das
     inzwischen entfallene `unknown_per_thousand` (`pipeline.ChapterDifficulty`/
     `BookDifficulty`) anzuzeigen — einheitlich statt zweier Maßzahlen nebeneinander
-    (Auftragstext). Die Buchzeile nennt `unique_unknown_lemma_count` seither als „Wörter zu
-    lernen" statt als „unbekannte Grundformen" — dieselbe Zahl, aber die Bezeichnung, unter
-    der sie tatsächlich benutzt wird (Entscheidung B)."""
+    (Auftragstext).
+
+    **Ausweisen, nicht umrechnen** (D1, Nachbesserung Durchsicht 79b4479, Entscheidung
+    Dominiks 24.09.2026): Beide Zeilen nennen jetzt zusätzlich, wie viele der unbekannten
+    Grundformen **keinen** Wörterbucheintrag tragen (`chapter.
+    unknown_lemma_count_without_dictionary_entry` beziehungsweise `result.
+    unique_unknown_lemma_count_without_dictionary_entry`) — bei Sherlock mit
+    B1-Vorbelegung waren das vorher unmarkiert 742 von 4.383 als „Wörter zu lernen"
+    gezählten Grundformen (16,9 %), obwohl es für sie keine Bedeutung gibt, die man lernen
+    könnte (`Coverage`s Docstring). Die Maßzahl der Einordnung (`coverage.share`, E5)
+    bleibt unverändert — nur die Anzeige trennt jetzt, was sie zählt.
+
+    **„Wörter" hieß in der Buchzeile zwei verschiedene Dinge** (D3): `result.token_count`
+    zählt Wortformen (jedes alphabetische Token, E5 Festlegung 1), `result.
+    unique_unknown_lemma_count` zählt Grundformen — beide Zeilen benennen das jetzt
+    getrennt („Wortformen" gegen „Grundformen") statt beides „Wörter" zu nennen. **„je
+    Seite" nennt seither seine Einheit und ist als Schätzung gekennzeichnet** (D3): „rund
+    N unbekannte Wortformen je Seite" statt der bloßen Zahl, dazu ein einmaliger
+    Fußhinweis auf die geschätzte Seitenlänge (`app.difficulty._GUESSED_PAGE_LENGTH_WORD_
+    FORMS`) — nicht auf jeder Zeile wiederholt, das träfe genau den Fall, den
+    dokumentation.md §4 Regel 14 meidet: eine Wiederholung ohne zweiten Erkenntniswert."""
     write_line("Schwierigkeitscheck:")
     for chapter in result.chapters:
         write_line(
             f"  Kapitel {chapter.number} ({chapter.title}): "
-            f"{_format_count(chapter.token_count)} Wörter, "
-            f"{_format_count(chapter.unknown_lemma_count)} unbekannte Grundformen, "
-            f"{_format_decimal(difficulty.unknown_words_per_page(chapter.coverage.share))} "
-            "je Seite, "
+            f"{_format_count(chapter.token_count)} Wortformen, "
+            f"{_format_count(chapter.unknown_lemma_count)} unbekannte Grundformen "
+            f"(davon {_format_count(chapter.unknown_lemma_count_without_dictionary_entry)} "
+            "ohne Wörterbucheintrag), "
+            f"rund {_format_decimal(difficulty.unknown_words_per_page(chapter.coverage.share))} "
+            "unbekannte Wortformen je Seite, "
             f"Abdeckung {_format_decimal(chapter.coverage.share * 100)} %."
         )
     for listing in result.skipped:
@@ -1121,12 +1152,22 @@ def _write_assess_result(result: pipeline.BookDifficulty, write_line: WriteLine)
     level = difficulty.classify_difficulty(result.coverage.share)
     level_label = _DIFFICULTY_LEVEL_LABELS[level]
     write_line(
-        f"Buch: {_format_count(result.token_count)} Wörter, "
-        f"{_format_count(result.unique_unknown_lemma_count)} Wörter zu lernen, "
-        f"{_format_decimal(difficulty.unknown_words_per_page(result.coverage.share))} "
-        "je Seite, "
+        f"Buch: {_format_count(result.token_count)} Wortformen, "
+        f"{_format_count(result.unique_unknown_lemma_count)} unbekannte Grundformen zu lernen "
+        "(davon "
+        f"{_format_count(result.unique_unknown_lemma_count_without_dictionary_entry)} ohne "
+        "Wörterbucheintrag), "
+        f"rund {_format_decimal(difficulty.unknown_words_per_page(result.coverage.share))} "
+        "unbekannte Wortformen je Seite, "
         f"Abdeckung {_format_decimal(result.coverage.share * 100)} % — "
         f"Einordnung: {level_label}."
+    )
+    # 300 ist app.difficulty._GUESSED_PAGE_LENGTH_WORD_FORMS wörtlich (E12, Entscheidung B)
+    # — hier als Text, nicht importiert: Das Feld ist bewusst privat (dessen eigener
+    # Docstring markiert es als Vermutung, keine öffentliche Schnittstelle), und diese Zeile
+    # nennt nur, was die Zahlen oben schon benutzen, ändert sie nicht.
+    write_line(
+        "Seitenlänge eine Vermutung, keine gemessene EPUB-Seite: rund 300 Wortformen je Seite."
     )
 
 
@@ -1203,6 +1244,24 @@ def _run(
             write_line(
                 "Noch kein Profil vorhanden — der Schwierigkeitscheck braucht dein "
                 "Profil. Lege es mit einem normalen Lauf an, dort wählst du dein Niveau."
+            )
+            return 1
+        # (Befund R1, Nachbesserung Durchsicht 79b4479, 24.09.2026): `is_file()` allein
+        # erkennt eine vorhandene, aber 0 Byte große oder schemalose Profildatei nicht als
+        # unbrauchbar — der Lauf lud dann erst spaCy (rund eine Sekunde) und scheiterte
+        # danach an `pipeline.assess_book`s eigener Prüfung, mit deren Kernmeldung
+        # „Profildatei nicht vorhanden: …", obwohl die Datei sehr wohl vorhanden war, nur
+        # leer. `profile.open_profile(read_only=True)` prüft dasselbe wie `assess_book`
+        # selbst (dieselbe sqlite-URI, `file:…?mode=ro`) — hier vor dem Laden von spaCy,
+        # mit einer Meldung, die den tatsächlichen Befund nennt statt „nicht vorhanden" zu
+        # wiederholen.
+        try:
+            profile.open_profile(cfg.profile_path, read_only=True).close()
+        except FileNotFoundError:
+            write_line(
+                f"Profildatei {cfg.profile_path} ist vorhanden, aber leer oder ohne "
+                "Schema — der Schwierigkeitscheck braucht dein Profil. Lege es mit einem "
+                "normalen Lauf an, dort wählst du dein Niveau."
             )
             return 1
         write_line("Sprachmodell wird geladen …")

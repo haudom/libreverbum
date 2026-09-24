@@ -3079,9 +3079,60 @@ def test_coverage_matches_the_hand_calculated_mini_chapter() -> None:
     assert result.token_count == 22
     assert result.understood_tokens == 17
     assert result.unknown_lemma_count == 2
+    # Weder "xylophone" noch "doctor" ist der uncertain-Platzhalter ohne
+    # Wörterbucheintrag — beide tragen einen echten `wikdict_sense`-Kandidaten
+    # (`_coverage_entry`) — deshalb 0, nicht 2 (Befund D1, Nachbesserung Durchsicht
+    # 79b4479, 24.09.2026; die zugehörige Vorrichtung steht bei
+    # `test_coverage_counts_lemmas_without_a_dictionary_entry_as_a_subset` unten).
+    assert result.unknown_lemma_count_without_dictionary_entry == 0
     assert result.share == pytest.approx(17 / 22)
     # Ohne `learned` (Vorgabe `()`) ändert sich nichts gegenüber `share`.
     assert result.share_after_learning == pytest.approx(17 / 22)
+
+
+def test_coverage_counts_lemmas_without_a_dictionary_entry_as_a_subset() -> None:
+    """Befund D1, Nachbesserung Durchsicht 79b4479, 24.09.2026: „Wörter zu lernen" zählte
+    unbekannte Grundformen ohne Wörterbucheintrag bisher ungekennzeichnet mit — bei
+    Sherlock B1 waren das 742 von 4.383 (16,9 %, Durchsichtsbericht), obwohl es für sie
+    keine Bedeutung gibt, die man lernen könnte. `unknown_lemma_count_without_dictionary_
+    entry` zählt nur diesen Teil: Einträge, deren `candidates` ausschließlich aus dem
+    `uncertain`-Platzhalter bestehen (`run_chapter`s Moduldocstring, letzter Absatz) — hier
+    „gizmo" (kein Wörterbucheintrag), nicht aber „xylophone" (unbekannt, aber mit echtem
+    Wörterbucheintrag, `_mini_chapter_vocabulary`).
+
+    Verfälschungsprobe (Bericht): `_is_without_dictionary_entry` durch `lambda entry: True`
+    ersetzt ließ diesen Test rot werden — `result.unknown_lemma_count_without_dictionary_
+    entry` wäre dann 2 (auch „xylophone" und „doctor" mitgezählt) statt der erwarteten 1."""
+    vocabulary = _mini_chapter_vocabulary()
+    placeholder_occurrence = Occurrence(
+        book=_COVERAGE_BOOK,
+        chapter_number=1,
+        lemma=Lemma(text="gizmo", pos="NOUN"),
+        word_form="gizmo",
+        example_sentence="Ein Beispielsatz mit gizmo.",
+        frequency=5,
+        proper_noun_frequency=0,
+    )
+    placeholder_sense = Sense(lemma=placeholder_occurrence.lemma, uncertain=True)
+    placeholder_entry = pipeline.VocabularyEntry(
+        occurrence=placeholder_occurrence,
+        candidates=[placeholder_sense],
+        status={placeholder_sense: profile.VocabularyStatus.UNKNOWN},
+    )
+    vocabulary_with_placeholder = pipeline.ChapterVocabulary(
+        chapter=vocabulary.chapter,
+        notice=vocabulary.notice,
+        entries=[*vocabulary.entries, placeholder_entry],
+        expressions=vocabulary.expressions,
+        token_count=vocabulary.token_count + placeholder_occurrence.frequency,
+        proper_nouns=vocabulary.proper_nouns,
+    )
+
+    result = pipeline.coverage(vocabulary_with_placeholder)
+
+    assert result.unknown_lemma_count == 3  # xylophone, doctor, gizmo
+    assert result.unknown_lemma_count_without_dictionary_entry == 1  # nur gizmo
+    assert result.unknown_lemma_count_without_dictionary_entry < result.unknown_lemma_count
 
 
 def test_coverage_share_after_learning_adds_back_only_the_learned_lemma() -> None:
@@ -3430,6 +3481,122 @@ def test_assess_book_counts_a_lemma_unknown_in_two_chapters_only_once(
         f"Vereinigung {result.unique_unknown_lemma_count} — erwartet ist genau ein "
         'kapitelübergreifend geteiltes unbekanntes Wort ("watch").'
     )
+
+
+def test_assess_book_reports_lemmas_without_a_dictionary_entry_as_a_subset(
+    pipeline_epub: Path, mini_dictionary_db: Path, existing_profile_path: Path, nlp: Language
+) -> None:
+    """Befund D1, Nachbesserung Durchsicht 79b4479, 24.09.2026: `unknown_lemma_count_
+    without_dictionary_entry` (je Kapitel) und `unique_unknown_lemma_count_without_
+    dictionary_entry` (fürs Buch, Vereinigung wie `unique_unknown_lemma_count`) zählen nur
+    die Teilmenge der unbekannten Grundformen ohne jeden Wörterbucheintrag.
+
+    Kapitel 1 aus `pipeline_epub` ist auf `mini_dictionary_db` abgestimmt (`street`,
+    `bank`, `red`, `draw`, `watch`) und enthält daneben `saw`, dessen Grundform `see` im
+    Mini-Wörterbuch fehlt (Moduldocstring oben, „der `saw`-Fall") — mindestens ein echter
+    Wörterbucheintrag und mindestens ein Platzhalter liegen dort also nebeneinander. Kapitel
+    2 („This unrelated second chapter names nothing from the dictionary at all.") nennt
+    keines der Stichwörter — jede seiner unbekannten Grundformen ist dort ein Platzhalter.
+
+    Verfälschungsprobe (Bericht): `_is_without_dictionary_entry` durch `lambda entry: True`
+    ersetzt ließ diesen Test bei der Zusicherung zu Kapitel 1 rot werden (dort wäre die
+    Teilzahl dann gleich der Gesamtzahl, nicht echt kleiner)."""
+    result = pipeline.assess_book(
+        epub_path=pipeline_epub,
+        dictionary_path=mini_dictionary_db,
+        profile_path=existing_profile_path,
+        nlp=nlp,
+    )
+
+    assert [chapter.number for chapter in result.chapters] == [1, 2]
+    for chapter in result.chapters:
+        assert chapter.unknown_lemma_count_without_dictionary_entry >= 0
+        assert chapter.unknown_lemma_count_without_dictionary_entry <= chapter.unknown_lemma_count
+
+    chapter_one, chapter_two = result.chapters
+    assert chapter_one.unknown_lemma_count_without_dictionary_entry > 0, (
+        '"see" (aus "saw") hat im Mini-Wörterbuch keinen Eintrag.'
+    )
+    assert (
+        chapter_one.unknown_lemma_count_without_dictionary_entry < chapter_one.unknown_lemma_count
+    ), (
+        "Kapitel 1 sollte daneben auch unbekannte Grundformen mit echtem Wörterbucheintrag "
+        "tragen (street/bank/red/draw/watch) — sonst prüft dieser Test die Teilmenge nicht "
+        "echt."
+    )
+    assert (
+        chapter_two.unknown_lemma_count_without_dictionary_entry == chapter_two.unknown_lemma_count
+    ), (
+        "Kapitel 2 nennt kein einziges Stichwort aus mini_dictionary_db - jede unbekannte "
+        "Grundform sollte dort ein Platzhalter sein."
+    )
+    assert chapter_two.unknown_lemma_count > 0
+
+    assert (
+        0
+        < result.unique_unknown_lemma_count_without_dictionary_entry
+        <= result.unique_unknown_lemma_count
+    )
+
+
+def test_assess_book_passes_profile_read_only_true_to_every_run_chapter_call(
+    pipeline_epub: Path,
+    mini_dictionary_db: Path,
+    existing_profile_path: Path,
+    nlp: Language,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Befund D4 (a), Nachbesserung Durchsicht 79b4479, 24.09.2026: Keine bisherige
+    Zusicherung hielt fest, dass `assess_book` `profile_read_only=True`
+    (`assess_book`s Docstring, Befund 2, Durchsicht 3b1e201) an **jeden**
+    `run_chapter`-Aufruf durchreicht — eine Verfälschung, die dieses Argument auf `False`
+    umstellt, blieb bisher grün, weil die eigene Vorprüfung von `assess_book`
+    (`profile.open_profile(..., read_only=True).close()`) das Profil schon vor dem ersten
+    `run_chapter`-Aufruf gegen eine 0-Byte-Datei schützt (siehe die Tests dazu oben) — ein
+    per Triage schreibender Zugriff *nach* dieser Vorprüfung wäre damit nicht erfasst
+    gewesen. Diese Attrappe reicht den echten Aufruf unverändert durch und hält nur fest,
+    welchen Wert `profile_read_only` je Aufruf trug.
+
+    Verfälschungsprobe (Bericht): `profile_read_only=True` im `run_chapter`-Aufruf
+    innerhalb von `assess_book` durch `profile_read_only=False` ersetzt ließ diesen Test
+    rot werden — beide aufgezeichneten Werte waren dann `False` statt `True`."""
+    real_run_chapter = pipeline.run_chapter
+    recorded: list[bool] = []
+
+    def _recording(
+        *,
+        epub_path: Path,
+        chapter_number: int,
+        dictionary_path: Path,
+        profile_path: Path,
+        nlp: Language,
+        cache_dir: Path | None = None,
+        on_progress: Callable[[pipeline.ChapterProgress], None] | None = None,
+        profile_read_only: bool = False,
+    ) -> pipeline.ChapterVocabulary:
+        recorded.append(profile_read_only)
+        return real_run_chapter(
+            epub_path=epub_path,
+            chapter_number=chapter_number,
+            dictionary_path=dictionary_path,
+            profile_path=profile_path,
+            nlp=nlp,
+            cache_dir=cache_dir,
+            on_progress=on_progress,
+            profile_read_only=profile_read_only,
+        )
+
+    monkeypatch.setattr(pipeline, "run_chapter", _recording)
+
+    result = pipeline.assess_book(
+        epub_path=pipeline_epub,
+        dictionary_path=mini_dictionary_db,
+        profile_path=existing_profile_path,
+        nlp=nlp,
+    )
+
+    assert len(result.chapters) == 2
+    assert recorded == [True, True], recorded
 
 
 def test_assess_book_computes_the_proper_noun_ratio_cache_only_once_per_run(
