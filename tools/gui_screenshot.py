@@ -41,6 +41,21 @@ Jeder der letzten drei Schritte meldet zusätzlich, wenn er **nichts** angesehen
 B4, Durchsicht `b2d5cab`): ein einfarbiges Bild, kein `Text` im Objektbaum, keine gemessene
 Textstelle gelten als eigener Fehlschlag, nicht als sauberes Ergebnis.
 
+Eine Nachprüfung des vorigen Commits (`00ce53b`) fand erneut Fehlschläge in beide
+Richtungen: Bedienelemente mit eigener Fläche falsch in beide Richtungen gemessen (Befund
+N1, `check_contrast` blendet seither nur die Textfarbe aus, nicht mehr `opacity`), nur die
+kontrastreichste statt der schlechtesten Farbspanne in RichText/StyledText gewählt (Befund
+N2, je zusammenhängendem Pixelklumpen einzeln gemessen), Überdeckung nur vollständig, nie
+teilweise erkannt (Befund N3, `_covering_elements`), „TEXT ZU BREIT" nur ohne Umbruch
+geprüft (Befund N4), `opacity` auf einem Vorfahren der Textstelle unbemerkt (Befund N7) und
+ein `PYTHONPATH=.`-Zwang für den Aufruf (Befund N8, hier durch `sys.path.insert` behoben).
+Einzelheiten je an ihrer Stelle unten.
+
+Grenze, die keiner der vier Schritte sieht (Befund N9): Eine QML-Warnung, die erst **nach**
+Ablauf von `--wait` entsteht (etwa durch eine Animation oder einen verzögerten
+Netzwerkzugriff), fällt nicht mehr in den Meldungs-Handler, den dieses Werkzeug ausliest —
+`grabWindow()` und die Prüfung laufen davor.
+
 Aufruf
 ------
     python tools/gui_screenshot.py <screen> <png> [--size 1280x800] [--dark]
@@ -69,6 +84,15 @@ if TYPE_CHECKING:
 REPO = Path(__file__).resolve().parent.parent
 GUI_QML = REPO / "gui" / "qml"
 FONTS = REPO / "gui" / "fonts"
+
+# (Befund N8, Nachprüfung 00ce53b): `from gui.app import ...` weiter unten scheitert ohne
+# dieses Vorziehen mit `ModuleNotFoundError: No module named 'gui'`, solange `libreverbum`
+# nicht in `.venv/` installiert ist (CLAUDE.md, „Wer ein Skript aufruft, das den Kern
+# importiert, braucht PYTHONPATH=."). Das Werkzeug soll wie im Modulkopf beschrieben ohne
+# vorherige Umgebungsvariable aufrufbar sein — es trägt sein eigenes Wurzelverzeichnis
+# deshalb selbst ein, vor jedem `gui.*`-Import (auch dem in Unterfunktionen weiter unten).
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
 
 # Text, der gekürzt werden darf, weil er ein Name und keine Aussage ist — übernommen aus
 # der geprüften Vorlage `tools/design_mockup/layout_check.py`, ELIDE_ERLAUBT, damit dieses
@@ -106,6 +130,14 @@ def contrast(a: tuple[int, int, int], b: tuple[int, int, int]) -> float:
 # ausdrückliche Angabe auf 3 stehen). Text.NoWrap ist dagegen tatsächlich 0.
 _TEXT_ELIDE_NONE = 3
 _TEXT_NO_WRAP = 0
+# (Befund N4, Nachprüfung 00ce53b): Text.WrapMode — WordWrap=1, WrapAnywhere=2, Wrap=3
+# (bricht notfalls mitten im Wort). Ein unteilbares Wort unter `WordWrap` läuft ohne
+# Umbruch durch den Nachbarn (`contentWidth` bleibt über `width`); unter `WrapAnywhere`/
+# `Wrap` bricht Qt tatsächlich auch mitten im Wort, `contentWidth` bleibt dort regulär
+# innerhalb der Breite — die Prüfung unten gilt deshalb für jeden Umbruchmodus außer
+# diesen beiden, nicht nur für `NoWrap`.
+_TEXT_WRAP_ANYWHERE = 2
+_TEXT_WRAP = 3
 
 
 def _read_enum_property(item: QQuickItem, name: str) -> int | None:
@@ -526,11 +558,18 @@ def check_layout(root: QQuickItem) -> tuple[int, list[str], int, int]:
                     content_width = child.property("contentWidth")
                     elide = _read_enum_property(child, "elide")
                     wrap_mode = _read_enum_property(child, "wrapMode")
+                    # (Befund N4, Nachprüfung 00ce53b): Der Vergleich griff bisher nur bei
+                    # `wrapMode == Text.NoWrap` — ein unteilbares Wort unter `WordWrap`
+                    # (der häufige Fall bei deutschen Komposita in schmalen Spalten) bricht
+                    # nicht um und lief unbemerkt über den Nachbarn. `WrapAnywhere`/`Wrap`
+                    # bricht dagegen auch mitten im Wort; dort bleibt `contentWidth`
+                    # regulär innerhalb der Breite, die Prüfung träfe dort nur einen
+                    # echten Qt-Fehler und ist entsprechend ausgenommen.
                     if (
                         content_width is not None
                         and child.width() > 0
                         and elide == _TEXT_ELIDE_NONE
-                        and wrap_mode == _TEXT_NO_WRAP
+                        and wrap_mode not in (_TEXT_WRAP_ANYWHERE, _TEXT_WRAP)
                         and content_width - child.width() > 1
                     ):
                         findings.append(
@@ -563,48 +602,122 @@ def check_layout(root: QQuickItem) -> tuple[int, list[str], int, int]:
     return (1 if findings else 0), findings, texte, mit_text_eigenschaft
 
 
-def _find_occluder(
-    root: QQuickItem, text_item: QQuickItem, eigenes_rechteck: QRectF, eigener_index: int
-) -> str | None:
-    """Nur zur Meldung, wenn sich beim Ausblenden einer Textstelle nichts geändert hat
-    (siehe `check_contrast`): Sucht ein anderes sichtbares Element, dessen Rechteck den
-    Textkasten überschneidet **und später im Baum besucht wird** als die Textstelle
-    selbst — Letzteres bewusst nur als grobe Näherung an „danach gezeichnet", zur reinen
-    Beschriftung des Befunds, nicht zu seiner Einstufung: Beides, ÜBERDECKT wie
-    UNSICHTBAR, bleibt in jedem Fall ein Befund. Ohne die Reihenfolge fände die Suche an
-    jeder Textstelle ihre eigene Hintergrundfläche (deklariert **vor** dem Text, also
-    keine Verdeckung) und meldete „ÜBERDECKT" auch bei einer schlichten Farbgleichheit."""
-    from PySide6.QtCore import QPointF, QRectF
+def _paint_key(item: QQuickItem, root: QQuickItem) -> list[tuple[float, int]]:
+    """Kette aus (`z`, Geschwisterindex) von der Wurzel bis zum Element — die Grundlage des
+    paarweisen Vergleichs `_painted_after`. Qt Quick malt Geschwister nach aufsteigendem
+    `z`, bei Gleichstand in `childItems()`-Reihenfolge; zwei Elemente teilen sich den
+    Kettenanfang bis zu ihrem gemeinsamen Vorfahren, danach entscheidet der erste
+    unterschiedliche Schritt — ein lexikographischer Vergleich der **ganzen** Kette liefert
+    deshalb dieselbe Antwort wie ein Vergleich erst ab der Verzweigung, ohne sie suchen zu
+    müssen (Befund N3, Nachprüfung 00ce53b: der alte Vergleich nach reiner Baumreihenfolge
+    ignorierte `z` und verwechselte damit „später besucht" mit „obenauf gezeichnet")."""
+    kette: list[tuple[float, int]] = []
+    knoten: QQuickItem | None = item
+    while knoten is not None and knoten is not root:
+        eltern = knoten.parentItem()
+        if eltern is None:
+            break
+        geschwister = eltern.childItems()
+        try:
+            index = geschwister.index(knoten)
+        except ValueError:
+            index = 0
+        kette.append((knoten.z(), index))
+        knoten = eltern
+    kette.reverse()
+    return kette
 
+
+def _painted_after(a: QQuickItem, b: QQuickItem, root: QQuickItem) -> bool:
+    """True, wenn `a` später gezeichnet wird als `b` — liegt `a` also optisch über `b`."""
+    return _paint_key(a, root) > _paint_key(b, root)
+
+
+def _covering_elements(
+    root: QQuickItem,
+    text_item: QQuickItem,
+    kasten: QRectF,
+    andere: list[tuple[QQuickItem, QRectF]],
+    window: object,
+    mit_bild: object,
+) -> list[str]:
+    """Sucht Elemente, die `kasten` (der sichtbare Kasten einer Textstelle) tatsächlich
+    überdecken — für die volle Verdeckung (Textstelle ohne eigene Änderung beim Ausblenden,
+    siehe `check_contrast`) ebenso wie für eine **teilweise** (Befund N3, Nachprüfung
+    00ce53b: Ein Deckel, der nur die rechte Hälfte eines Satzes verdeckt, ließ die linke
+    Hälfte normal Tinte zeigen — „irgendeine Änderung" allein sagt nichts über einen
+    abgeschnittenen Satz).
+
+    Drei Stufen, jede filtert eine der drei Fallen der Vorrunden:
+
+    1. **Geometrisch mit Mindestanteil.** Nur eine Überschneidung, die einen nennenswerten
+       Teil der Kastenhöhe trifft (≥ 30 %), zählt als Kandidat — ein Unterstrich oder eine
+       dünne Linie, die eine Zeile nur an drei von dreißig Pixeln kreuzt
+       (`tests/qml_fixtures/Underline.qml`), zeichnet eine Zeile nach, verdeckt sie nicht.
+    2. **Später gezeichnet** (`_painted_after`, über `z` und Baumposition) — ein
+       Hervorhebungsrechteck *hinter* dem Text (niedrigeres `z`) überschneidet sich
+       geometrisch genauso, liegt aber nicht obenauf.
+    3. **Am Bild bestätigt.** Erst das Ausblenden des Kandidaten selbst und der Vergleich
+       der Pixel in der Überschneidung mit dem Originalbild zeigt, ob er dort wirklich
+       etwas zeichnet — ein Fokusring, eine `MouseArea` (zeichnet nichts) oder ein per
+       `clip` unsichtbarer Nachbar ändern dabei kein einziges Pixel und fallen heraus. Das
+       sind die drei Fehlalarme, die die z-lose Baumreihenfolge einer Vorrunde an allen 16
+       Mockup-Bildern auslöste (Befund F1, Nachprüfung d00e7c9) — hier durch die
+       Bildbestätigung ausgeschlossen, nicht durch eine Ausnahmeliste."""
     vorfahren = _ancestors(text_item)
-    index = 0
+    treffer: list[str] = []
+    for kandidat, rechteck in andere:
+        if kandidat is text_item or kandidat in vorfahren:
+            continue
+        if text_item in _ancestors(kandidat):
+            continue
+        ueberschneidung = rechteck.intersected(kasten)
+        if ueberschneidung.width() < 2 or ueberschneidung.height() < 2:
+            continue
+        if kasten.height() > 0 and ueberschneidung.height() / kasten.height() < 0.3:
+            continue
+        if not _painted_after(kandidat, text_item, root):
+            continue
 
-    def suche(item: QQuickItem) -> str | None:
-        nonlocal index
-        for child in item.childItems():
-            if not child.isVisible():
-                continue
-            mein_index = index
-            index += 1
-            if child is text_item or child in vorfahren:
-                treffer = suche(child)
-                if treffer:
-                    return treffer
-                continue
-            if mein_index > eigener_index and child.width() > 0 and child.height() > 0:
-                oben_links = child.mapToScene(QPointF(0, 0))
-                rechteck = QRectF(oben_links.x(), oben_links.y(), child.width(), child.height())
-                if rechteck.intersects(eigenes_rechteck):
-                    return child.objectName() or child.metaObject().className()
-            treffer = suche(child)
-            if treffer:
-                return treffer
-        return None
+        urspruenglich = kandidat.opacity()
+        kandidat.setOpacity(0.0)
+        ohne_kandidat = window.grabWindow()
+        kandidat.setOpacity(urspruenglich)
 
-    return suche(root)
+        x0, y0 = max(0, int(ueberschneidung.x())), max(0, int(ueberschneidung.y()))
+        x1 = min(mit_bild.width(), round(ueberschneidung.x() + ueberschneidung.width()))
+        y1 = min(mit_bild.height(), round(ueberschneidung.y() + ueberschneidung.height()))
+        geaendert = False
+        for yy in range(y0, y1):
+            for xx in range(x0, x1):
+                a = mit_bild.pixelColor(xx, yy)
+                b = ohne_kandidat.pixelColor(xx, yy)
+                delta = (
+                    abs(a.red() - b.red()) + abs(a.green() - b.green()) + abs(a.blue() - b.blue())
+                )
+                if delta > _DIFF_SCHWELLE:
+                    geaendert = True
+                    break
+            if geaendert:
+                break
+        if geaendert:
+            treffer.append(kandidat.objectName() or kandidat.metaObject().className())
+    return treffer
 
 
 _GENERISCHE_FAMILIEN = {"", "sans serif", "serif", "monospace", "cursive", "fantasy", "system"}
+
+# Summe |dR|+|dG|+|dB| — deutlich über dem, was gewöhnliches Antialiasing an unbeteiligten
+# Kanten (Rundung, Subpixel-Hinting) erzeugt, am eingecheckten gui/qml/Placeholder.qml
+# nachgemessen. Gilt für die Tintenmessung wie für die Verdeckungsprüfung (Befund N3) —
+# beide vergleichen zwei Bildern desselben Fensters gegeneinander.
+_DIFF_SCHWELLE = 24
+
+# (Befund N2, Nachprüfung 00ce53b): Mindestzahl an Pixeln je räumlich zusammenhängendem
+# Tintenklumpen (`check_contrast`), damit er als eigener Kern zählt statt als
+# Antialiasing-Rest ohne eigenen Kern in der Nähe. Klein genug, dass ein kurzes Wort wie
+# „Warnung" (`tests/qml_fixtures/ColorSpan.qml`) sicher mitzählt.
+_TINTE_MINDESTPIXEL = 6
 
 
 def check_contrast(
@@ -633,8 +746,30 @@ def check_contrast(
 
     Ändert sich beim Ausblenden nichts, ist die Textstelle entweder deckungsgleich mit
     ihrem Grund (UNSICHTBAR) oder von einem anderen, undurchsichtigen Element vollständig
-    verdeckt (ÜBERDECKT, `_find_occluder`) — nur zur besseren Meldung unterschieden, beides
-    ist ein Befund.
+    verdeckt (ÜBERDECKT, `_covering_elements`) — nur zur besseren Meldung unterschieden,
+    beides ist ein Befund. Zeigt die Textstelle dagegen selbst Tinte, prüft
+    `_covering_elements` zusätzlich auf eine **teilweise** Verdeckung (TEILWEISE VERDECKT,
+    Befund N3, Nachprüfung 00ce53b) — ein Deckel, der nur einen Teil des Satzes trifft,
+    lässt den Rest ganz normal Tinte zeigen und wäre sonst unbemerkt geblieben.
+
+    Ausgeblendet wird für die Tintenmessung nur die **Farbe** der Textstelle
+    (`color: transparent`), nicht mehr ihre `opacity` (Befund N1, Nachprüfung 00ce53b):
+    Ein Bedienelement mit eigener Fläche (`TextField`/`TextArea`/`Label` mit `background`,
+    ein `Text` mit einem eigenen Kind-Rechteck als Abzeichenfläche) trägt diese Fläche als
+    **Kind** desselben Objekts, das auch die Textstelle selbst ist — `opacity` wirkt auf
+    ein Item und alle seine Kinder gemeinsam und blendete die Fläche mit aus. Das Bild ohne
+    Text zeigte dadurch die Seite statt der eigenen Feldfläche: eine helle Schrift auf
+    hellem Feld erschien als „gegen die Seite gemessen" und damit fälschlich kontrastreich,
+    ein dunkles Feld mit dunkler Schrift fälschlich kontrastarm. `color` trifft dagegen nur
+    die Tinte selbst, die Fläche bleibt in beiden Aufnahmen unverändert stehen. Ändert das
+    Ausblenden der Farbe sichtbar nichts (RichText/StyledText mit eigener Farbe je Spanne,
+    `<span style='color:...'>`/`<font color=...>`, überschreibt die Grundfarbe des Items),
+    greift ersatzweise das Leeren von `text` (Befund N2-Zusatzfall).
+
+    Innerhalb des Textkastens kann mehr als eine Tinte stecken — RichText/StyledText
+    erlaubt mehrere Farbspannen in einer Textstelle. Gezählt wird deshalb je
+    zusammenhängendem Klumpen geänderter Pixel einzeln, und über alle Klumpen hinweg
+    gewinnt die **schlechteste** Tinte, nicht die beste (Befund N2, Nachprüfung 00ce53b).
 
     Liefert `(code, zeilen, gemessen, uebersprungen)`; `code` ist 2, wenn keine einzige
     Textstelle gemessen wurde (Untergrenze, Befund B4). `gemessen` zählt nur, was
@@ -642,23 +777,25 @@ def check_contrast(
     werden (Befund F10 der Nachprüfung entfällt damit von selbst: Jede besuchte Textstelle
     erzeugt entweder genau eine Zeile und einen Zähler, oder keins von beidem)."""
     from PySide6.QtCore import QPointF, QRectF
-    from PySide6.QtGui import QFontInfo
+    from PySide6.QtGui import QColor, QFontInfo
 
-    texte: list[tuple[QQuickItem, str, float, float, float, float, bool, int]] = []
+    texte: list[tuple[QQuickItem, str, float, float, float, float, bool]] = []
     verblasst: list[str] = []
-    naechster_index = 0
+    alle_elemente: list[tuple[QQuickItem, QRectF]] = []
 
     def walk(item: QQuickItem, clip: QRectF) -> None:
-        nonlocal naechster_index
         for child in item.childItems():
             if not child.isVisible():
                 continue
-            eigener_index = naechster_index
-            naechster_index += 1
             oben_links = child.mapToScene(QPointF(0, 0))
             rechteck = QRectF(oben_links.x(), oben_links.y(), child.width(), child.height())
             sichtbar = rechteck.intersected(clip)
             innen = clip.intersected(rechteck) if child.clip() else clip
+
+            # (Befund N3): jedes sichtbare Element mit eigener Ausdehnung ist ein
+            # möglicher Verdecker einer Textstelle — nicht nur andere Textstellen.
+            if child.width() > 0 and child.height() > 0:
+                alle_elemente.append((child, rechteck))
 
             if (
                 _text_kind(child) is not None
@@ -669,8 +806,32 @@ def check_contrast(
             ):
                 text = str(child.property("text") or "")
                 if text.strip():  # (Befund F6) leerer Text: nichts zu messen, kein Befund
-                    if child.opacity() < 0.999:
-                        verblasst.append(f"{text[:40]!r} (opacity {child.opacity():.2f})")
+                    # (Befund N7, Nachprüfung 00ce53b): Die Hausregel „opacity nie auf
+                    # Text" (CLAUDE.md, Gestaltung) galt bisher nur für die eigene
+                    # Opacity der Textstelle — ein Vorfahre mit `opacity < 1` dämpft
+                    # denselben Text genauso und blieb unbemerkt. Geprüft wird deshalb die
+                    # kleinste Opacity über die Textstelle selbst und alle ihre Vorfahren;
+                    # eine Einblendanimation, die im Ruhezustand bei 1 steht (wie der
+                    # Bestand sie einsetzt), bleibt davon unberührt.
+                    eigene_opacity = child.opacity()
+                    schwaechster_vorfahr = min(
+                        (
+                            (vorfahr.opacity(), vorfahr)
+                            for vorfahr in _ancestors(child)
+                            if vorfahr.opacity() < 0.999
+                        ),
+                        default=None,
+                        key=lambda paar: paar[0],
+                    )
+                    if eigene_opacity < 0.999 or schwaechster_vorfahr is not None:
+                        if eigene_opacity < 0.999:
+                            wert, quelle = eigene_opacity, "eigene"
+                        else:
+                            assert schwaechster_vorfahr is not None
+                            wert, vorfahr = schwaechster_vorfahr
+                            vorfahr_name = vorfahr.objectName() or vorfahr.metaObject().className()
+                            quelle = f"Vorfahr {vorfahr_name}"
+                        verblasst.append(f"{text[:40]!r} (opacity {wert:.2f}, {quelle})")
                     # Ganz sichtbar (Kasten nicht vom Rollbereich einer Liste angeschnitten)
                     # oder nur ein Rand-Rest — wie im Vorbild `contrast_check.py`: Ein
                     # Fehlschlag beim Ausblenden ("nichts geändert") ist an einem winzigen
@@ -691,7 +852,6 @@ def check_contrast(
                             sichtbar.width(),
                             sichtbar.height(),
                             ganz,
-                            eigener_index,
                         )
                     )
             walk(child, innen)
@@ -701,12 +861,8 @@ def check_contrast(
     zeilen: list[str] = []
     gemessen = 0
     uebersprungen = 0
-    # Summe |dR|+|dG|+|dB| — deutlich über dem, was gewöhnliches Antialiasing an
-    # unbeteiligten Kanten (Rundung, Subpixel-Hinting) erzeugt, am eingecheckten
-    # gui/qml/Placeholder.qml nachgemessen.
-    schwelle = 24
 
-    for item, text, x, y, w, h, ganz, eigener_index in texte:
+    for item, text, x, y, w, h, ganz in texte:
         font = item.property("font")
         if font is not None:
             erwartet = font.family()
@@ -736,29 +892,52 @@ def check_contrast(
             uebersprungen += 1
             continue
 
-        urspruengliche_opacity = item.opacity()
-        item.setOpacity(0.0)
-        ohne = window.grabWindow()
-        item.setOpacity(urspruengliche_opacity)
-
-        aenderungen: list[tuple[int, tuple[int, int, int], tuple[int, int, int]]] = []
-        for yy in range(y0, y1):
-            for xx in range(x0, x1):
-                mit_farbe = image.pixelColor(xx, yy)
-                ohne_farbe = ohne.pixelColor(xx, yy)
-                delta = (
-                    abs(mit_farbe.red() - ohne_farbe.red())
-                    + abs(mit_farbe.green() - ohne_farbe.green())
-                    + abs(mit_farbe.blue() - ohne_farbe.blue())
-                )
-                if delta > schwelle:
-                    aenderungen.append(
-                        (
-                            delta,
+        def _diff_gegen(
+            ohne_bild: object, x0: int = x0, y0: int = y0, x1: int = x1, y1: int = y1
+        ) -> dict[tuple[int, int], tuple[tuple[int, int, int], tuple[int, int, int]]]:
+            gefunden: dict[tuple[int, int], tuple[tuple[int, int, int], tuple[int, int, int]]] = {}
+            for yy in range(y0, y1):
+                for xx in range(x0, x1):
+                    mit_farbe = image.pixelColor(xx, yy)
+                    ohne_farbe = ohne_bild.pixelColor(xx, yy)
+                    delta = (
+                        abs(mit_farbe.red() - ohne_farbe.red())
+                        + abs(mit_farbe.green() - ohne_farbe.green())
+                        + abs(mit_farbe.blue() - ohne_farbe.blue())
+                    )
+                    if delta > _DIFF_SCHWELLE:
+                        gefunden[(xx, yy)] = (
                             (mit_farbe.red(), mit_farbe.green(), mit_farbe.blue()),
                             (ohne_farbe.red(), ohne_farbe.green(), ohne_farbe.blue()),
                         )
-                    )
+            return gefunden
+
+        # (Befund N1, Nachprüfung 00ce53b): `color` statt `opacity` ausblenden — siehe
+        # Docstring. `color` ist bei allen vier Klassen hinter `_text_kind` («text»/
+        # «input») dieselbe Eigenschaft für die Tinte (`QQuickText.color`,
+        # `QQuickTextInput.color`, geerbt von `TextField`/`Label` bzw. `TextEdit`,
+        # geerbt von `TextArea`).
+        urspruengliche_farbe = item.property("color")
+        item.setProperty("color", QColor(0, 0, 0, 0))
+        ohne = window.grabWindow()
+        item.setProperty("color", urspruengliche_farbe)
+
+        aenderungen = _diff_gegen(ohne)
+
+        if not aenderungen:
+            # RichText/StyledText mit farbig ausgezeichneten Spannen
+            # (`<span style='color:...'>`/`<font color=...>`) überschreibt die
+            # Grundfarbe des Items je Spanne — das Ausblenden der Grundfarbe ändert dort
+            # sichtbar nichts (`tests/qml_fixtures/ColorSpan.qml`). Rückfallebene: der
+            # Text selbst wird geleert, das blendet jede Spanne unabhängig von ihrer
+            # eigenen Farbe aus. Nur als Rückfallebene, nicht als Regelfall — ein
+            # geleerter Text kann bei gebundener Breite einen Neuumbruch der übrigen
+            # Seite auslösen, `color` verändert dagegen nie das Layout.
+            urspruenglicher_text = item.property("text")
+            item.setProperty("text", "")
+            ohne = window.grabWindow()
+            item.setProperty("text", urspruenglicher_text)
+            aenderungen = _diff_gegen(ohne)
 
         if not aenderungen:
             if not ganz:
@@ -768,50 +947,116 @@ def check_contrast(
                 uebersprungen += 1
                 continue
             gemessen += 1
-            verdecker = _find_occluder(root, item, QRectF(x, y, w, h), eigener_index)
+            verdecker = _covering_elements(
+                root, item, QRectF(x, y, w, h), alle_elemente, window, image
+            )
             if verdecker:
-                zeilen.append(f"! ÜBERDECKT von {verdecker}: {text!r}")
+                zeilen.append(f"! ÜBERDECKT von {'/'.join(verdecker)}: {text!r}")
             else:
                 zeilen.append(f"! UNSICHTBAR: {text!r}")
             continue
 
         gemessen += 1
 
-        # Die Tinte ist die häufigste "mit"-Farbe unter den geänderten Pixeln — nicht die
-        # Pixel mit der größten Änderung: Kreuzt eine andersfarbige Linie oder ein Rahmen
-        # nur einen schmalen Streifen des Kastens (`tests/qml_fixtures/Underline.qml`),
-        # erzeugt genau dort der größte Farbsprung, ohne die Tinte des übrigen, deutlich
-        # größeren Textanteils zu sein — „größte Änderung" hätte diesen Streifen fälschlich
-        # als Tinte gewählt (an `NxUnderlineBefore` nachgemessen: 10,14:1 statt der
-        # tatsächlichen rund 1,2:1).
+        # (Befund N3): auch eine Textstelle mit eigener Tinte kann **teilweise** verdeckt
+        # sein — ein Deckel über der rechten Hälfte eines Satzes lässt die linke normal
+        # Tinte zeigen, „irgendeine Änderung" allein sagt nichts über den fehlenden Rest.
+        verdecker = _covering_elements(root, item, QRectF(x, y, w, h), alle_elemente, window, image)
+        if verdecker:
+            zeilen.append(f"! TEILWEISE VERDECKT von {'/'.join(verdecker)}: {text!r}")
+
+        # (Befund N2, Nachprüfung 00ce53b): Mehrere Tintengruppen statt einer einzigen
+        # finden — RichText/StyledText kann mehrere Farbspannen in derselben Textstelle
+        # tragen (`<span style='color:...'>`/`<font color=...>`), und nur die
+        # **schlechteste** zählt für den Befund, nicht die kontrastreichste.
         #
-        # Bei einer kleinen oder nur mäßig kontrastreichen Textstelle ist die einzelne
-        # häufigste Exaktfarbe dagegen kein verlässlicher Kern mehr: Ein Zeichensatz
-        # rendert seinen soliden Kern so gut wie nie in **einer** exakten Farbe, sondern in
-        # vielen, von Subpixel-Rundung minimal verschiedenen Tönen, während sich der
-        # blasse Antialiasing-Rand auf wenige, dem Grund nahe Töne konzentriert — eine
-        # einzelne Randfarbe kann dadurch häufiger sein als jede einzelne Kernfarbe, obwohl
-        # der Kern in Summe weit mehr Pixel stellt (an der Beschriftung eines
-        # `Button` nachgemessen: 47 Rand-Pixel in einer Farbe gegen über hundert
-        # Kern-Pixel, verteilt auf gut ein Dutzend fast-schwarze Töne). Alle Farben **nahe
-        # der Höchsthäufigkeit** (mindestens die Hälfte davon) treten deshalb gegeneinander
-        # an; unter ihnen gewinnt die, die sich am weitesten vom Grund unterscheidet — der
-        # echte Kern liegt immer weiter vom Grund entfernt als sein eigener, blasserer
-        # Rand, und eine einzelne Rand-Exaktfarbe erreicht die Höchsthäufigkeit (oder
-        # kommt ihr nahe) nur, wenn der Kern selbst auf noch mehr, noch seltenere
-        # Exaktfarben verteilt ist.
-        grund_schaetzung = Counter(eintrag[2] for eintrag in aenderungen).most_common(1)[0][0]
+        # Eine blasse zweite Spanne wählt ihr Entwurfsmuster fast immer als Abblendung
+        # derselben Tinte zum Grund hin (`inkSoft`/`inkFaint`, technik.md §14) — ihre
+        # Farbe liegt damit im RGB-Raum sehr nah an der Verlaufsgeraden, die ihr eigenes
+        # Antialiasing ohnehin erzeugt, und ist von echtem Kantenrauschen der ersten
+        # Spanne über die Farbe allein **nicht** zuverlässig zu unterscheiden (an
+        # `tests/qml_fixtures/ColorSpan.qml`, „reich" nachgemessen: der blasse Anteil lag
+        # nur 5,7 Einheiten von der Verlaufsgeraden der dunklen Spanne entfernt — weit
+        # innerhalb jeder sinnvollen Farbtoleranz). Getrennt wird deshalb **räumlich**
+        # statt über die Farbe: Jede zusammenhängende Fläche geänderter Pixel (4er-
+        # Nachbarschaft) ist ein eigener Klumpen — ein Buchstabe oder ein Wortteil,
+        # niemals zwei durch eine Lücke getrennte Spannen zugleich. Innerhalb eines
+        # Klumpens gewinnt nicht die häufigste Exaktfarbe (ein rundes Zeichen erreicht bei
+        # kleiner Schrift oft gar keine voll deckende Kernfläche, ein einzelner
+        # Zwischenton kann dort selbst schon in der Mehrheit sein), sondern die Farbe, die
+        # am weitesten vom geschätzten Grund entfernt ist — dieselbe Überlegung wie beim
+        # alten, einstufigen Vergleich, hier nur je Klumpen statt einmal für die ganze
+        # Textstelle angewendet. Über alle Klumpen der Textstelle hinweg gewinnt die
+        # **schlechteste** — eine blasse Wortgruppe soll den Befund auslösen, nicht von
+        # einer kontrastreichen Nachbarin im selben Textelement überstimmt werden. Winzige
+        # Klumpen (< `_TINTE_MINDESTPIXEL` Pixel — ein einzelner Antialiasing-Rest ohne
+        # eigenen Kern in der Nähe) zählen nicht mit, außer es gibt gar keinen größeren.
+        besucht: set[tuple[int, int]] = set()
+        klumpen: list[list[tuple[int, int]]] = []
+        for start in aenderungen:
+            if start in besucht:
+                continue
+            besucht.add(start)
+            stapel = [start]
+            aktueller_klumpen = [start]
+            while stapel:
+                px, py = stapel.pop()
+                for nachbar in ((px + 1, py), (px - 1, py), (px, py + 1), (px, py - 1)):
+                    if nachbar in aenderungen and nachbar not in besucht:
+                        besucht.add(nachbar)
+                        stapel.append(nachbar)
+                        aktueller_klumpen.append(nachbar)
+            klumpen.append(aktueller_klumpen)
+
+        # Innerhalb eines Klumpens gewinnt nicht die häufigste Exaktfarbe (ein rundes
+        # Zeichen wie „o" erreicht bei 16 px oft gar keine voll deckende Kernfläche — die
+        # häufigste Farbe im Klumpen wäre dann selbst schon ein Zwischenton, an
+        # `gui/qml/Placeholder.qml`, „Kontrolle gut lesbar" nachgemessen), sondern die
+        # Farbe, die am weitesten vom geschätzten Grund entfernt ist — die sattere Tinte
+        # ist immer weiter vom Grund entfernt als ihr eigener, blasserer Rand, unabhängig
+        # davon, wie viele Pixel sie stellt.
+        grund_schaetzung = Counter(ohne for _mit, ohne in aenderungen.values()).most_common(1)[0][0]
         grund_lum = relative_luminance(grund_schaetzung)
-        mit_haeufigkeit = Counter(eintrag[1] for eintrag in aenderungen)
-        max_haeufigkeit = mit_haeufigkeit.most_common(1)[0][1]
-        kandidaten = [
-            farbe for farbe, anzahl in mit_haeufigkeit.items() if anzahl >= max_haeufigkeit / 2
-        ]
-        vordergrund = max(kandidaten, key=lambda farbe: abs(relative_luminance(farbe) - grund_lum))
-        ohne_bei_vordergrund = Counter(
-            eintrag[2] for eintrag in aenderungen if eintrag[1] == vordergrund
-        )
-        hintergrund = ohne_bei_vordergrund.most_common(1)[0][0]
+
+        def _repraesentativ(
+            punkte: list[tuple[int, int]],
+            aenderungen: dict[
+                tuple[int, int], tuple[tuple[int, int, int], tuple[int, int, int]]
+            ] = aenderungen,
+            grund_lum: float = grund_lum,
+        ) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
+            return max(
+                (aenderungen[p] for p in punkte),
+                key=lambda eintrag: abs(relative_luminance(eintrag[0]) - grund_lum),
+            )
+
+        nennenswert = [k for k in klumpen if len(k) >= _TINTE_MINDESTPIXEL]
+        if not nennenswert:
+            # Winzige Textstelle (etwa eine einzelne Ziffer): kein Klumpen erreicht die
+            # Mindestpixelzahl — dann zählt trotzdem der größte, statt gar keine Tinte zu
+            # wählen.
+            nennenswert = [max(klumpen, key=len)]
+
+        # Ein einzelner, unbelegter Ausreißer-Klumpen darf die Messung nicht dominieren —
+        # ein winziges Satzzeichen wie „·" erreicht selbst bei voller Deckung oft nicht die
+        # satte Kernfarbe seiner Zeile (an `tools/design_mockup/qml/Triage.qml`,
+        # „bookLine" nachgemessen: 3,90:1 statt der tatsächlichen 5,80:1 von
+        # `Theme.inkSoft`, ein einzelner 14-Pixel-Klumpen unter 48). Eine echte, blasse
+        # Farbspanne bestätigt sich dagegen über mehrere Buchstaben hinweg mit
+        # übereinstimmender Farbe (an `tests/qml_fixtures/ColorSpan.qml`, „Warnung"
+        # nachgemessen). Gewertet wird deshalb nur eine Farbe, die mindestens **zwei**
+        # Klumpen liefern (grob gerundet, um Antialiasing-Rauschen zwischen sonst
+        # gleichen Buchstaben zu verzeihen) — außer es gibt gar keine solche
+        # Übereinstimmung, dann bleibt der einzige Fund die einzige Auskunft, die es gibt.
+        def _grob(farbe: tuple[int, int, int]) -> tuple[int, int, int]:
+            return (farbe[0] // 12, farbe[1] // 12, farbe[2] // 12)
+
+        repraesentanten = [_repraesentativ(k) for k in nennenswert]
+        haeufigkeit_grob = Counter(_grob(vorne) for vorne, _hinten in repraesentanten)
+        belegt = [paar for paar in repraesentanten if haeufigkeit_grob[_grob(paar[0])] >= 2]
+        kandidaten = belegt or repraesentanten
+
+        vordergrund, hintergrund = min(kandidaten, key=lambda paar: contrast(paar[0], paar[1]))
 
         verhaeltnis = contrast(vordergrund, hintergrund)
         # (Befund F11, Nachprüfung d00e7c9): `font.pixelSize()` liefert -1, wenn die

@@ -473,3 +473,124 @@ def test_gui_screenshot_fails_when_a_theme_font_family_is_missing(tmp_path: Path
     assert result.returncode == 2, result.stdout + result.stderr
     assert "Theme.fonts nennt" in (result.stdout + result.stderr)
     assert not png.is_file()
+
+
+def test_gui_screenshot_measures_the_true_contrast_of_a_filled_control_background(
+    tmp_path: Path,
+) -> None:
+    """Befund N1 (Nachprüfung 00ce53b): Ein `TextField` mit eigener Fläche
+    (`tests/qml_fixtures/FieldBackground.qml`, Feldfläche `#ffffff`, Seite `#e3dfd6` —
+    absichtlich verschieden). `item.setOpacity(0)` blendete beim Ausblenden die eigene
+    Feldfläche mit aus — das „ohne"-Bild zeigte dadurch die Seite statt der echten
+    Feldfläche, und die Messung träfe Schrift gegen den falschen Grund.
+
+    Verfälschung: in `check_contrast` das Ausblenden per `color` wieder durch
+    `item.setOpacity(0.0)` ersetzen → der gemeldete Grund wäre `#e3dfd6` (die Seite)
+    statt `#ffffff` (die echte Feldfläche); die zweite Zusicherung unten wird rot."""
+    result = _run_fixture("FieldBackground", tmp_path)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "Eingabe hell auf hell" in result.stdout
+    assert "auf #ffffff 'Eingabe hell auf hell'" in result.stdout, result.stdout
+
+
+def test_gui_screenshot_does_not_flag_a_well_contrasted_filled_field(tmp_path: Path) -> None:
+    """Gegenprobe zu N1 (Nachprüfung 00ce53b): Dieselbe Bauform — ein Eingabefeld mit
+    eigener, von der Seite verschiedener Fläche — aber mit gut lesbarer Schrift
+    (`tests/qml_fixtures/FieldBackgroundGood.qml`). Ein falsch-rot messendes Werkzeug
+    (Feldfläche beim Ausblenden mit entfernt) meldete hier einen Kontrastfehler gegen die
+    Seitenfarbe, obwohl die Schrift auf ihrer eigenen Fläche einwandfrei ist — die Falle,
+    die `tests/qml_fixtures/TextFieldScreen.qml` vor dieser Nachbesserung verdeckte, weil
+    Feldfläche und Seite dort zufällig gleich gefärbt waren (`beobachtungen/
+    2026-09-23-ap15-nachpruefung-runde2.md`).
+
+    Verfälschung: dieselbe wie oben (`setOpacity(0)` statt `color`) → der Grund stünde
+    als `#e3dfd6` (die Seite) in der Ausgabe statt `#fdfcfa` (die echte Feldfläche) — die
+    zweite Zusicherung unten wird rot, auch wenn der Kontrast zufällig gegen beide Gründe
+    reicht und `returncode` allein die Verfälschung nicht zeigt."""
+    result = _run_fixture("FieldBackgroundGood", tmp_path)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Ergebnis: OK" in result.stdout
+    assert "auf #fdfcfa 'Gut lesbare Eingabe'" in result.stdout, result.stdout
+
+
+def test_gui_screenshot_flags_the_worst_color_span_in_rich_text(tmp_path: Path) -> None:
+    """Befund N2 (Nachprüfung 00ce53b): RichText mit zwei Farbspannen in einer Textstelle
+    (`tests/qml_fixtures/ColorSpan.qml`) — ein langer, gut lesbarer Teil und eine kurze,
+    blasse Randbemerkung („Warnung"). Die Randbemerkung liefert für sich genommen weit
+    weniger geänderte Pixel als der lange Teil; gemessen werden muss trotzdem sie, nicht
+    der bessere Teil derselben Textstelle.
+
+    Verfälschung: in `check_contrast` `nennenswert` durch `[max(klumpen, key=len)]`
+    ersetzen (immer nur der größte Klumpen zählt) → der lange, gut lesbare Teil würde
+    gewählt, „Warnung" käme nicht als eigener, blasser Fund vor, `returncode` bliebe 0."""
+    result = _run_fixture("ColorSpan", tmp_path)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "#cfcabf" in result.stdout, result.stdout
+
+
+def test_gui_screenshot_flags_a_partial_occlusion(tmp_path: Path) -> None:
+    """Befund N3 (Nachprüfung 00ce53b): Ein Rechteck mit höherem `z` deckt die rechte
+    Hälfte eines Satzes ab (`tests/qml_fixtures/Overlap.qml`) — die linke Hälfte zeigt
+    weiterhin normal Tinte. „Irgendeine Änderung beim Ausblenden" allein sagt nichts über
+    den fehlenden Teil des Satzes; erst `_covering_elements` erkennt die Überdeckung.
+
+    Verfälschung: den Aufruf von `_covering_elements` für eine Textstelle mit eigener
+    Tinte (der zweite, nach `TEILWEISE VERDECKT` benannte Aufruf in `check_contrast`)
+    entfernen → „TEILWEISE VERDECKT" käme nicht vor, `returncode` bliebe an dieser Stelle
+    unbeeinflusst von der Verdeckung."""
+    result = _run_fixture("Overlap", tmp_path)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "TEILWEISE VERDECKT von deckel" in result.stdout
+
+
+def test_gui_screenshot_does_not_flag_a_highlight_behind_text(tmp_path: Path) -> None:
+    """Gegenprobe zu N3 (Nachprüfung 00ce53b): Ein Rechteck überschneidet den Textkasten
+    geometrisch genauso wie ein Deckel, liegt aber mit niedrigerem `z` **hinter** dem Text
+    (`tests/qml_fixtures/HighlightBehindText.qml`, wie die laufende Zeile einer Liste,
+    `Theme.qml`-Token `marked`) — eine reine Baumreihenfolge ohne `z` hätte das fälschlich
+    als Verdeckung gemeldet (Befund F1/F2 der Nachprüfung von `d00e7c9`, an allen 16
+    Mockup-Bildern).
+
+    Verfälschung: `_painted_after` in `_covering_elements` durch `True` ersetzen (jedes
+    spätere Element gilt als obenauf, `z` wird ignoriert) → „TEILWEISE VERDECKT" oder
+    „ÜBERDECKT" käme fälschlich vor, `returncode` würde 1 statt 0."""
+    result = _run_fixture("HighlightBehindText", tmp_path)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Ergebnis: OK" in result.stdout
+
+
+def test_gui_screenshot_flags_an_unbreakable_word_under_word_wrap(tmp_path: Path) -> None:
+    """Befund N4 (Nachprüfung 00ce53b): Ein unteilbares, zusammengesetztes Wort mit
+    `wrapMode: Text.WordWrap` in einem schmalen Kasten (`tests/qml_fixtures/
+    WrapOverflow.qml`) — Qt bricht bei `WordWrap` nur an Wortgrenzen, ein einzelnes zu
+    breites Wort läuft deshalb unverändert über den Kasten hinaus. Deutsche Komposita in
+    schmalen Spalten sind hier der Normalfall, nicht der Ausnahmefall.
+
+    Verfälschung: die Bedingung in `check_layout` von
+    `wrap_mode not in (_TEXT_WRAP_ANYWHERE, _TEXT_WRAP)` zurück auf
+    `wrap_mode == _TEXT_NO_WRAP` setzen → „TEXT ZU BREIT" käme nicht vor, `returncode`
+    wäre nicht mehr an dieser Stelle 1."""
+    result = _run_fixture("WrapOverflow", tmp_path)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "TEXT ZU BREIT" in result.stdout
+
+
+def test_gui_screenshot_flags_opacity_on_an_ancestor_of_text(tmp_path: Path) -> None:
+    """Befund N7 (Nachprüfung 00ce53b): `opacity` sitzt auf einem Vorfahren der
+    Textstelle, nicht auf ihr selbst (`tests/qml_fixtures/AncestorOpacity.qml`) — die
+    Hausregel „opacity nie auf Text" (CLAUDE.md, Gestaltung) galt bisher nur für die
+    eigene Opacity der Textstelle.
+
+    Verfälschung: in `check_contrast` die Suche über `_ancestors(child)` entfernen und
+    nur noch `child.opacity()` prüfen → „Vorfahr" käme in keiner Zeile vor, `returncode`
+    bliebe an dieser Stelle unbeeinflusst von der gedämpften Textstelle."""
+    result = _run_fixture("AncestorOpacity", tmp_path)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "opacity 0.80, Vorfahr" in result.stdout
